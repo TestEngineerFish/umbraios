@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:#E6E4DF;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;font-family:-apple-system,"SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+  :root{
+   --bg:#F6F5F2;--card:#FFFFFF;--titlebar:#EFEDE8;--border:#E6E3DC;--text:#1F2320;--muted:#6B716B;
+   --nav:#15110E;--orange:#E8590C;--orange-deep:#C2410C;--orange-soft:#FFF1E6;--orange-text:#9A3412;
+   --success:#0F766E;--success-soft:#E2F1EF;--warning:#B45309;--warning-soft:#FBEEDD;--danger:#B42318;--danger-soft:#FBE9E7;
+   --user-bubble:#EAF1F7;--track:#F3F2EF;--chip:#F0EEEA;
+  }
+  [data-theme="dark"]{
+   --bg:#15110E;--card:#232019;--titlebar:#1C1A17;--border:#332E26;--text:#EDEAE3;--muted:#9A938A;
+   --nav:#1C1A17;--orange-soft:rgba(232,89,12,.16);--orange-text:#F0A878;
+   --success:#34B5A6;--success-soft:rgba(15,118,110,.2);--warning:#D98A29;--warning-soft:rgba(180,83,9,.22);--danger:#E0675C;--danger-soft:rgba(180,35,24,.22);
+   --user-bubble:#2B2620;--track:#1B1915;--chip:#2A251F;
+  }
+  ::-webkit-scrollbar{width:9px;height:9px;}
+  ::-webkit-scrollbar-thumb{background:rgba(120,115,108,.35);border-radius:999px;border:2px solid transparent;background-clip:padding-box;}
+  @keyframes umblink{0%,49%{opacity:1}50%,100%{opacity:0}}
+  @keyframes umbob{0%,80%,100%{transform:translateY(0);opacity:.35}40%{transform:translateY(-4px);opacity:1}}
+</style>
+</helmet>
+<div data-theme="{{ theme }}" ref="{{ setRoot }}" style="position:relative;width:1100px;height:720px;background:var(--bg);color:var(--text);border-radius:12px;overflow:hidden;border:1px solid rgba(0,0,0,.16);display:flex;flex-direction:column;box-shadow:0 16px 50px rgba(0,0,0,.22);font-size:14px;">
+
+  <!-- ===== title bar ===== -->
+  <div style="height:40px;flex:none;display:flex;align-items:center;gap:12px;padding:0 14px;background:var(--titlebar);border-bottom:1px solid var(--border);">
+    <div style="display:flex;gap:8px;align-items:center;">
+      <span style="width:12px;height:12px;border-radius:999px;background:#FF5F57;"></span>
+      <span style="width:12px;height:12px;border-radius:999px;background:#FEBC2E;"></span>
+      <span style="width:12px;height:12px;border-radius:999px;background:#28C840;"></span>
+    </div>
+    <span style="font-weight:600;font-size:13px;letter-spacing:.2px;">Umbra</span>
+    <div style="flex:1;"></div>
+    <button onClick="{{ toggleTheme }}" title="切换深浅色" style="display:flex;align-items:center;justify-content:center;width:28px;height:24px;border:1px solid var(--border);background:var(--card);border-radius:7px;color:var(--muted);cursor:pointer;" style-hover="color:var(--text)">
+      <sc-if value="{{ dark }}" hint-placeholder-val="{{ false }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg></sc-if>
+      <sc-if value="{{ light }}" hint-placeholder-val="{{ true }}"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg></sc-if>
+    </button>
+    <div style="display:flex;align-items:center;gap:7px;padding:3px 10px;border:1px solid var(--border);border-radius:999px;background:var(--card);">
+      <span style="width:8px;height:8px;border-radius:999px;background:var(--success);box-shadow:0 0 0 3px var(--success-soft);"></span>
+      <span style="font-size:11.5px;color:var(--muted);">已连接 · umbra.tingyusha.xyz</span>
+    </div>
+  </div>
+
+  <!-- ===== body row ===== -->
+  <div style="flex:1;display:flex;min-height:0;">
+
+    <!-- ===== left nav ===== -->
+    <nav style="width:180px;flex:none;background:var(--nav);display:flex;flex-direction:column;padding:14px 10px;gap:3px;">
+      <div style="display:flex;align-items:center;gap:9px;padding:4px 6px 14px;">
+        <span style="width:26px;height:26px;border-radius:7px;background:var(--orange);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;">U</span>
+        <span style="color:#fff;font-weight:600;font-size:14.5px;">Umbra</span>
+      </div>
+
+      <button onClick="{{ goChat }}" style="{{ navChat }}" style-hover="background:rgba(255,255,255,.06)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-11.9 7.6L4 20l1-4.6A8.4 8.4 0 1 1 21 11.5z"></path></svg>
+        <span>聊天</span>
+      </button>
+      <button onClick="{{ goTasks }}" style="{{ navTasks }}" style-hover="background:rgba(255,255,255,.06)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6h11M9 12h11M9 18h11"></path><path d="M4 6l1 1 2-2M4 12l1 1 2-2M4 18l1 1 2-2"></path></svg>
+        <span>任务</span>
+      </button>
+      <button onClick="{{ goAbilities }}" style="{{ navAbilities }}" style-hover="background:rgba(255,255,255,.06)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+        <span>能力</span>
+      </button>
+      <button onClick="{{ goRealtime }}" style="{{ navRealtime }}" style-hover="background:rgba(255,255,255,.06)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg>
+        <span>实时操作</span>
+      </button>
+      <button onClick="{{ goLogs }}" style="{{ navLogs }}" style-hover="background:rgba(255,255,255,.06)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="16" rx="2"></rect><path d="M6.5 9l3 2.5-3 2.5M12 15h5"></path></svg>
+        <span>日志</span>
+      </button>
+      <button onClick="{{ goSettings }}" style="{{ navSettings }}" style-hover="background:rgba(255,255,255,.06)">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h10M18 7h2M4 17h2M10 17h10"></path><circle cx="16" cy="7" r="2.4"></circle><circle cx="8" cy="17" r="2.4"></circle></svg>
+        <span>设置</span>
+      </button>
+
+      <div style="flex:1;"></div>
+      <div style="border-top:1px solid rgba(255,255,255,.08);padding:12px 6px 2px;">
+        <div style="color:rgba(255,255,255,.9);font-size:12px;font-weight:500;">MacBook-Pro-2.local</div>
+        <div style="color:rgba(255,255,255,.42);font-size:11px;margin-top:2px;">macOS · 此设备</div>
+      </div>
+    </nav>
+
+    <!-- ===== main ===== -->
+    <main style="flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg);">
+
+      <!-- ===== CHAT ===== -->
+      <sc-if value="{{ isChat }}" hint-placeholder-val="{{ true }}">
+      <div style="display:flex;flex-direction:column;height:100%;min-height:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:1px solid var(--border);flex:none;">
+          <h1 style="margin:0;font-size:16px;font-weight:600;">聊天</h1>
+          <button onClick="{{ newSession }}" style="display:flex;align-items:center;gap:6px;padding:6px 13px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer;" style-hover="border-color:var(--orange);color:var(--orange-text)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>新会话
+          </button>
+        </div>
+
+        <div ref="{{ setMsgEl }}" style="flex:1;overflow-y:auto;padding:22px;display:flex;flex-direction:column;gap:16px;min-height:0;">
+
+          <sc-if value="{{ showConvo }}" hint-placeholder-val="{{ true }}">
+          <div style="display:flex;flex-direction:column;gap:16px;">
+            <!-- user -->
+            <div style="align-self:flex-end;max-width:78%;background:var(--user-bubble);padding:11px 14px;border-radius:14px 14px 4px 14px;line-height:1.55;">帮我把上周的数据导出成 PDF，发到下载目录。</div>
+
+            <!-- tool trace -->
+            <div style="align-self:flex-start;max-width:80%;width:100%;">
+              <div onClick="{{ toggleTrace }}" style="display:flex;align-items:center;gap:7px;cursor:pointer;color:var(--muted);font-size:12px;margin-bottom:6px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" style="{{ chevStyle }}"><path d="M9 6l6 6-6 6"></path></svg>
+                工具轨迹 · 3 步
+              </div>
+              <sc-if value="{{ traceOpen }}" hint-placeholder-val="{{ true }}">
+              <div style="background:var(--track);border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11.5px;line-height:1.85;color:var(--muted);">
+                <div>🔧 list_online_devices()</div>
+                <div style="color:var(--success);">↳ 返回 3 台设备</div>
+                <div>🔧 query_metrics(range="last_week")</div>
+                <div>🔧 export_pdf(target="~/Downloads/weekly.pdf")</div>
+              </div>
+              </sc-if>
+            </div>
+
+            <!-- completion card -->
+            <div style="align-self:flex-start;max-width:80%;background:var(--success-soft);border:1px solid var(--success);border-left:3px solid var(--success);border-radius:10px;padding:13px 15px;">
+              <div style="font-weight:600;color:var(--success);margin-bottom:7px;">🎉 任务完成：导出周报 PDF</div>
+              <div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text);margin-bottom:5px;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11M7 11l5 5 5-5M5 20h14"></path></svg>
+                <a href="#" onClick="{{ noop }}" style="color:var(--orange-text);text-decoration:none;font-weight:500;">weekly.pdf</a>
+                <span style="color:var(--muted);">· 248 KB</span>
+              </div>
+              <div style="font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:11px;color:var(--muted);">~/Downloads/weekly.pdf</div>
+            </div>
+
+            <!-- user 2 -->
+            <div style="align-self:flex-end;max-width:78%;background:var(--user-bubble);padding:11px 14px;border-radius:14px 14px 4px 14px;line-height:1.55;">再帮我写一个待办小程序，能添加任务和勾选完成就行。</div>
+
+            <!-- progress card -->
+            <div style="align-self:flex-start;max-width:80%;width:100%;background:var(--card);border:1px solid var(--border);border-left:3px solid var(--orange);border-radius:10px;padding:13px 15px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:9px;">
+                <span style="font-weight:600;">写一个待办小程序</span>
+                <span style="font-size:12px;color:var(--orange-text);font-weight:600;">65%</span>
+              </div>
+              <div style="height:6px;border-radius:999px;background:var(--track);overflow:hidden;margin-bottom:8px;">
+                <div style="height:100%;width:65%;background:var(--orange);border-radius:999px;"></div>
+              </div>
+              <div style="font-size:12.5px;color:var(--muted);display:flex;align-items:center;gap:6px;">
+                <span style="width:6px;height:6px;border-radius:999px;background:var(--orange);"></span>
+                正在生成 index.html…
+              </div>
+            </div>
+
+            <!-- confirm card -->
+            <sc-if value="{{ confirmPending }}" hint-placeholder-val="{{ true }}">
+            <div style="align-self:flex-start;max-width:80%;background:var(--orange-soft);border:1px solid var(--orange);border-radius:10px;padding:14px 15px;">
+              <div style="font-weight:600;color:var(--orange-text);margin-bottom:6px;display:flex;align-items:center;gap:7px;">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4M12 17h.01"></path><path d="M10.3 3.9 2.4 18a2 2 0 0 0 1.7 3h15.8a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"></path></svg>
+                执行前确认
+              </div>
+              <div style="font-size:13px;line-height:1.55;color:var(--text);margin-bottom:12px;">将允许 Claude Code 进入执行模式（运行命令 / 装依赖 / 联网），是否允许？</div>
+              <div style="display:flex;gap:9px;">
+                <button onClick="{{ approve }}" style="padding:7px 15px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--orange-deep)">批准执行</button>
+                <button onClick="{{ deny }}" style="padding:7px 15px;background:transparent;color:var(--danger);border:1px solid var(--danger);border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;" style-hover="background:var(--danger-soft)">拒绝</button>
+              </div>
+            </div>
+            </sc-if>
+            <sc-if value="{{ confirmApproved }}" hint-placeholder-val="{{ false }}">
+            <div style="align-self:flex-start;max-width:80%;font-size:12.5px;color:var(--success);display:flex;align-items:center;gap:7px;padding:4px 2px;">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>已批准执行，正在运行…
+            </div>
+            </sc-if>
+            <sc-if value="{{ confirmDenied }}" hint-placeholder-val="{{ false }}">
+            <div style="align-self:flex-start;max-width:80%;font-size:12.5px;color:var(--danger);display:flex;align-items:center;gap:7px;padding:4px 2px;">已拒绝，将仅生成代码、不执行。</div>
+            </sc-if>
+
+            <!-- image message -->
+            <div style="align-self:flex-start;max-width:80%;">
+              <div onClick="{{ openLightbox }}" style="cursor:zoom-in;width:236px;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:var(--card);">
+                <div style="height:36px;background:var(--orange-soft);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:5px;padding:0 11px;">
+                  <span style="width:9px;height:9px;border-radius:999px;background:var(--orange);"></span>
+                  <span style="font-size:11px;color:var(--orange-text);font-weight:600;">我的待办</span>
+                </div>
+                <div style="padding:11px 12px;display:flex;flex-direction:column;gap:7px;">
+                  <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--muted);"><span style="width:13px;height:13px;border:1.5px solid var(--orange);border-radius:4px;background:var(--orange);"></span><span style="text-decoration:line-through;">买牛奶</span></div>
+                  <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;"><span style="width:13px;height:13px;border:1.5px solid var(--muted);border-radius:4px;"></span>预订会议室</div>
+                  <div style="display:flex;align-items:center;gap:8px;font-size:11.5px;"><span style="width:13px;height:13px;border:1.5px solid var(--muted);border-radius:4px;"></span>回复设计稿评论</div>
+                </div>
+              </div>
+              <div style="font-size:11.5px;color:var(--muted);margin-top:5px;">预览截图 · 点击放大</div>
+            </div>
+
+            <!-- streaming reply -->
+            <div style="align-self:flex-start;max-width:80%;background:var(--card);border:1px solid var(--border);padding:11px 14px;border-radius:14px 14px 14px 4px;line-height:1.6;min-height:20px;">
+              <sc-if value="{{ heroThinking }}" hint-placeholder-val="{{ false }}">
+                <span style="display:inline-flex;gap:4px;align-items:center;padding:2px 0;">
+                  <span style="width:7px;height:7px;border-radius:999px;background:var(--muted);animation:umbob 1.2s infinite;"></span>
+                  <span style="width:7px;height:7px;border-radius:999px;background:var(--muted);animation:umbob 1.2s infinite .2s;"></span>
+                  <span style="width:7px;height:7px;border-radius:999px;background:var(--muted);animation:umbob 1.2s infinite .4s;"></span>
+                </span>
+              </sc-if>
+              <span>{{ heroShown }}</span><sc-if value="{{ heroStreaming }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;width:2px;height:15px;background:var(--orange);vertical-align:-2px;margin-left:1px;animation:umblink 1s steps(1) infinite;"></span></sc-if>
+            </div>
+          </div>
+          </sc-if>
+
+          <!-- dynamic appended messages -->
+          <sc-for list="{{ dynView }}" as="m" hint-placeholder-count="0">
+            <sc-if value="{{ m.isUser }}" hint-placeholder-val="{{ false }}">
+              <div style="align-self:flex-end;max-width:78%;background:var(--user-bubble);padding:11px 14px;border-radius:14px 14px 4px 14px;line-height:1.55;">{{ m.text }}</div>
+            </sc-if>
+            <sc-if value="{{ m.isBot }}" hint-placeholder-val="{{ false }}">
+              <div style="align-self:flex-start;max-width:80%;background:var(--card);border:1px solid var(--border);padding:11px 14px;border-radius:14px 14px 14px 4px;line-height:1.6;min-height:20px;">
+                <sc-if value="{{ m.showDots }}" hint-placeholder-val="{{ false }}">
+                  <span style="display:inline-flex;gap:4px;align-items:center;">
+                    <span style="width:7px;height:7px;border-radius:999px;background:var(--muted);animation:umbob 1.2s infinite;"></span>
+                    <span style="width:7px;height:7px;border-radius:999px;background:var(--muted);animation:umbob 1.2s infinite .2s;"></span>
+                    <span style="width:7px;height:7px;border-radius:999px;background:var(--muted);animation:umbob 1.2s infinite .4s;"></span>
+                  </span>
+                </sc-if>
+                <span>{{ m.text }}</span><sc-if value="{{ m.streaming }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block;width:2px;height:15px;background:var(--orange);vertical-align:-2px;margin-left:1px;animation:umblink 1s steps(1) infinite;"></span></sc-if>
+              </div>
+            </sc-if>
+          </sc-for>
+
+          <sc-if value="{{ emptyState }}" hint-placeholder-val="{{ false }}">
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--muted);gap:10px;min-height:300px;">
+              <span style="width:46px;height:46px;border-radius:12px;background:var(--orange);color:#fff;font-weight:700;font-size:24px;display:flex;align-items:center;justify-content:center;opacity:.92;">U</span>
+              <span style="font-size:15px;">开始和 Umbra 聊天</span>
+            </div>
+          </sc-if>
+        </div>
+
+        <!-- input -->
+        <div style="flex:none;border-top:1px solid var(--border);background:var(--card);padding:12px 16px;">
+          <div style="display:flex;gap:10px;align-items:flex-end;">
+            <textarea value="{{ draft }}" onChange="{{ setDraft }}" onKeyDown="{{ onKey }}" placeholder="输入消息，Enter 发送，Shift+Enter 换行" rows="2" style="flex:1;resize:none;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:10px;padding:9px 12px;font-size:13.5px;line-height:1.5;font-family:inherit;outline:none;max-height:120px;" style-focus="border-color:var(--orange)"></textarea>
+            <button onClick="{{ send }}" style="flex: none; display: flex; align-items: center; gap: 6px; padding: 9px 16px; height: 40px; background: var(--orange); color: #fff; border: none; border-radius: 10px; font-size: 13.5px; font-weight: 600; cursor: pointer; align-self: center" style-hover="background:var(--orange-deep)">
+              发送<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"></path></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== TASKS ===== -->
+      <sc-if value="{{ isTasks }}" hint-placeholder-val="{{ false }}">
+      <div style="height:100%;overflow-y:auto;padding:18px 22px;">
+        <h1 style="margin:0 0 16px;font-size:16px;font-weight:600;">任务</h1>
+        <div style="display:flex;flex-direction:column;gap:10px;">
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:14px;">
+            <div style="flex:1;"><div style="font-weight:500;">导出周报 PDF</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px;">本机 · MacBook-Pro-2</div></div>
+            <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--success-soft);color:var(--success);">已完成</span>
+            <span style="font-size:12px;color:var(--muted);width:42px;text-align:right;">14:02</span>
+          </div>
+
+          <div onClick="{{ openTask }}" style="background:var(--card);border:1px solid var(--orange);border-radius:12px;padding:13px 16px;cursor:pointer;">
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:9px;">
+              <div style="flex:1;"><div style="font-weight:500;">写一个待办小程序</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px;">Claude Code · 执行模式</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--orange-soft);color:var(--orange-text);">执行中</span>
+              <span style="font-size:12px;color:var(--muted);width:42px;text-align:right;">14:09</span>
+            </div>
+            <div style="height:5px;border-radius:999px;background:var(--track);overflow:hidden;"><div style="height:100%;width:65%;background:var(--orange);"></div></div>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:14px;">
+            <div style="flex:1;"><div style="font-weight:500;">给落地页换主图</div><div style="font-size:11.5px;color:var(--muted);margin-top:2px;">排队中</div></div>
+            <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--chip);color:var(--muted);">待执行</span>
+            <span style="font-size:12px;color:var(--muted);width:42px;text-align:right;">14:11</span>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:13px 16px;display:flex;align-items:center;gap:14px;">
+            <div style="flex:1;"><div style="font-weight:500;">批量压缩视频</div><div style="font-size:11.5px;color:var(--danger);margin-top:2px;">FFmpeg 退出码 1 · 磁盘空间不足</div></div>
+            <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 10px;border-radius:999px;font-size:11.5px;font-weight:600;background:var(--danger-soft);color:var(--danger);">失败</span>
+            <span style="font-size:12px;color:var(--muted);width:42px;text-align:right;">13:40</span>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- task detail panel -->
+      <sc-if value="{{ taskOpen }}" hint-placeholder-val="{{ false }}">
+      <div onClick="{{ closeTask }}" style="position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:30;"></div>
+      <div style="position:absolute;top:0;right:0;bottom:0;width:420px;background:var(--card);border-left:1px solid var(--border);z-index:31;display:flex;flex-direction:column;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:15px 20px;border-bottom:1px solid var(--border);">
+          <div><div style="font-weight:600;font-size:15px;">写一个待办小程序</div><div style="font-size:11.5px;color:var(--orange-text);margin-top:2px;">执行中 · Claude Code</div></div>
+          <button onClick="{{ closeTask }}" style="border:none;background:transparent;color:var(--muted);cursor:pointer;font-size:20px;line-height:1;">×</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:18px 20px;display:flex;flex-direction:column;gap:20px;">
+          <div>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span style="font-size:12px;color:var(--muted);">总进度</span><span style="font-size:12px;color:var(--orange-text);font-weight:600;">65%</span></div>
+            <div style="height:6px;border-radius:999px;background:var(--track);overflow:hidden;"><div style="height:100%;width:65%;background:var(--orange);"></div></div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px;">步骤</div>
+            <div style="display:flex;flex-direction:column;gap:9px;">
+              <div style="display:flex;align-items:center;gap:9px;font-size:13px;"><span style="width:18px;height:18px;border-radius:999px;background:var(--success);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;">✓</span>拟定结构</div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:13px;"><span style="width:18px;height:18px;border-radius:999px;border:2px solid var(--orange);"></span>生成 index.html</div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);"><span style="width:18px;height:18px;border-radius:999px;border:2px solid var(--border);"></span>接入交互逻辑</div>
+              <div style="display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);"><span style="width:18px;height:18px;border-radius:999px;border:2px solid var(--border);"></span>本地保存与通知</div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px;">事件时间线</div>
+            <div style="display:flex;flex-direction:column;gap:0;border-left:2px solid var(--border);margin-left:4px;">
+              <div style="position:relative;padding:0 0 13px 16px;"><span style="position:absolute;left:-6px;top:3px;width:9px;height:9px;border-radius:999px;background:var(--orange);"></span><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted);">14:08</span><div style="font-size:12.5px;">创建任务</div></div>
+              <div style="position:relative;padding:0 0 13px 16px;"><span style="position:absolute;left:-6px;top:3px;width:9px;height:9px;border-radius:999px;background:var(--orange);"></span><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted);">14:08</span><div style="font-size:12.5px;">拟定结构 · 4 个步骤</div></div>
+              <div style="position:relative;padding:0 0 2px 16px;"><span style="position:absolute;left:-6px;top:3px;width:9px;height:9px;border-radius:999px;background:var(--orange);"></span><span style="font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--muted);">14:09</span><div style="font-size:12.5px;">生成 index.html…</div></div>
+            </div>
+          </div>
+          <div>
+            <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:10px;">生成结果</div>
+            <div style="display:flex;align-items:center;gap:8px;font-size:13px;border:1px solid var(--border);border-radius:8px;padding:9px 11px;">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--muted)" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3v5h5M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path></svg>
+              <a href="#" onClick="{{ noop }}" style="color:var(--orange-text);text-decoration:none;font-weight:500;">index.html</a>
+              <span style="flex:1;"></span><span style="font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:var(--muted);">~/Downloads/todo/</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      </sc-if>
+      </sc-if>
+
+      <!-- ===== ABILITIES ===== -->
+      <sc-if value="{{ isAbilities }}" hint-placeholder-val="{{ false }}">
+      <div style="height:100%;overflow-y:auto;padding:18px 22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <h1 style="margin:0;font-size:16px;font-weight:600;">能力</h1>
+          <button onClick="{{ goSettings }}" style="display:flex;align-items:center;gap:6px;padding:6px 13px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px;font-size:13px;cursor:pointer;" style-hover="border-color:var(--orange);color:var(--orange-text)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg>添加程序</button>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:13px;">
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:15px;">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">
+              <span style="width:34px;height:34px;border-radius:9px;background:var(--orange-soft);color:var(--orange-text);display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 9l-4 3 4 3M16 9l4 3-4 3M13 5l-2 14"></path></svg></span>
+              <div style="flex:1;"><div style="font-weight:600;">Claude Code</div><div style="font-size:11.5px;color:var(--muted);">v1.0.7</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--success-soft);color:var(--success);"><span style="width:6px;height:6px;border-radius:999px;background:var(--success);"></span>可用</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">write_code</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">edit_file</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">run_command</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">capture</span>
+            </div>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:15px;opacity:.62;">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">
+              <span style="width:34px;height:34px;border-radius:9px;background:var(--chip);color:var(--muted);display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l6-6-6-6M12 19h8"></path></svg></span>
+              <div style="flex:1;"><div style="font-weight:600;">Codex CLI</div><div style="font-size:11.5px;color:var(--muted);">未安装 codex</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--chip);color:var(--muted);">未安装</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">write_code</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">refactor</span>
+            </div>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:15px;">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">
+              <span style="width:34px;height:34px;border-radius:9px;background:var(--orange-soft);color:var(--orange-text);display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"></rect><path d="M3 9h18"></path></svg></span>
+              <div style="flex:1;"><div style="font-weight:600;">系统</div><div style="font-size:11.5px;color:var(--muted);">macOS 内置</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--success-soft);color:var(--success);"><span style="width:6px;height:6px;border-radius:999px;background:var(--success);"></span>可用</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">open_app</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">find_file</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">read_file</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">notify</span>
+            </div>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:15px;">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">
+              <span style="width:34px;height:34px;border-radius:9px;background:var(--orange-soft);color:var(--orange-text);display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m22 8-6 4 6 4V8z"></path><rect x="2" y="6" width="14" height="12" rx="2"></rect></svg></span>
+              <div style="flex:1;"><div style="font-weight:600;">FFmpeg</div><div style="font-size:11.5px;color:var(--muted);">v6.1</div></div>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--success-soft);color:var(--success);"><span style="width:6px;height:6px;border-radius:999px;background:var(--success);"></span>可用</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">transcode</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">compress</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">extract_frame</span>
+            </div>
+          </div>
+
+          <div style="grid-column:1 / -1;background:var(--card);border:1px solid var(--warning);border-radius:12px;padding:15px;">
+            <div style="display:flex;align-items:center;gap:11px;margin-bottom:12px;">
+              <span style="width:34px;height:34px;border-radius:9px;background:var(--warning-soft);color:var(--warning);display:flex;align-items:center;justify-content:center;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg></span>
+              <div style="flex:1;"><div style="font-weight:600;">电脑操作 <span style="font-size:11px;color:var(--muted);font-weight:400;">computer-use</span></div><div style="font-size:11.5px;color:var(--warning);">需在设置授予『屏幕录制 / 辅助功能』权限</div></div>
+              <button onClick="{{ goSettings }}" style="padding:4px 11px;border:1px solid var(--warning);color:var(--warning);background:transparent;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">去授权</button>
+              <span style="display:inline-flex;align-items:center;gap:5px;padding:2px 9px;border-radius:999px;font-size:11px;font-weight:600;background:var(--warning-soft);color:var(--warning);"><span style="width:6px;height:6px;border-radius:999px;background:var(--warning);"></span>待授权</span>
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;">
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">screenshot</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">click</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">type</span>
+              <span style="padding:3px 9px;border-radius:999px;background:var(--chip);font-size:11.5px;color:var(--muted);font-family:ui-monospace,Menlo,monospace;">key</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== REALTIME ===== -->
+      <sc-if value="{{ isRealtime }}" hint-placeholder-val="{{ false }}">
+      <div style="height:100%;overflow-y:auto;padding:18px 22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <h1 style="margin:0;font-size:16px;font-weight:600;">实时操作</h1>
+            <button onClick="{{ toggleRealtime }}" style="font-size:11.5px;color:var(--muted);background:transparent;border:1px solid var(--border);border-radius:999px;padding:2px 9px;cursor:pointer;">切换状态</button>
+          </div>
+          <sc-if value="{{ rtRunning }}" hint-placeholder-val="{{ true }}">
+          <button style="display:flex;align-items:center;gap:7px;padding:7px 15px;border:1.5px solid var(--danger);color:var(--danger);background:var(--danger-soft);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;" style-hover="background:var(--danger);color:#fff">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>紧急停止
+          </button>
+          </sc-if>
+        </div>
+
+        <sc-if value="{{ rtIdle }}" hint-placeholder-val="{{ false }}">
+        <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--muted);height:420px;">
+          <span style="width:54px;height:54px;border-radius:14px;background:var(--card);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="4" width="19" height="13" rx="2"></rect><path d="M8 21h8M12 17v4"></path></svg></span>
+          <div style="font-size:14px;">当前没有进行中的电脑操作</div>
+          <div style="font-size:12px;display:flex;align-items:center;gap:6px;"><span style="width:7px;height:7px;border-radius:999px;background:var(--warning);"></span>computer-use 已开启 · 权限待授予</div>
+        </div>
+        </sc-if>
+
+        <sc-if value="{{ rtRunning }}" hint-placeholder-val="{{ true }}">
+        <div style="display:grid;grid-template-columns:1.15fr 1fr;gap:16px;">
+          <!-- screenshot preview -->
+          <div>
+            <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px;"><span style="width:6px;height:6px;border-radius:999px;background:var(--danger);animation:umblink 1.4s infinite;"></span>当前屏幕</div>
+            <div style="border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#3a3633;aspect-ratio:16/10;position:relative;">
+              <div style="position:absolute;inset:0;background:linear-gradient(135deg,#4a4540,#2e2b28);"></div>
+              <div style="position:absolute;left:18px;top:16px;right:18px;height:62%;background:var(--card);border-radius:8px;border:1px solid rgba(0,0,0,.2);overflow:hidden;">
+                <div style="height:22px;background:var(--titlebar);display:flex;align-items:center;gap:4px;padding:0 8px;border-bottom:1px solid var(--border);"><span style="width:7px;height:7px;border-radius:999px;background:#FF5F57;"></span><span style="width:7px;height:7px;border-radius:999px;background:#FEBC2E;"></span><span style="width:7px;height:7px;border-radius:999px;background:#28C840;"></span><span style="font-size:9px;color:var(--muted);margin-left:6px;">访达 — 下载</span></div>
+                <div style="padding:8px 10px;display:flex;flex-direction:column;gap:5px;">
+                  <div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--muted);">📄 report.docx</div>
+                  <div style="display:flex;align-items:center;gap:6px;font-size:9.5px;background:var(--orange-soft);color:var(--orange-text);border-radius:4px;padding:2px 4px;width:fit-content;">📕 weekly.pdf</div>
+                  <div style="display:flex;align-items:center;gap:6px;font-size:9.5px;color:var(--muted);">🖼 cover.png</div>
+                </div>
+              </div>
+              <div style="position:absolute;left:42%;top:46%;width:18px;height:18px;border:2px solid var(--orange);border-radius:999px;box-shadow:0 0 0 6px rgba(232,89,12,.25);"></div>
+            </div>
+          </div>
+          <!-- info -->
+          <div style="display:flex;flex-direction:column;gap:14px;">
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:13px 15px;">
+              <div style="font-size:11.5px;color:var(--muted);margin-bottom:5px;">目标</div>
+              <div style="font-size:13.5px;line-height:1.5;">把『下载』里的 weekly.pdf 发给飞书『增长组』</div>
+            </div>
+            <div style="background:var(--orange-soft);border:1px solid var(--orange);border-radius:10px;padding:13px 15px;">
+              <div style="font-size:11.5px;color:var(--orange-text);margin-bottom:5px;">当前动作</div>
+              <div style="font-size:13.5px;line-height:1.5;color:var(--text);display:flex;align-items:center;gap:8px;"><span style="width:7px;height:7px;border-radius:999px;background:var(--orange);"></span>在访达中选中 weekly.pdf</div>
+            </div>
+            <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:13px 15px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;"><span style="font-size:11.5px;color:var(--muted);">引擎：云端 computer-use</span><span style="font-size:11.5px;color:var(--orange-text);font-weight:600;">第 3 / 20 步</span></div>
+              <div style="height:6px;border-radius:999px;background:var(--track);overflow:hidden;"><div style="height:100%;width:15%;background:var(--orange);"></div></div>
+            </div>
+          </div>
+        </div>
+        <!-- action history -->
+        <div style="margin-top:18px;">
+          <div style="font-size:12px;color:var(--muted);font-weight:600;margin-bottom:9px;">动作历史</div>
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;overflow:hidden;font-family:ui-monospace,Menlo,monospace;font-size:12px;">
+            <div style="display:flex;gap:10px;padding:8px 13px;border-bottom:1px solid var(--border);"><span style="color:var(--muted);width:34px;">#1</span><span style="color:var(--orange-text);width:46px;">点击</span><span>Dock 上的「访达」图标</span></div>
+            <div style="display:flex;gap:10px;padding:8px 13px;border-bottom:1px solid var(--border);"><span style="color:var(--muted);width:34px;">#2</span><span style="color:var(--orange-text);width:46px;">按键</span><span>⌘ + ⇧ + L 进入「下载」</span></div>
+            <div style="display:flex;gap:10px;padding:8px 13px;background:var(--orange-soft);"><span style="color:var(--muted);width:34px;">#3</span><span style="color:var(--orange-text);width:46px;">点击</span><span>选中 weekly.pdf（当前）</span></div>
+          </div>
+        </div>
+        </sc-if>
+      </div>
+      </sc-if>
+
+      <!-- ===== LOGS ===== -->
+      <sc-if value="{{ isLogs }}" hint-placeholder-val="{{ false }}">
+      <div style="height:100%;display:flex;flex-direction:column;min-height:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 22px;border-bottom:1px solid var(--border);flex:none;gap:12px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <h1 style="margin:0;font-size:16px;font-weight:600;">日志</h1>
+            <div style="display:flex;gap:6px;">
+              <button onClick="{{ filterAll }}" style="{{ logFAll }}">全部</button>
+              <button onClick="{{ filterJobs }}" style="{{ logFJobs }}">任务</button>
+              <button onClick="{{ filterConn }}" style="{{ logFConn }}">连接</button>
+              <button onClick="{{ filterCap }}" style="{{ logFCap }}">能力执行</button>
+            </div>
+          </div>
+          <button style="display:flex;align-items:center;gap:6px;padding:6px 12px;border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:8px;font-size:12.5px;cursor:pointer;" style-hover="border-color:var(--orange);color:var(--orange-text)"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>打开日志文件夹</button>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:14px 22px;font-family:ui-monospace,'SF Mono',Menlo,monospace;font-size:12px;line-height:1.95;min-height:0;">
+          <sc-for list="{{ logView }}" as="l" hint-placeholder-count="8">
+            <div style="display:flex;gap:11px;">
+              <span style="color:var(--muted);flex:none;">{{ l.time }}</span>
+              <span style="flex:none;width:62px;font-weight:600;color:{{ l.color }};">{{ l.tag }}</span>
+              <span style="color:var(--text);">{{ l.msg }}</span>
+            </div>
+          </sc-for>
+        </div>
+      </div>
+      </sc-if>
+
+      <!-- ===== SETTINGS ===== -->
+      <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+      <div style="height:100%;overflow-y:auto;padding:18px 22px;">
+        <h1 style="margin:0 0 16px;font-size:16px;font-weight:600;">设置</h1>
+        <div style="display:flex;flex-direction:column;gap:14px;max-width:680px;">
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;">
+            <div style="font-weight:600;margin-bottom:14px;">连接</div>
+            <div style="display:flex;flex-direction:column;gap:13px;">
+              <div style="display:flex;align-items:center;gap:14px;"><label style="width:120px;font-size:13px;color:var(--muted);">服务端地址</label><input value="https://umbra.tingyusha.xyz" style="flex:1;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;padding:7px 11px;font-size:13px;outline:none;font-family:ui-monospace,Menlo,monospace;" style-focus="border-color:var(--orange)"></div>
+              <div style="display:flex;align-items:center;gap:14px;"><label style="width:120px;font-size:13px;color:var(--muted);">访问 Token</label><input value="••••••••••••••••" type="password" style="flex:1;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;padding:7px 11px;font-size:13px;outline:none;font-family:ui-monospace,Menlo,monospace;letter-spacing:2px;" style-focus="border-color:var(--orange)"></div>
+              <div style="display:flex;align-items:center;gap:14px;"><label style="width:120px;font-size:13px;color:var(--muted);">连接状态</label><span style="display:inline-flex;align-items:center;gap:7px;font-size:13px;"><span style="width:8px;height:8px;border-radius:999px;background:var(--success);box-shadow:0 0 0 3px var(--success-soft);"></span>已连接</span><span style="flex:1;"></span><button style="padding:6px 13px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;font-size:12.5px;cursor:pointer;" style-hover="border-color:var(--orange);color:var(--orange-text)">重连</button></div>
+            </div>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;">
+            <div style="font-weight:600;margin-bottom:14px;">设备</div>
+            <div style="display:flex;flex-direction:column;gap:13px;">
+              <div style="display:flex;align-items:center;gap:14px;"><label style="width:120px;font-size:13px;color:var(--muted);">设备 ID</label><span style="font-size:13px;font-family:ui-monospace,Menlo,monospace;color:var(--text);">dev_8f3a-2c91-mbp2</span></div>
+              <div style="display:flex;align-items:center;gap:14px;"><label style="width:120px;font-size:13px;color:var(--muted);">设备名</label><input value="MacBook-Pro-2.local" style="flex:1;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;padding:7px 11px;font-size:13px;outline:none;" style-focus="border-color:var(--orange)"></div>
+            </div>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;">
+            <div style="font-weight:600;margin-bottom:5px;">权限 <span style="font-size:12px;color:var(--muted);font-weight:400;">macOS</span></div>
+            <div style="display:flex;flex-direction:column;">
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);"><div style="flex:1;"><div style="font-size:13.5px;">辅助功能</div><div style="font-size:11.5px;color:var(--muted);margin-top:1px;">允许控制其它应用（点击、输入）</div></div><span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--success);font-weight:600;"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"></path></svg>已授予</span></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid var(--border);"><div style="flex:1;"><div style="font-size:13.5px;">屏幕录制</div><div style="font-size:11.5px;color:var(--muted);margin-top:1px;">用于截图与 computer-use 监看</div></div><span style="display:inline-flex;align-items:center;gap:5px;font-size:12.5px;color:var(--warning);font-weight:600;"><span style="width:7px;height:7px;border-radius:999px;background:var(--warning);"></span>未授予</span><button style="padding:5px 12px;border:1px solid var(--warning);color:var(--warning);background:transparent;border-radius:7px;font-size:12px;font-weight:600;cursor:pointer;">去授权</button></div>
+              <div style="display:flex;align-items:center;gap:12px;padding:12px 0;"><div style="flex:1;"><div style="font-size:13.5px;">computer-use 总开关</div><div style="font-size:11.5px;color:var(--muted);margin-top:1px;">允许 AI 像人一样操作本机软件（默认关）</div></div>
+                <button onClick="{{ toggleCU }}" style="{{ cuTrack }}"><span style="{{ cuKnob }}"></span></button>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;">
+            <div style="font-weight:600;margin-bottom:14px;">能力配置</div>
+            <div style="display:flex;align-items:center;gap:14px;margin-bottom:14px;"><label style="width:120px;font-size:13px;color:var(--muted);">providers.json</label><span style="flex:1;font-size:12px;font-family:ui-monospace,Menlo,monospace;color:var(--muted);">~/.umbra/providers.json</span><button style="padding:6px 13px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;font-size:12.5px;cursor:pointer;" style-hover="border-color:var(--orange);color:var(--orange-text)">编辑</button></div>
+            <div style="display:flex;align-items:center;gap:14px;">
+              <label style="width:120px;font-size:13px;color:var(--muted);">coding 权限</label>
+              <div style="display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;">
+                <button onClick="{{ setMode0 }}" style="{{ mode0 }}">只生成</button>
+                <button onClick="{{ setMode1 }}" style="{{ mode1 }}">执行前确认</button>
+                <button onClick="{{ setMode2 }}" style="{{ mode2 }}">直接执行</button>
+              </div>
+            </div>
+          </div>
+
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;display:flex;align-items:center;gap:14px;">
+            <div style="flex:1;"><div style="font-weight:600;">关于</div><div style="font-size:12px;color:var(--muted);margin-top:3px;">Umbra 桌面客户端 · v0.4.2 (electron)</div></div>
+            <button style="padding:6px 13px;border:1px solid var(--border);background:transparent;color:var(--text);border-radius:8px;font-size:12.5px;cursor:pointer;" style-hover="border-color:var(--orange);color:var(--orange-text)">检查更新</button>
+          </div>
+
+        </div>
+      </div>
+      </sc-if>
+
+    </main>
+  </div>
+
+  <!-- ===== lightbox ===== -->
+  <sc-if value="{{ lightbox }}" hint-placeholder-val="{{ false }}">
+  <div onClick="{{ closeLightbox }}" style="position:absolute;inset:0;background:rgba(0,0,0,.82);z-index:60;display:flex;align-items:center;justify-content:center;cursor:zoom-out;">
+    <div style="width:430px;background:var(--card);border-radius:14px;overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.5);">
+      <div style="height:52px;background:var(--orange-soft);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;padding:0 18px;">
+        <span style="width:12px;height:12px;border-radius:999px;background:var(--orange);"></span>
+        <span style="font-size:15px;color:var(--orange-text);font-weight:600;">我的待办</span>
+      </div>
+      <div style="padding:22px;display:flex;flex-direction:column;gap:13px;">
+        <div style="display:flex;align-items:center;gap:12px;font-size:15px;color:var(--muted);"><span style="width:20px;height:20px;border:2px solid var(--orange);border-radius:6px;background:var(--orange);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;">✓</span><span style="text-decoration:line-through;">买牛奶</span></div>
+        <div style="display:flex;align-items:center;gap:12px;font-size:15px;"><span style="width:20px;height:20px;border:2px solid var(--muted);border-radius:6px;"></span>预订会议室</div>
+        <div style="display:flex;align-items:center;gap:12px;font-size:15px;"><span style="width:20px;height:20px;border:2px solid var(--muted);border-radius:6px;"></span>回复设计稿评论</div>
+        <div style="display:flex;gap:10px;margin-top:6px;border-top:1px solid var(--border);padding-top:16px;"><input placeholder="添加任务…" style="flex:1;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:8px;padding:8px 11px;font-size:13px;outline:none;"><button style="padding:8px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-weight:600;font-size:13px;">添加</button></div>
+      </div>
+    </div>
+    <div style="position:absolute;top:20px;right:24px;color:rgba(255,255,255,.7);font-size:12.5px;">按 Esc 或点击空白处关闭</div>
+  </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1100,&quot;height&quot;:720},&quot;dark&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;外观&quot;},&quot;startScreen&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;chat&quot;,&quot;tasks&quot;,&quot;abilities&quot;,&quot;realtime&quot;,&quot;logs&quot;,&quot;settings&quot;],&quot;default&quot;:&quot;chat&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;外观&quot;},&quot;accent&quot;:{&quot;editor&quot;:&quot;color&quot;,&quot;default&quot;:&quot;#E8590C&quot;,&quot;options&quot;:[&quot;#E8590C&quot;,&quot;#2A6FDB&quot;,&quot;#1F8A5B&quot;,&quot;#7C3AED&quot;],&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;外观&quot;}}">
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.HERO = "好的，基本结构已经搭好了。现在帮你接上交互——添加任务、点击勾选完成、刷新后仍然保留。完成后会把文件放到你的「下载」目录，并在这里通知你。";
+    this.state = {
+      nav: props.startScreen || 'chat',
+      dark: !!props.dark,
+      heroShown: '', heroStreaming: true,
+      traceOpen: true,
+      confirm: 'pending',
+      lightbox: false,
+      taskOpen: false,
+      cleared: false,
+      draft: '',
+      dyn: [],
+      rtRunning: true,
+      cu: false,
+      codingMode: 1,
+      logFilter: 'all',
+    };
+    this._logs = [
+      {time:'14:01:55', tag:'conn', src:'conn', color:'var(--success)', msg:'已连接 umbra.tingyusha.xyz · 设备已登记'},
+      {time:'14:02:03', tag:'job', src:'jobs', color:'var(--orange-text)', msg:'create_job(goal="导出周报 PDF")'},
+      {time:'14:02:18', tag:'cap', src:'cap', color:'#7c5cff', msg:'system.export_pdf → ~/Downloads/weekly.pdf'},
+      {time:'14:02:19', tag:'job', src:'jobs', color:'var(--orange-text)', msg:'job#3142 已完成 · 248KB'},
+      {time:'14:08:40', tag:'job', src:'jobs', color:'var(--orange-text)', msg:'create_job(goal="写一个待办小程序")'},
+      {time:'14:08:41', tag:'cap', src:'cap', color:'#7c5cff', msg:'claude_code.write_code(file="index.html")'},
+      {time:'14:09:02', tag:'warn', src:'cap', color:'var(--warning)', msg:'等待用户确认进入执行模式'},
+      {time:'14:09:30', tag:'info', src:'conn', color:'var(--muted)', msg:'心跳 ok · 延迟 38ms'},
+      {time:'13:40:11', tag:'error', src:'jobs', color:'var(--danger)', msg:'ffmpeg.compress 退出码 1 · 磁盘空间不足'},
+    ];
+  }
+  componentDidMount(){ this._streamHero(); this._applyAccent(); this._onKey=(e)=>{ if(e.key==='Escape'){ this.setState({lightbox:false, taskOpen:false}); } }; window.addEventListener('keydown', this._onKey); }
+  componentDidUpdate(prev){ if(prev && this.props.accent!==undefined) this._applyAccent(); }
+  componentWillUnmount(){ clearInterval(this._t1); clearInterval(this._t2); window.removeEventListener('keydown', this._onKey); }
+
+  _applyAccent(){ if(this.root && this.props.accent){ this.root.style.setProperty('--orange', this.props.accent); } }
+
+  _streamHero(){
+    let i = 0;
+    clearInterval(this._t1);
+    this._t1 = setInterval(()=>{
+      i++;
+      this.setState({ heroShown: this.HERO.slice(0,i) });
+      this._scroll();
+      if(i >= this.HERO.length){ clearInterval(this._t1); this.setState({heroStreaming:false}); }
+    }, 26);
+  }
+  _scroll(){ if(this.msgEl){ this.msgEl.scrollTop = this.msgEl.scrollHeight; } }
+
+  send = () => {
+    const t = this.state.draft.trim();
+    if(!t) return;
+    const reply = "收到，我来处理这个请求。先在已连接的设备上查一下可用能力，再决定怎么执行。";
+    const dyn = this.state.dyn.concat([
+      { role:'user', full:t, shown:t.length },
+      { role:'bot', full:reply, shown:0 },
+    ]);
+    const idx = dyn.length - 1;
+    this.setState({ dyn, draft:'', cleared:false }, ()=>this._scroll());
+    let j = 0;
+    clearInterval(this._t2);
+    this._t2 = setInterval(()=>{
+      j++;
+      this.setState(s=>{ const d=s.dyn.slice(); if(d[idx]) d[idx]={...d[idx], shown:j}; return {dyn:d}; });
+      this._scroll();
+      if(j >= reply.length) clearInterval(this._t2);
+    }, 24);
+  };
+
+  setDraft = (e)=> this.setState({draft:e.target.value});
+  onKey = (e)=>{ if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); this.send(); } };
+  newSession = ()=> this.setState({cleared:true, dyn:[]});
+
+  renderVals(){
+    const s = this.state;
+    const navBase = { display:'flex', alignItems:'center', gap:10, padding:'8px 10px', borderRadius:8, fontSize:13.5, cursor:'pointer', border:'none', width:'100%', textAlign:'left', fontFamily:'inherit', whiteSpace:'nowrap' };
+    const navStyle = (k)=> ({ ...navBase, background: s.nav===k?'var(--orange)':'transparent', color: s.nav===k?'#fff':'rgba(255,255,255,.72)', fontWeight: s.nav===k?600:500 });
+    const chip = (active)=> ({ padding:'4px 11px', borderRadius:999, fontSize:12, cursor:'pointer', fontFamily:'inherit', border:'1px solid '+(active?'var(--orange)':'var(--border)'), background: active?'var(--orange-soft)':'transparent', color: active?'var(--orange-text)':'var(--muted)', fontWeight: active?600:400 });
+    const seg = (active)=> ({ padding:'6px 13px', fontSize:12.5, cursor:'pointer', border:'none', borderRight:'1px solid var(--border)', fontFamily:'inherit', background: active?'var(--orange)':'transparent', color: active?'#fff':'var(--text)', fontWeight: active?600:400 });
+
+    const dynView = s.dyn.map(m=>({
+      isUser: m.role==='user',
+      isBot: m.role==='bot',
+      text: m.full.slice(0, m.shown),
+      showDots: m.role==='bot' && m.shown===0,
+      streaming: m.role==='bot' && m.shown>0 && m.shown < m.full.length,
+    }));
+
+    const logView = s.logFilter==='all' ? this._logs : this._logs.filter(l=>l.src===s.logFilter);
+
+    return {
+      theme: s.dark ? 'dark' : 'light',
+      dark: s.dark, light: !s.dark,
+      setRoot: (el)=>{ this.root=el; this._applyAccent(); },
+      setMsgEl: (el)=>{ this.msgEl=el; },
+      toggleTheme: ()=> this.setState({dark:!s.dark}),
+
+      goChat:()=>this.setState({nav:'chat'}), goTasks:()=>this.setState({nav:'tasks'}),
+      goAbilities:()=>this.setState({nav:'abilities'}), goRealtime:()=>this.setState({nav:'realtime'}),
+      goLogs:()=>this.setState({nav:'logs'}), goSettings:()=>this.setState({nav:'settings'}),
+      navChat:navStyle('chat'), navTasks:navStyle('tasks'), navAbilities:navStyle('abilities'),
+      navRealtime:navStyle('realtime'), navLogs:navStyle('logs'), navSettings:navStyle('settings'),
+
+      isChat:s.nav==='chat', isTasks:s.nav==='tasks', isAbilities:s.nav==='abilities',
+      isRealtime:s.nav==='realtime', isLogs:s.nav==='logs', isSettings:s.nav==='settings',
+
+      heroShown:s.heroShown, heroStreaming:s.heroStreaming, heroThinking: s.heroShown.length===0,
+      traceOpen:s.traceOpen, toggleTrace:()=>this.setState({traceOpen:!s.traceOpen}),
+      chevStyle:{ transition:'transform .15s', transform: s.traceOpen?'rotate(90deg)':'rotate(0deg)' },
+
+      confirmPending:s.confirm==='pending', confirmApproved:s.confirm==='approved', confirmDenied:s.confirm==='denied',
+      approve:()=>this.setState({confirm:'approved'}), deny:()=>this.setState({confirm:'denied'}),
+
+      showConvo: !s.cleared,
+      emptyState: s.cleared && s.dyn.length===0,
+      dynView,
+      draft:s.draft, setDraft:this.setDraft, onKey:this.onKey, send:this.send, newSession:this.newSession,
+      noop:(e)=>e.preventDefault(),
+
+      openLightbox:()=>this.setState({lightbox:true}), closeLightbox:()=>this.setState({lightbox:false}), lightbox:s.lightbox,
+      openTask:()=>this.setState({taskOpen:true}), closeTask:()=>this.setState({taskOpen:false}), taskOpen:s.taskOpen,
+
+      rtRunning:s.rtRunning, rtIdle:!s.rtRunning, toggleRealtime:()=>this.setState({rtRunning:!s.rtRunning}),
+
+      toggleCU:()=>this.setState({cu:!s.cu}),
+      cuTrack:{ width:38, height:22, borderRadius:999, border:'none', cursor:'pointer', padding:2, display:'flex', justifyContent: s.cu?'flex-end':'flex-start', background: s.cu?'var(--orange)':'var(--border)', transition:'background .15s' },
+      cuKnob:{ width:18, height:18, borderRadius:999, background:'#fff', display:'block', boxShadow:'0 1px 2px rgba(0,0,0,.25)' },
+
+      setMode0:()=>this.setState({codingMode:0}), setMode1:()=>this.setState({codingMode:1}), setMode2:()=>this.setState({codingMode:2}),
+      mode0:seg(s.codingMode===0), mode1:seg(s.codingMode===1), mode2:{...seg(s.codingMode===2), borderRight:'none'},
+
+      filterAll:()=>this.setState({logFilter:'all'}), filterJobs:()=>this.setState({logFilter:'jobs'}),
+      filterConn:()=>this.setState({logFilter:'conn'}), filterCap:()=>this.setState({logFilter:'cap'}),
+      logFAll:chip(s.logFilter==='all'), logFJobs:chip(s.logFilter==='jobs'), logFConn:chip(s.logFilter==='conn'), logFCap:chip(s.logFilter==='cap'),
+      logView,
+    };
+  }
+}
+</script>
+</body>
+</html>

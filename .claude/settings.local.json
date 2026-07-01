@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xcodebuild -project UmbraiOS.xcodeproj -scheme UmbraiOS -destination 'platform=iOS Simulator,name=iPhone 15' clean build)",
+      "Bash(xcodebuild -project UmbraiOS.xcodeproj -scheme UmbraiOS -destination 'platform=iOS Simulator,name=iPhone 16' clean build)",
+      "Bash(xcrun simctl *)",
+      "Bash(xcodebuild -project /Users/sam/Documents/SourceTree/Geek/UmbraiOS/UmbraiOS.xcodeproj -scheme UmbraiOS -destination 'id=E828BA13-D72E-4EF6-A2A6-F38E6CA8E7F4' build)",
+      "Bash(swift build *)",
+      "Bash(swiftc *)",
+      "Bash(plutil -p /Users/sam/Library/Developer/Xcode/DerivedData/UmbraiOS-*/Build/Products/Debug-iphoneos/UmbraiOS.app/Info.plist)",
+      "Bash(xcodebuild -project /Users/sam/Documents/SourceTree/Geek/UmbraiOS/UmbraiOS.xcodeproj -scheme UmbraiOS -destination 'generic/platform=iOS' -configuration Debug build)"
+    ]
+  }
+}
