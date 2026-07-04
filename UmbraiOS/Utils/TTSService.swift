@@ -22,7 +22,7 @@ class TTSService: NSObject, ObservableObject {
         stop()
 
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "zh-CN")
+        utterance.voice = AVSpeechSynthesisVoice(language: LanguageManager.shared.speechLocaleIdentifier)
         utterance.rate = 0.5
 
         synthesizer.delegate = self
@@ -57,7 +57,9 @@ final class SpeechRecognizer: ObservableObject {
     @Published var transcript = ""
     @Published var available = true
 
-    private let recognizer = SFSpeechRecognizer(locale: Locale(identifier: "zh-CN"))
+    private var recognizer: SFSpeechRecognizer? {
+        SFSpeechRecognizer(locale: Locale(identifier: LanguageManager.shared.speechLocaleIdentifier))
+    }
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?

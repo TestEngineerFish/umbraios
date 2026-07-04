@@ -2,32 +2,35 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var languageManager: LanguageManager
     @StateObject private var viewModel = ChatViewModel()
 
     var body: some View {
+        // 依赖 localeRevision，确保切换语言后 Tab 文案刷新
+        let _ = languageManager.localeRevision
         TabView {
             ChatView(viewModel: viewModel)
                 .tabItem {
                     Image(systemName: "bubble.left.and.bubble.right")
-                    Text("聊天")
+                    Text(L("tab.chat"))
                 }
 
             TasksView()
                 .tabItem {
                     Image(systemName: "list.bullet.clipboard")
-                    Text("任务")
+                    Text(L("tab.tasks"))
                 }
 
             AbilitiesView()
                 .tabItem {
                     Image(systemName: "square.grid.2x2")
-                    Text("能力")
+                    Text(L("tab.skills"))
                 }
 
             MeView()
                 .tabItem {
                     Image(systemName: "person.crop.circle")
-                    Text("我的")
+                    Text(L("tab.me"))
                 }
         }
         .tint(Color.umbraOrange)

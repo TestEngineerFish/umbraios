@@ -72,11 +72,11 @@ class TasksViewModel: ObservableObject {
 
     func statusBadgeText(_ status: String) -> String {
         switch status {
-        case "done": return "已完成"
-        case "running": return "执行中"
-        case "pending": return "待执行"
-        case "failed": return "失败"
-        case "cancelled": return "已取消"
+        case "done": return L("tasks.done")
+        case "running": return L("tasks.running")
+        case "pending": return L("tasks.pending")
+        case "failed": return L("tasks.failed")
+        case "cancelled": return L("tasks.cancelled")
         default: return status
         }
     }

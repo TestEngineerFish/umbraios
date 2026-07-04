@@ -28,6 +28,7 @@ private func parseServerDate(_ ts: String) -> Date? {
     return nil
 }
 
+@MainActor
 private func formatMessageTime(_ ts: String?) -> String? {
     guard let ts = ts, let date = parseServerDate(ts) else { return nil }
 
@@ -36,20 +37,24 @@ private func formatMessageTime(_ ts: String?) -> String? {
     let components = calendar.dateComponents([.day], from: date, to: now)
     let daysAgo = components.day ?? 0
 
+    let locale = LanguageManager.shared.locale
     let timeFormatter = DateFormatter()
+    timeFormatter.locale = locale
     timeFormatter.dateFormat = "HH:mm"
 
     if daysAgo <= 0 {
         return timeFormatter.string(from: date)
     } else if daysAgo == 1 {
-        return "昨天 " + timeFormatter.string(from: date)
+        return L("date.yesterday", timeFormatter.string(from: date))
     } else if calendar.isDate(date, equalTo: now, toGranularity: .year) {
         let monthFormatter = DateFormatter()
-        monthFormatter.dateFormat = "M月d日 HH:mm"
+        monthFormatter.locale = locale
+        monthFormatter.dateFormat = L("date.monthDayTime")
         return monthFormatter.string(from: date)
     } else {
         let fullFormatter = DateFormatter()
-        fullFormatter.dateFormat = "yyyy年M月d日 HH:mm"
+        fullFormatter.locale = locale
+        fullFormatter.dateFormat = L("date.fullDateTime")
         return fullFormatter.string(from: date)
     }
 }
@@ -140,7 +145,7 @@ struct ChatView: View {
                     Circle()
                         .fill(Color.green)
                         .frame(width: 6, height: 6)
-                    Text("已连接 · 此设备可执行")
+                    Text(L("chat.connected"))
                         .font(.system(size: 11))
                         .foregroundColor(.umbraMuted)
                 }
@@ -165,9 +170,9 @@ struct ChatView: View {
                 .foregroundColor(umbraColor(\.border)),
             alignment: .bottom
         )
-        .confirmationDialog("开启新对话？当前对话会被清空。", isPresented: $showNewChatConfirm, titleVisibility: .visible) {
-            Button("开启新对话", role: .destructive) { viewModel.newSession() }
-            Button("取消", role: .cancel) { }
+        .confirmationDialog(L("chat.newSession.confirm"), isPresented: $showNewChatConfirm, titleVisibility: .visible) {
+            Button(L("chat.newSession.title"), role: .destructive) { viewModel.newSession() }
+            Button(L("common.cancel"), role: .cancel) { }
         }
     }
 
@@ -209,18 +214,18 @@ struct ChatView: View {
                 .background(Color.orange)
                 .clipShape(RoundedRectangle(cornerRadius: 15))
 
-            Text("开始和 Umbra 聊天")
+            Text(L("chat.empty.title"))
                 .font(.system(size: 16, weight: .semibold))
 
-            Text("发消息、加附件，或让我在这台电脑上帮你做点事")
+            Text(L("chat.empty.subtitle"))
                 .font(.system(size: 12.5))
                 .foregroundColor(.umbraMuted)
                 .multilineTextAlignment(.center)
 
             LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
-                chipSuggestion("总结一份文档")
-                chipSuggestion("截屏并说明")
-                chipSuggestion("写个小工具")
+                chipSuggestion(L("chat.suggestion.summary"))
+                chipSuggestion(L("chat.suggestion.screenshot"))
+                chipSuggestion(L("chat.suggestion.tool"))
             }
             .padding(.horizontal, 20)
             Spacer()
@@ -315,7 +320,7 @@ struct ChatView: View {
                             Image(systemName: "chevron.right")
                                 .font(.system(size: 11))
                                 .rotationEffect(data.traceOpen ? .degrees(90) : .zero)
-                            Text("工具轨迹 · \(data.trace.count) 步")
+                            Text(L("chat.toolTrace", Int64(data.trace.count)))
                                 .font(.system(size: 11.5))
                                 .foregroundColor(.umbraMuted)
                         }
@@ -446,7 +451,7 @@ struct ChatView: View {
 
     private func doneCard(goal: String, results: [[String: String]]) -> some View {
         VStack(alignment: .leading, spacing: 7) {
-            Text("🎉 任务完成：\(goal)")
+            Text(L("chat.done", goal))
                 .font(.system(size: 13.5, weight: .semibold))
                 .foregroundColor(.green)
 
@@ -484,7 +489,7 @@ struct ChatView: View {
             HStack(spacing: 7) {
                 Image(systemName: "exclamationmark.triangle")
                     .foregroundColor(.orangeText)
-                Text("执行前确认")
+                Text(L("chat.confirm.title"))
                     .font(.system(size: 13.5, weight: .semibold))
                     .foregroundColor(.orangeText)
             }
@@ -495,14 +500,14 @@ struct ChatView: View {
                 .padding(.bottom, 12)
 
             HStack(spacing: 9) {
-                Button("批准执行") {
+                Button(L("chat.confirm.approve")) {
                     viewModel.handleConfirm(taskId: data.taskId, approved: true)
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(.orange)
                 .frame(maxWidth: .infinity)
 
-                Button("拒绝") {
+                Button(L("chat.confirm.deny")) {
                     viewModel.handleConfirm(taskId: data.taskId, approved: false)
                 }
                 .buttonStyle(.bordered)
@@ -541,9 +546,9 @@ struct ChatView: View {
     private var quickChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
-                chip("总结文档") { viewModel.draft = "帮我总结这份文档的要点" }
-                chip("识别图片") { viewModel.draft = "请识别这张图片并描述内容" }
-                chip("操作电脑") { viewModel.draft = "帮我操作一下电脑" }
+                chip(L("chat.chip.summary")) { viewModel.draft = L("chat.chip.draft.summary") }
+                chip(L("chat.chip.image")) { viewModel.draft = L("chat.chip.draft.image") }
+                chip(L("chat.chip.computer")) { viewModel.draft = L("chat.chip.draft.computer") }
             }
             .padding(.horizontal, 14)
             .padding(.top, 8)
@@ -589,7 +594,7 @@ struct ChatView: View {
 
             // Text field
             HStack(spacing: 6) {
-                TextField("发消息…", text: $viewModel.draft, axis: .vertical)
+                TextField(L("chat.input.placeholder"), text: $viewModel.draft, axis: .vertical)
                     .textFieldStyle(.plain)
                     .tint(Color.umbraOrange)
                     .lineLimit(1...4)
@@ -598,7 +603,7 @@ struct ChatView: View {
                     .toolbar {
                         ToolbarItemGroup(placement: .keyboard) {
                             Spacer()
-                            Button("完成") { inputFocused = false }
+                            Button(L("chat.input.done")) { inputFocused = false }
                                 .tint(Color.umbraOrange)
                         }
                     }
@@ -658,16 +663,18 @@ struct AttachSheet: View {
     enum Action { case photo, camera, file, voice }
     let onSelect: (Action) -> Void
 
-    private let items: [(Action, String, String)] = [
-        (.photo, "photo.on.rectangle", "相册"),
-        (.camera, "camera", "拍照"),
-        (.file, "doc", "文件"),
-        (.voice, "mic", "语音输入")
-    ]
+    private var items: [(Action, String, String)] {
+        [
+            (.photo, "photo.on.rectangle", L("chat.attach.album")),
+            (.camera, "camera", L("chat.attach.camera")),
+            (.file, "doc", L("chat.attach.file")),
+            (.voice, "mic", L("chat.attach.voice"))
+        ]
+    }
 
     var body: some View {
         VStack(spacing: 0) {
-            Text("添加")
+            Text(L("chat.attach.add"))
                 .font(.system(size: 15, weight: .semibold))
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.horizontal, 20)
@@ -837,11 +844,11 @@ extension ChatView {
                         }
                     }
                     .frame(height: 16)
-                    Text("朗读中")
+                    Text(L("chat.tts.reading"))
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundColor(.orangeText)
                 } else {
-                    Text("朗读回复")
+                    Text(L("chat.tts.readReply"))
                         .font(.system(size: 11.5, weight: .semibold))
                         .foregroundColor(.orangeText)
                 }
@@ -880,7 +887,7 @@ struct ImageLightboxView: View {
                         .padding()
                         .transition(.opacity)
                 case .failure:
-                    Text("图片加载失败")
+                    Text(L("chat.image.loadFailed"))
                         .foregroundColor(.white)
                 case .empty:
                     ProgressView()

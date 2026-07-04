@@ -136,7 +136,7 @@ class ChatViewModel: ObservableObject {
         for i in blocks.indices {
             if case .job(var j) = blocks[i], j.confirmTaskId == taskId {
                 j.confirmTaskId = nil
-                j.message = approved ? "已批准，执行中…" : "已拒绝"
+                j.message = approved ? L("chat.status.approved") : L("chat.status.denied")
                 blocks[i] = .job(j)
             }
         }
@@ -191,7 +191,7 @@ class ChatViewModel: ObservableObject {
         case "confirm_request":
             if let taskId = msg.taskId,
                !blocks.contains(where: { if case .confirm(let c) = $0 { return c.taskId == taskId } else { return false } }) {
-                blocks.append(.confirm(ChatBlock.ConfirmBlock(taskId: taskId, summary: msg.confirmSummary ?? "需要执行前确认", resolved: nil)))
+                blocks.append(.confirm(ChatBlock.ConfirmBlock(taskId: taskId, summary: msg.confirmSummary ?? L("chat.status.confirmRequired"), resolved: nil)))
                 confirmPending = ConfirmRequest(taskId: taskId, summary: msg.confirmSummary ?? "")
             }
 
@@ -215,7 +215,7 @@ class ChatViewModel: ObservableObject {
                 }
                 assistantIdx = nil
             }
-            blocks.append(.error(id: UUID(), text: msg.errorMessage ?? "出错了"))
+            blocks.append(.error(id: UUID(), text: msg.errorMessage ?? L("chat.status.error")))
 
         default: break
         }
@@ -254,7 +254,7 @@ class ChatViewModel: ObservableObject {
                 }
             }
         } else {
-            let goal = msg.jobGoal ?? "任务"
+            let goal = msg.jobGoal ?? L("chat.status.task")
             let block = ChatBlock.jobBlock(
                 jobId: id, goal: goal, pct: pct,
                 status: msg.jobStatus ?? "running",
@@ -271,7 +271,7 @@ class ChatViewModel: ObservableObject {
         for i in blocks.indices {
             if case .job(var j) = blocks[i], j.confirmTaskId == taskId {
                 j.confirmTaskId = nil
-                j.message = approved ? "已批准，执行中…" : "已拒绝"
+                j.message = approved ? L("chat.status.approved") : L("chat.status.denied")
                 blocks[i] = .job(j)
             }
             if case .confirm(var c) = blocks[i], c.taskId == taskId {

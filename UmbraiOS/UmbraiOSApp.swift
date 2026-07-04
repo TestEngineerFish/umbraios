@@ -4,11 +4,15 @@ import AVFoundation
 @main
 struct UmbraiOSApp: App {
     @StateObject private var appState = AppState.shared
+    @ObservedObject private var languageManager = LanguageManager.shared
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                .environmentObject(languageManager)
+                .environment(\.locale, languageManager.locale)
+                .id(languageManager.localeRevision)
                 .preferredColorScheme(appState.isDarkMode ? .dark : .light)
         }
     }

@@ -10,7 +10,7 @@ struct TasksView: View {
             VStack(spacing: 0) {
                 // Header
                 HStack {
-                    Text("任务")
+                    Text(L("tasks.title"))
                         .font(.system(size: 18, weight: .semibold))
                     Spacer()
                     Button {
@@ -92,7 +92,7 @@ struct TaskRow: View {
             }
             .frame(height: 5)
 
-            Text(job.result_summary?.prefix(70) ?? job.channel.map { "来自 \($0)" } ?? "")
+            Text(taskSubtitle(for: job))
                 .font(.system(size: 11.5))
                 .foregroundColor(.umbraMuted)
                 .lineLimit(1)
@@ -107,13 +107,23 @@ struct TaskRow: View {
         )
     }
 
+    private func taskSubtitle(for job: Job) -> String {
+        if let summary = job.result_summary, !summary.isEmpty {
+            return String(summary.prefix(70))
+        }
+        if let channel = job.channel {
+            return L("tasks.fromChannel", channel)
+        }
+        return ""
+    }
+
     private var statusBadge: some View {
         let (text, color): (String, Color) = {
             switch job.status {
-            case "done": return ("已完成", .green)
-            case "running": return ("执行中", .orange)
-            case "pending": return ("待执行", .umbraMuted)
-            case "failed": return ("失败", .red)
+            case "done": return (L("tasks.done"), .green)
+            case "running": return (L("tasks.running"), .orange)
+            case "pending": return (L("tasks.pending"), .umbraMuted)
+            case "failed": return (L("tasks.failed"), .red)
             default: return (job.status, .umbraMuted)
             }
         }()
@@ -152,7 +162,7 @@ struct JobDetailView: View {
                     // Progress
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Text("总进度")
+                            Text(L("tasks.progress"))
                                 .font(.system(size: 12))
                                 .foregroundColor(.umbraMuted)
                             Spacer()
@@ -176,7 +186,7 @@ struct JobDetailView: View {
                     // Steps
                     if !detail.subtasks.isEmpty {
                         VStack(alignment: .leading, spacing: 9) {
-                            Text("步骤")
+                            Text(L("tasks.steps"))
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(.umbraMuted)
                             ForEach(detail.subtasks.sorted(by: { $0.seq < $1.seq })) { sub in
@@ -193,7 +203,7 @@ struct JobDetailView: View {
                     // Timeline
                     if !detail.events.isEmpty {
                         VStack(alignment: .leading, spacing: 0) {
-                            Text("事件时间线")
+                            Text(L("tasks.events"))
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(.umbraMuted)
                                 .padding(.bottom, 10)
@@ -233,7 +243,7 @@ struct JobDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("关闭") { dismiss() }
+                    Button(L("common.close")) { dismiss() }
                         .tint(Color.umbraOrange)
                 }
             }

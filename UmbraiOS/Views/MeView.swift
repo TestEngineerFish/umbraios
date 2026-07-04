@@ -3,48 +3,50 @@ import SwiftUI
 // MARK: - Me View
 struct MeView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var languageManager: LanguageManager
     @StateObject private var config = NetworkConfig.shared
     @State private var showingEditServer = false
     @State private var showingEditToken = false
+    @State private var showingLanguagePicker = false
     @State private var cuEnabled: Bool = UserDefaults.standard.bool(forKey: "cuEnabled")
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 16) {
-                    // Device card
                     deviceCard
 
-                    // Connection section
-                    section(title: "连接") {
-                        settingRow(title: "服务端地址", value: config.serverUrl) {
+                    section(title: L("me.connection")) {
+                        settingRow(title: L("me.serverUrl"), value: config.serverUrl) {
                             showingEditServer = true
                         }
                         rowDivider
-                        settingRow(title: "访问 Token", value: "••••••") {
+                        settingRow(title: L("me.accessToken"), value: "••••••") {
                             showingEditToken = true
                         }
                     }
 
-                    // Execution section
-                    section(title: "执行与权限") {
-                        ToggleRow(title: "辅助功能", isOn: .constant(true))
+                    section(title: L("me.execution")) {
+                        ToggleRow(title: L("me.accessibility"), isOn: .constant(true))
                             .disabled(true)
                         rowDivider
-                        ToggleRow(title: "computer-use 总开关", isOn: $cuEnabled)
+                        ToggleRow(title: L("me.computerUse"), isOn: $cuEnabled)
                             .onChange(of: cuEnabled) { newValue in
                                 UserDefaults.standard.set(newValue, forKey: "cuEnabled")
                             }
                     }
 
-                    // General section
-                    section(title: "通用") {
-                        ToggleRow(title: "自动朗读回复", isOn: $appState.autoReadReplies)
+                    section(title: L("me.general")) {
+                        settingRow(title: L("me.language"), value: languageManager.currentDisplayName) {
+                            showingLanguagePicker = true
+                        }
                         rowDivider
-                        ToggleRow(title: "深色模式", isOn: $appState.isDarkMode)
+                        ToggleRow(title: L("me.autoRead"), isOn: $appState.autoReadReplies)
+                        rowDivider
+                        ToggleRow(title: L("me.darkMode"), isOn: $appState.isDarkMode)
                         rowDivider
                         HStack {
-                            Text("关于")
+                            Text(L("me.about"))
                                 .font(.system(size: 13.5))
                             Spacer()
                             Text("v0.4.2")
@@ -57,12 +59,15 @@ struct MeView: View {
                 .padding(.horizontal, 14)
                 .padding(.top, 16)
             }
-            .navigationTitle("我的")
+            .navigationTitle(L("me.title"))
             .sheet(isPresented: $showingEditServer) {
                 EditServerSheet()
             }
             .sheet(isPresented: $showingEditToken) {
                 EditTokenSheet()
+            }
+            .sheet(isPresented: $showingLanguagePicker) {
+                LanguagePickerSheet()
             }
         }
     }
@@ -80,7 +85,7 @@ struct MeView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(UIDevice.current.name)
                     .font(.system(size: 15, weight: .semibold))
-                Text("iOS · 已登记为执行设备")
+                Text(L("me.deviceRegistered"))
                     .font(.system(size: 12))
                     .foregroundColor(.umbraMuted)
             }
@@ -91,7 +96,7 @@ struct MeView: View {
                 Circle()
                     .fill(Color.green)
                     .frame(width: 7, height: 7)
-                Text("在线")
+                Text(L("me.online"))
                     .font(.system(size: 12))
                     .foregroundColor(.green)
             }
@@ -138,6 +143,7 @@ struct MeView: View {
                 Text(value)
                     .font(.system(size: 12))
                     .foregroundColor(.umbraMuted)
+                    .lineLimit(1)
                 Image(systemName: "chevron.right")
                     .font(.system(size: 12))
                     .foregroundColor(.umbraMuted)
@@ -147,11 +153,47 @@ struct MeView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - Row Divider（行与行之间的分割线；不再用每行 overlay，避免错位/横切开关）
     private var rowDivider: some View {
         Rectangle()
             .fill(umbraColor(\.border))
             .frame(height: 1)
+    }
+}
+
+// MARK: - Language Picker Sheet
+struct LanguagePickerSheet: View {
+    @Environment(\.dismiss) var dismiss
+    @EnvironmentObject var languageManager: LanguageManager
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(AppLanguage.allCases) { language in
+                    Button {
+                        languageManager.preference = language
+                        dismiss()
+                    } label: {
+                        HStack {
+                            Text(language.nativeDisplayName)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if languageManager.preference == language {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.umbraOrange)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle(L("me.language"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("common.cancel")) { dismiss() }
+                }
+            }
+        }
+        .presentationDetents([.medium])
     }
 }
 
@@ -183,20 +225,20 @@ struct EditServerSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("服务端地址") {
+                Section(L("me.serverUrl")) {
                     TextField("https://...", text: $serverUrl)
                         .keyboardType(.URL)
                         .autocorrectionDisabled()
                 }
             }
-            .navigationTitle("编辑服务端")
+            .navigationTitle(L("me.editServer"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(L("common.cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    Button(L("common.save")) {
                         config.serverUrl = serverUrl
                         dismiss()
                     }
@@ -217,19 +259,19 @@ struct EditTokenSheet: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("访问 Token") {
-                    SecureField("输入 Token", text: $token)
+                Section(L("me.accessToken")) {
+                    SecureField(L("me.enterToken"), text: $token)
                         .autocorrectionDisabled()
                 }
             }
-            .navigationTitle("编辑 Token")
+            .navigationTitle(L("me.editToken"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("取消") { dismiss() }
+                    Button(L("common.cancel")) { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("保存") {
+                    Button(L("common.save")) {
                         config.token = token
                         dismiss()
                     }

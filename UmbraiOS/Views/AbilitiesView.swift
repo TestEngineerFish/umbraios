@@ -16,7 +16,7 @@ struct AbilitiesView: View {
                             Image(systemName: "square.grid.2x2")
                                 .font(.system(size: 40))
                                 .foregroundColor(.umbraMuted)
-                            Text("暂无能力")
+                            Text(L("skills.empty"))
                                 .font(.system(size: 16))
                                 .foregroundColor(.umbraMuted)
                         }
@@ -38,7 +38,7 @@ struct AbilitiesView: View {
                 .padding(.horizontal, 14)
                 .padding(.top, 16)
             }
-            .navigationTitle("能力")
+            .navigationTitle(L("skills.title"))
             .task {
                 await viewModel.loadCapabilities()
             }
@@ -64,7 +64,7 @@ struct ProviderCard: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(provider.display_name)
                         .font(.system(size: 14, weight: .semibold))
-                    Text(provider.version.map { "v\($0)" } ?? (provider.available ? "可用" : provider.unavailable_reason))
+                    Text(provider.version.map { "v\($0)" } ?? (provider.available ? L("skills.available") : provider.unavailable_reason))
                         .font(.system(size: 11))
                         .foregroundColor(.umbraMuted)
                 }
@@ -73,7 +73,7 @@ struct ProviderCard: View {
 
                 // Status badge
                 if provider.available {
-                    Text("可用")
+                    Text(L("skills.available"))
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundColor(.green)
                         .padding(.horizontal, 9)
@@ -81,7 +81,7 @@ struct ProviderCard: View {
                         .background(Color.green.opacity(0.1))
                         .clipShape(Capsule())
                 } else {
-                    Text("不可用")
+                    Text(L("skills.unavailable"))
                         .font(.system(size: 10.5, weight: .semibold))
                         .foregroundColor(.umbraMuted)
                         .padding(.horizontal, 9)
