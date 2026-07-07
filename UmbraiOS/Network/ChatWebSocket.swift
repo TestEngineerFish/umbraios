@@ -103,8 +103,11 @@ class ChatWebSocket: ObservableObject {
 
     // MARK: - Private
     private func sendJSON(_ json: [String: Any]) {
-        guard let data = try? JSONSerialization.data(withJSONObject: json) else { return }
-        webSocketTask?.send(.data(data)) { [weak self] error in
+        // 必须发「文本帧」：服务端 chat_ws 用 receive_text() 只收文本帧；
+        // 发 .data（二进制帧）会让服务端解析失败并关闭连接（表现为 Socket not connected / RST）。
+        guard let data = try? JSONSerialization.data(withJSONObject: json),
+              let text = String(data: data, encoding: .utf8) else { return }
+        webSocketTask?.send(.string(text)) { error in
             if let error {
                 print("[ChatWebSocket] Send error: \(error)")
             }
