@@ -10,6 +10,8 @@ class ChatWebSocket: ObservableObject {
     @Published private(set) var status: ConnectionStatus = .offline
 
     private var webSocketTask: URLSessionWebSocketTask?
+    // 必须持有 URLSession：局部变量会被 ARC 释放，导致其 WebSocket task 立刻失效（Socket not connected / RST）。
+    private var session: URLSession?
     private var receiveTask: Task<Void, Never>?
     private var backoff: TimeInterval = 1.0
     private let maxBackoff: TimeInterval = 30.0
@@ -32,6 +34,7 @@ class ChatWebSocket: ObservableObject {
         }
 
         let session = URLSession(configuration: .default)
+        self.session = session   // 持有，防止被释放导致连接被拆
         let task = session.webSocketTask(with: url)
         task.resume()
         webSocketTask = task
@@ -71,7 +74,8 @@ class ChatWebSocket: ObservableObject {
         let msg: [String: Any] = [
             "type": "message",
             "content": content,
-            "client_id": clientId
+            "client_id": clientId,
+            "auto_approve_operate": NetworkConfig.shared.autoApproveOperate
         ]
         sendJSON(msg)
     }

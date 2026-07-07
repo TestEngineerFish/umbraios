@@ -560,12 +560,6 @@
         }
       }
     },
-    "chat.status.timeout" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection interrupted or timed out. Please resend." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接中断或响应超时，请重新发送。" } }
-      }
-    },
     "chat.status.error" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -596,6 +590,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "任务"
+          }
+        }
+      }
+    },
+    "chat.status.timeout" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connection interrupted or timed out. Please resend."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连接中断或响应超时，请重新发送。"
           }
         }
       }
