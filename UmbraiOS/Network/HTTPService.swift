@@ -15,13 +15,22 @@ class HTTPService {
     }
 
     // MARK: - History
-    func fetchHistory(limit: Int = 20, beforeId: Int? = nil) async -> [HistoryMessage] {
+    func fetchHistory(limit: Int = 20, beforeId: Int? = nil, conversation: String = "assistant") async -> [HistoryMessage] {
         var components = URLComponents(string: "\(baseUrl)/history")
-        components?.queryItems = [
-            URLQueryItem(name: "limit", value: String(limit))
-        ] + (beforeId.map { [URLQueryItem(name: "before_id", value: String($0))] } ?? [])
+        var items = [
+            URLQueryItem(name: "limit", value: String(limit)),
+            URLQueryItem(name: "conversation", value: conversation)
+        ]
+        if let beforeId { items.append(URLQueryItem(name: "before_id", value: String(beforeId))) }
+        components?.queryItems = items
 
         return await request(components?.url)
+    }
+
+    // MARK: - Conversations
+    func fetchConversations() async -> [ConversationRow] {
+        guard let url = URL(string: "\(baseUrl)/conversations") else { return [] }
+        return await request(url)
     }
 
     // MARK: - Jobs
@@ -121,6 +130,7 @@ class HTTPService {
             if T.self == [HistoryMessage].self { return [] as! T }
             if T.self == [Job].self { return [] as! T }
             if T.self == [Capability].self { return [] as! T }
+            if T.self == [ConversationRow].self { return [] as! T }
             fatalError("Unexpected type")
         }
         do {
@@ -132,6 +142,7 @@ class HTTPService {
             if T.self == [HistoryMessage].self { return [] as! T }
             if T.self == [Job].self { return [] as! T }
             if T.self == [Capability].self { return [] as! T }
+            if T.self == [ConversationRow].self { return [] as! T }
             return try! JSONDecoder().decode(T.self, from: Data())
         }
     }

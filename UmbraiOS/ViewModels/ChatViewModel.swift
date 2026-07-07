@@ -1,10 +1,22 @@
 import Foundation
 
 // MARK: - Chat ViewModel
+//
+// 多会话（与 PC / Web 端一致）：
+//   - "assistant"   = 你↔秘书主会话（可发送）
+//   - "device:<id>" = 服务端↔某设备的编排流（默认只读，设置里可开启发送）
+//   每个会话各自维护 blocks/分页/未读；服务端推送按 msg.conversation 路由。
 @MainActor
 class ChatViewModel: ObservableObject {
-    // Message blocks for rendering
+    static let mainConv = "assistant"
+
+    // 当前会话的消息（驱动列表渲染）
     @Published var blocks: [ChatBlock] = []
+    // 会话切换
+    @Published var activeConv: String = ChatViewModel.mainConv
+    @Published var conversationOrder: [String] = [ChatViewModel.mainConv]
+    @Published var unread: Set<String> = []
+
     @Published var draft: String = ""
     @Published var isThinking: Bool = false
     @Published var showAttachSheet: Bool = false
@@ -15,143 +27,219 @@ class ChatViewModel: ObservableObject {
 
     let ws = ChatWebSocket()
 
-    private var assistantIdx: Int?
-    private var jobMap: [String: Int] = [:]
-    private var oldestId: Int?
-    private var hasMoreHistory: Bool = true
-    private var isLoadingHistory: Bool = false
+    // 每个会话的独立状态
+    private final class ConvStore {
+        var blocks: [ChatBlock] = []
+        var assistantIdx: Int?
+        var jobMap: [String: Int] = [:]
+        var oldestId: Int?
+        var hasMoreHistory = true
+        var loaded = false
+    }
+    private var stores: [String: ConvStore] = [:]
+
+    private var isLoadingHistory = false
     var stickToBottom: Bool = true
-
-    // 公开滚动状态供UI使用
     var shouldScrollToBottom: Bool { stickToBottom }
+    func setStickToBottom(_ value: Bool) { stickToBottom = value }
 
-    func setStickToBottom(_ value: Bool) {
-        stickToBottom = value
+    func isReadonly(_ conv: String) -> Bool {
+        conv != ChatViewModel.mainConv && !NetworkConfig.shared.allowDeviceSend
+    }
+
+    func convLabel(_ conv: String) -> String {
+        if conv == ChatViewModel.mainConv { return L("chat.conv.secretary") }
+        if conv.hasPrefix("device:") { return String(conv.dropFirst("device:".count)).uppercased() }
+        return conv
     }
 
     init() {
         setupWebSocket()
     }
 
+    // MARK: - Store helpers
+    private func store(_ conv: String) -> ConvStore {
+        if let s = stores[conv] { return s }
+        let s = ConvStore()
+        stores[conv] = s
+        if !conversationOrder.contains(conv) { conversationOrder.append(conv) }
+        return s
+    }
+    private var mainStore: ConvStore { store(ChatViewModel.mainConv) }
+
+    // 把某会话的变更反映到 UI：active → 更新 blocks；否则标未读。
+    private func reflect(_ conv: String) {
+        if conv == activeConv {
+            blocks = store(conv).blocks
+        } else {
+            unread.insert(conv)
+        }
+    }
+
+    // MARK: - Setup / history
     private func setupWebSocket() {
-        ws.onMessage = { [weak self] msg in
-            self?.handleMessage(msg)
-        }
-        ws.onStatusChange = { [weak self] _ in
-            // Status changed, UI will update via @Published
-        }
+        ws.onMessage = { [weak self] msg in self?.handleMessage(msg) }
+        ws.onStatusChange = { [weak self] _ in _ = self }
         ws.connect()
         loadHistory()
+        loadConversationsList()
     }
 
     func loadHistory() {
         guard !isLoadingHistory else { return }
         isLoadingHistory = true
-
         Task {
-            let messages = await HTTPService.shared.fetchHistory(limit: 40)
+            let messages = await HTTPService.shared.fetchHistory(limit: 40, conversation: ChatViewModel.mainConv)
             await MainActor.run {
                 self.isLoadingHistory = false
-                if self.blocks.isEmpty {
-                    self.blocks = messages.map { msg in
-                        if msg.role == "user" {
-                            return ChatBlock.user(id: UUID(), text: msg.content, ts: msg.created_at)
-                        } else {
-                            return ChatBlock.assistantBlock(text: msg.content, ts: msg.created_at)
-                        }
-                    }
+                let s = self.mainStore
+                s.loaded = true
+                if s.blocks.isEmpty {
+                    s.blocks = messages.map { self.historyToBlock($0) }
                 }
                 if let last = messages.first {
-                    self.oldestId = last.id
-                    self.hasMoreHistory = messages.count >= 40
+                    s.oldestId = last.id
+                    s.hasMoreHistory = messages.count >= 40
+                }
+                self.reflect(ChatViewModel.mainConv)
+            }
+        }
+    }
+
+    private func loadConvHistory(_ conv: String) {
+        let s = store(conv)
+        guard !s.loaded else { return }
+        s.loaded = true
+        Task {
+            let messages = await HTTPService.shared.fetchHistory(limit: 40, conversation: conv)
+            await MainActor.run {
+                if s.blocks.isEmpty {
+                    s.blocks = messages.map { self.historyToBlock($0) }
+                }
+                if let last = messages.first {
+                    s.oldestId = last.id
+                    s.hasMoreHistory = messages.count >= 40
+                }
+                self.reflect(conv)
+            }
+        }
+    }
+
+    private func loadConversationsList() {
+        Task {
+            let rows = await HTTPService.shared.fetchConversations()
+            await MainActor.run {
+                for r in rows where r.conversation != ChatViewModel.mainConv {
+                    _ = self.store(r.conversation)
                 }
             }
+        }
+    }
+
+    private func historyToBlock(_ msg: HistoryMessage) -> ChatBlock {
+        switch msg.role {
+        case "user": return .user(id: UUID(), text: msg.content, ts: msg.created_at)
+        case "device": return .device(id: UUID(), text: msg.content, ts: msg.created_at)
+        default: return .assistantBlock(text: msg.content, ts: msg.created_at)
         }
     }
 
     func loadOlderHistory() async {
-        guard !isLoadingHistory, hasMoreHistory, let beforeId = oldestId else { return }
+        let s = store(activeConv)
+        guard !isLoadingHistory, s.hasMoreHistory, let beforeId = s.oldestId else { return }
         isLoadingHistory = true
-
-        let messages = await HTTPService.shared.fetchHistory(limit: 40, beforeId: beforeId)
-
+        let conv = activeConv
+        let messages = await HTTPService.shared.fetchHistory(limit: 40, beforeId: beforeId, conversation: conv)
         await MainActor.run {
             isLoadingHistory = false
-            if messages.isEmpty {
-                hasMoreHistory = false
-                return
-            }
-            if messages.count < 40 { hasMoreHistory = false }
-            oldestId = messages.first?.id
-
-            let newBlocks: [ChatBlock] = messages.map { msg in
-                if msg.role == "user" {
-                    return ChatBlock.user(id: UUID(), text: msg.content, ts: msg.created_at)
-                } else {
-                    return ChatBlock.assistantBlock(text: msg.content, ts: msg.created_at)
-                }
-            }
-            blocks.insert(contentsOf: newBlocks, at: 0)
-
-            // Adjust indices
+            if messages.isEmpty { s.hasMoreHistory = false; return }
+            if messages.count < 40 { s.hasMoreHistory = false }
+            s.oldestId = messages.first?.id
+            let newBlocks = messages.map { self.historyToBlock($0) }
+            s.blocks.insert(contentsOf: newBlocks, at: 0)
             let shift = newBlocks.count
-            for key in jobMap.keys { jobMap[key]? += shift }
-            assistantIdx? += shift
+            for key in s.jobMap.keys { s.jobMap[key]? += shift }
+            s.assistantIdx? += shift
+            reflect(conv)
         }
     }
 
+    // MARK: - Conversation switching
+    func switchConversation(_ conv: String) {
+        guard conv != activeConv else { return }
+        activeConv = conv
+        unread.remove(conv)
+        stickToBottom = true
+        let s = store(conv)
+        blocks = s.blocks
+        if !s.loaded { loadConvHistory(conv) }
+    }
+
+    // MARK: - Send
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         draft = ""
         stickToBottom = true
-
+        // 发送始终由秘书处理 → 落主会话；若当前在设备会话，切回主会话。
+        if activeConv != ChatViewModel.mainConv { switchConversation(ChatViewModel.mainConv) }
+        let s = mainStore
         let now = ISO8601DateFormatter().string(from: Date())
-        blocks.append(.user(id: UUID(), text: text, ts: now))
-
-        let assistantBlockIdx = blocks.count
-        blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: true, streaming: true, text: "", trace: [], traceOpen: true, ts: now)))
-        assistantIdx = assistantBlockIdx
-
+        s.blocks.append(.user(id: UUID(), text: text, ts: now))
+        s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: true, streaming: true, text: "", trace: [], traceOpen: true, ts: now)))
+        s.assistantIdx = s.blocks.count - 1
+        reflect(ChatViewModel.mainConv)
         ws.sendMessage(text)
     }
 
     func newSession() {
-        blocks.removeAll()
-        assistantIdx = nil
-        jobMap.removeAll()
+        let s = mainStore
+        s.blocks.removeAll()
+        s.assistantIdx = nil
+        s.jobMap.removeAll()
+        s.oldestId = nil
+        s.hasMoreHistory = true
         ws.sendNewSession()
         stickToBottom = true
+        if activeConv != ChatViewModel.mainConv { switchConversation(ChatViewModel.mainConv) }
+        else { reflect(ChatViewModel.mainConv) }
     }
 
     func toggleTrace(at index: Int) {
-        guard index < blocks.count, case .assistant(var a) = blocks[index] else { return }
+        let s = store(activeConv)
+        guard index < s.blocks.count, case .assistant(var a) = s.blocks[index] else { return }
         a.traceOpen.toggle()
-        blocks[index] = .assistant(a)
+        s.blocks[index] = .assistant(a)
+        reflect(activeConv)
     }
 
     func handleConfirm(taskId: String, approved: Bool) {
         ws.sendConfirm(taskId: taskId, approved: approved)
-        // Update UI
-        for i in blocks.indices {
-            if case .job(var j) = blocks[i], j.confirmTaskId == taskId {
-                j.confirmTaskId = nil
-                j.message = approved ? L("chat.status.approved") : L("chat.status.denied")
-                blocks[i] = .job(j)
-            }
-        }
+        resolveConfirm(taskId: taskId, approved: approved)
         confirmPending = nil
+    }
+
+    // 总是允许：打开自动批准（“我的”里同步）+ 批准本次。
+    func handleConfirmAlways(taskId: String) {
+        NetworkConfig.shared.autoApproveOperate = true
+        handleConfirm(taskId: taskId, approved: true)
+    }
+
+    private var autoApprovedTasks: Set<String> = []
+    // 满足自动批准就直接批准；返回是否已自动处理。
+    private func autoApproveIfEnabled(_ taskId: String) -> Bool {
+        guard NetworkConfig.shared.autoApproveOperate, !autoApprovedTasks.contains(taskId) else { return false }
+        autoApprovedTasks.insert(taskId)
+        ws.sendConfirm(taskId: taskId, approved: true)
+        resolveConfirm(taskId: taskId, approved: true)
+        return true
     }
 
     // MARK: - Message Handler
     private func handleMessage(_ msg: ChatMessage) {
         switch msg.type {
         case "delta":
-            if var a = currentAssistant {
-                a.text += msg.deltaText ?? ""
-                a.thinking = false
-                updateAssistant(a)
-            }
+            if var a = currentAssistant { a.text += msg.deltaText ?? ""; a.thinking = false; updateAssistant(a) }
 
         case "tool_call":
             if var a = currentAssistant {
@@ -160,10 +248,7 @@ class ChatViewModel: ObservableObject {
                     a.text = ""
                 }
                 var argsStr = ""
-                if let args = msg.toolArgs {
-                    let truncated = String(describing: args).prefix(120)
-                    argsStr = String(truncated)
-                }
+                if let args = msg.toolArgs { argsStr = String(String(describing: args).prefix(120)) }
                 a.trace.append("🔧 \(msg.toolName ?? "unknown")(\(argsStr))")
                 updateAssistant(a)
             }
@@ -177,22 +262,33 @@ class ChatViewModel: ObservableObject {
             }
 
         case "reply":
-            if var a = currentAssistant {
-                a.text = msg.text ?? a.text
-                a.thinking = false
-                a.streaming = false
-                updateAssistant(a)
-            }
-            assistantIdx = nil
+            if var a = currentAssistant { a.text = msg.text ?? a.text; a.thinking = false; a.streaming = false; updateAssistant(a) }
+            mainStore.assistantIdx = nil
 
         case "job_update":
             handleJobUpdate(msg)
 
+        case "device_message":
+            let conv = msg.conversation ?? ChatViewModel.mainConv
+            let s = store(conv)
+            let ts = msg.created_at ?? ISO8601DateFormatter().string(from: Date())
+            if msg.chatRole == "device" {
+                s.blocks.append(.device(id: UUID(), text: msg.chatText ?? "", ts: ts))
+            } else {
+                s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: false, streaming: false, text: msg.chatText ?? "", trace: [], traceOpen: false, ts: ts)))
+            }
+            reflect(conv)
+
         case "confirm_request":
-            if let taskId = msg.taskId,
-               !blocks.contains(where: { if case .confirm(let c) = $0 { return c.taskId == taskId } else { return false } }) {
-                blocks.append(.confirm(ChatBlock.ConfirmBlock(taskId: taskId, summary: msg.confirmSummary ?? L("chat.status.confirmRequired"), resolved: nil)))
-                confirmPending = ConfirmRequest(taskId: taskId, summary: msg.confirmSummary ?? "")
+            if let taskId = msg.taskId {
+                let s = mainStore
+                let exists = s.blocks.contains { if case .confirm(let c) = $0 { return c.taskId == taskId } else { return false } }
+                if !exists {
+                    s.blocks.append(.confirm(ChatBlock.ConfirmBlock(taskId: taskId, summary: msg.confirmSummary ?? L("chat.status.confirmRequired"), resolved: nil)))
+                    confirmPending = ConfirmRequest(taskId: taskId, summary: msg.confirmSummary ?? "")
+                    reflect(ChatViewModel.mainConv)
+                }
+                _ = autoApproveIfEnabled(taskId)
             }
 
         case "confirm_resolved":
@@ -200,57 +296,62 @@ class ChatViewModel: ObservableObject {
 
         case "chat_message":
             let ts = msg.created_at ?? ISO8601DateFormatter().string(from: Date())
+            let s = mainStore
             if msg.chatRole == "user" {
-                blocks.append(.user(id: UUID(), text: msg.chatText ?? "", ts: ts))
+                s.blocks.append(.user(id: UUID(), text: msg.chatText ?? "", ts: ts))
             } else if msg.chatRole == "assistant" {
-                blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: false, streaming: false, text: msg.chatText ?? "", trace: [], traceOpen: false, ts: ts)))
+                s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: false, streaming: false, text: msg.chatText ?? "", trace: [], traceOpen: false, ts: ts)))
             }
+            reflect(ChatViewModel.mainConv)
 
         case "error":
-            if assistantIdx != nil {
-                if var a = currentAssistant {
-                    a.thinking = false
-                    a.streaming = false
-                    updateAssistant(a)
-                }
-                assistantIdx = nil
+            let s = mainStore
+            if s.assistantIdx != nil {
+                if var a = currentAssistant { a.thinking = false; a.streaming = false; updateAssistant(a) }
+                s.assistantIdx = nil
             }
-            blocks.append(.error(id: UUID(), text: msg.errorMessage ?? L("chat.status.error")))
+            s.blocks.append(.error(id: UUID(), text: msg.errorMessage ?? L("chat.status.error")))
+            reflect(ChatViewModel.mainConv)
 
         default: break
         }
     }
 
+    // 流式回合始终属于主会话
     private var currentAssistant: ChatBlock.AssistantBlock? {
-        guard let idx = assistantIdx, idx < blocks.count,
-              case .assistant(let a) = blocks[idx] else { return nil }
+        let s = mainStore
+        guard let idx = s.assistantIdx, idx < s.blocks.count, case .assistant(let a) = s.blocks[idx] else { return nil }
         return a
     }
 
     private func updateAssistant(_ a: ChatBlock.AssistantBlock) {
-        guard let idx = assistantIdx, idx < blocks.count else { return }
-        blocks[idx] = .assistant(a)
+        let s = mainStore
+        guard let idx = s.assistantIdx, idx < s.blocks.count else { return }
+        s.blocks[idx] = .assistant(a)
+        reflect(ChatViewModel.mainConv)
     }
 
     private func handleJobUpdate(_ msg: ChatMessage) {
         guard let id = msg.jobId else { return }
+        let conv = msg.conversation ?? ChatViewModel.mainConv
+        let s = store(conv)
         let overall = msg.jobOverall ?? (msg.jobStatus == "done" ? 1.0 : 0.0)
         let pct = min(100, max(0, Int(overall * 100)))
 
-        if let idx = jobMap[id] {
-            if case .job(var j) = blocks[idx] {
+        if let idx = s.jobMap[id] {
+            if case .job(var j) = s.blocks[idx] {
                 j.pct = pct
                 j.status = msg.jobStatus ?? j.status
                 j.message = msg.jobMessage ?? j.message
                 if let goal = msg.jobGoal { j.goal = goal }
                 if let confirmId = msg.jobConfirmTaskId, msg.jobNeedsConfirm == true {
                     j.confirmTaskId = confirmId
+                    if autoApproveIfEnabled(confirmId) { j.confirmTaskId = nil }
                 }
                 if let results = msg.jobResults { j.results = results }
-                blocks[idx] = .job(j)
-
+                s.blocks[idx] = .job(j)
                 if msg.jobStatus == "done" {
-                    blocks.append(.done(id: UUID(), goal: j.goal, results: j.results ?? []))
+                    s.blocks.append(.done(id: UUID(), goal: j.goal, results: j.results ?? []))
                 }
             }
         } else {
@@ -262,22 +363,30 @@ class ChatViewModel: ObservableObject {
                 confirmTaskId: msg.jobConfirmTaskId,
                 results: msg.jobResults
             )
-            jobMap[id] = blocks.count
-            blocks.append(block)
+            s.jobMap[id] = s.blocks.count
+            s.blocks.append(block)
         }
+        reflect(conv)
     }
 
+    // 跨所有会话统一更新某确认的状态
     private func resolveConfirm(taskId: String, approved: Bool) {
-        for i in blocks.indices {
-            if case .job(var j) = blocks[i], j.confirmTaskId == taskId {
-                j.confirmTaskId = nil
-                j.message = approved ? L("chat.status.approved") : L("chat.status.denied")
-                blocks[i] = .job(j)
+        for (conv, s) in stores {
+            var changed = false
+            for i in s.blocks.indices {
+                if case .job(var j) = s.blocks[i], j.confirmTaskId == taskId {
+                    j.confirmTaskId = nil
+                    j.message = approved ? L("chat.status.approved") : L("chat.status.denied")
+                    s.blocks[i] = .job(j)
+                    changed = true
+                }
+                if case .confirm(var c) = s.blocks[i], c.taskId == taskId {
+                    c.resolved = approved ? .approved : .denied
+                    s.blocks[i] = .confirm(c)
+                    changed = true
+                }
             }
-            if case .confirm(var c) = blocks[i], c.taskId == taskId {
-                c.resolved = approved ? .approved : .denied
-                blocks[i] = .confirm(c)
-            }
+            if changed && conv == activeConv { blocks = s.blocks }
         }
     }
 }
@@ -286,16 +395,18 @@ class ChatViewModel: ObservableObject {
 enum ChatBlock: Identifiable {
     case user(id: UUID, text: String, ts: String?)
     case assistant(AssistantBlock)
+    case device(id: UUID, text: String, ts: String?)
     case job(JobBlock)
     case done(id: UUID, goal: String, results: [[String: String]])
     case confirm(ConfirmBlock)
     case error(id: UUID, text: String)
 
-    // 稳定 id：每个块创建时就固定，供 SwiftUI 做行身份识别（此前每次访问都新建 UUID，导致整列反复重建、卡顿）。
+    // 稳定 id：每个块创建时就固定，供 SwiftUI 做行身份识别。
     var id: String {
         switch self {
         case .user(let id, _, _): return id.uuidString
         case .assistant(let a): return a.id.uuidString
+        case .device(let id, _, _): return id.uuidString
         case .job(let j): return j.id.uuidString
         case .done(let id, _, _): return id.uuidString
         case .confirm(let c): return c.id.uuidString

@@ -6,6 +6,16 @@ struct HistoryMessage: Codable, Identifiable {
     let role: String
     let content: String
     let created_at: String?
+    let conversation: String?
+}
+
+// 会话列表项：'assistant'=你↔秘书；'device:<id>'=服务端↔某设备（只读）。
+struct ConversationRow: Codable {
+    let conversation: String
+    let last_role: String
+    let last_content: String
+    let last_at: String?
+    let count: Int
 }
 
 struct Job: Codable, Identifiable {

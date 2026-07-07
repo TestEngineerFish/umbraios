@@ -91,14 +91,23 @@ struct ChatView: View {
             // Header
             chatHeader
 
+            // Conversation switcher (与秘书 + 各设备只读)
+            if viewModel.conversationOrder.count > 1 {
+                conversationBar
+            }
+
             // Messages
             messageList
 
-            // Quick chips
-            quickChips
+            if viewModel.isReadonly(viewModel.activeConv) {
+                readonlyBanner
+            } else {
+                // Quick chips
+                quickChips
 
-            // Input bar
-            inputBar
+                // Input bar
+                inputBar
+            }
         }
         .background(umbraColor(\.bg))
         .sheet(isPresented: $viewModel.showAttachSheet) {
@@ -174,6 +183,66 @@ struct ChatView: View {
             Button(L("chat.newSession.title"), role: .destructive) { viewModel.newSession() }
             Button(L("common.cancel"), role: .cancel) { }
         }
+    }
+
+    // MARK: - Conversation switcher
+    private var conversationBar: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                ForEach(viewModel.conversationOrder, id: \.self) { conv in
+                    let on = conv == viewModel.activeConv
+                    let readonly = viewModel.isReadonly(conv)
+                    Button {
+                        viewModel.switchConversation(conv)
+                    } label: {
+                        HStack(spacing: 5) {
+                            if readonly {
+                                Image(systemName: "lock.fill").font(.system(size: 9))
+                            }
+                            Text(viewModel.convLabel(conv))
+                                .font(.system(size: 12.5, weight: on ? .semibold : .regular))
+                            if viewModel.unread.contains(conv) && !on {
+                                Circle().fill(Color.orange).frame(width: 6, height: 6)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 6)
+                        .background(on ? Color.orange.opacity(0.14) : umbraColor(\.card))
+                        .foregroundColor(on ? .orangeText : umbraColor(\.text))
+                        .clipShape(Capsule())
+                        .overlay(
+                            Capsule().stroke(on ? Color.orange : umbraColor(\.border), lineWidth: 1)
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 9)
+        }
+        .background(umbraColor(\.card))
+        .overlay(
+            Rectangle().frame(height: 1).foregroundColor(umbraColor(\.border)),
+            alignment: .bottom
+        )
+    }
+
+    // MARK: - Read-only banner（设备会话默认只读）
+    private var readonlyBanner: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "lock.fill").font(.system(size: 12))
+            Text(L("chat.conv.readonly"))
+                .font(.system(size: 12))
+            Spacer()
+        }
+        .foregroundColor(.umbraMuted)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 13)
+        .background(umbraColor(\.bar))
+        .overlay(
+            Rectangle().frame(height: 1).foregroundColor(umbraColor(\.border)).offset(y: -1),
+            alignment: .top
+        )
     }
 
     // MARK: - Messages
@@ -269,6 +338,16 @@ struct ChatView: View {
                         .padding(.leading, 4)
                 }
             }
+        case .device(_, let text, let ts):
+            VStack(alignment: .trailing, spacing: 4) {
+                deviceBubble(text)
+                if let timeStr = formatMessageTime(ts) {
+                    Text(timeStr)
+                        .font(.system(size: 10.5))
+                        .foregroundColor(.umbraMuted)
+                        .padding(.trailing, 4)
+                }
+            }
         case .job(let data):
             jobCard(data)
         case .done(_, let goal, let results):
@@ -296,6 +375,37 @@ struct ChatView: View {
                         bottomTrailingRadius: 4,
                         topTrailingRadius: 14
                     )
+                )
+                .frame(maxWidth: UIScreen.main.bounds.width * 0.82, alignment: .trailing)
+        }
+    }
+
+    // 设备上报（服务端↔设备只读流里的“设备”一侧）：靠右、灰底气泡区分秘书。
+    private func deviceBubble(_ text: String) -> some View {
+        HStack {
+            Spacer()
+            Text(text)
+                .font(.system(size: 13))
+                .lineSpacing(4)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 10)
+                .background(umbraColor(\.track))
+                .clipShape(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 14,
+                        bottomLeadingRadius: 14,
+                        bottomTrailingRadius: 4,
+                        topTrailingRadius: 14
+                    )
+                )
+                .overlay(
+                    UnevenRoundedRectangle(
+                        topLeadingRadius: 14,
+                        bottomLeadingRadius: 14,
+                        bottomTrailingRadius: 4,
+                        topTrailingRadius: 14
+                    )
+                    .stroke(umbraColor(\.border), lineWidth: 1)
                 )
                 .frame(maxWidth: UIScreen.main.bounds.width * 0.82, alignment: .trailing)
         }
@@ -515,6 +625,15 @@ struct ChatView: View {
                 .foregroundColor(.red)
                 .frame(maxWidth: .infinity)
             }
+
+            Button(L("chat.confirm.approveAlways")) {
+                viewModel.handleConfirmAlways(taskId: data.taskId)
+            }
+            .buttonStyle(.bordered)
+            .tint(.orange)
+            .foregroundColor(.orangeText)
+            .frame(maxWidth: .infinity)
+            .padding(.top, 2)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 13)

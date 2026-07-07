@@ -9,6 +9,8 @@ struct MeView: View {
     @State private var showingEditToken = false
     @State private var showingLanguagePicker = false
     @State private var cuEnabled: Bool = UserDefaults.standard.bool(forKey: "cuEnabled")
+    @State private var allowDeviceSend: Bool = NetworkConfig.shared.allowDeviceSend
+    @State private var autoApproveOperate: Bool = NetworkConfig.shared.autoApproveOperate
 
     var body: some View {
         NavigationStack {
@@ -34,6 +36,46 @@ struct MeView: View {
                             .onChange(of: cuEnabled) { newValue in
                                 UserDefaults.standard.set(newValue, forKey: "cuEnabled")
                             }
+                    }
+
+                    section(title: L("me.allowDeviceSend")) {
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(L("me.allowDeviceSend"))
+                                    .font(.system(size: 13.5))
+                                Text(L("me.allowDeviceSend.desc"))
+                                    .font(.system(size: 11.5))
+                                    .foregroundColor(.umbraMuted)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $allowDeviceSend)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .tint(Color.umbraOrange)
+                                .onChange(of: allowDeviceSend) { newValue in
+                                    NetworkConfig.shared.allowDeviceSend = newValue
+                                }
+                        }
+                        .padding(.vertical, 13)
+                        rowDivider
+                        HStack(alignment: .top) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(L("me.autoApproveOperate"))
+                                    .font(.system(size: 13.5))
+                                Text(L("me.autoApproveOperate.desc"))
+                                    .font(.system(size: 11.5))
+                                    .foregroundColor(.umbraMuted)
+                            }
+                            Spacer()
+                            Toggle("", isOn: $autoApproveOperate)
+                                .labelsHidden()
+                                .toggleStyle(.switch)
+                                .tint(Color.umbraOrange)
+                                .onChange(of: autoApproveOperate) { newValue in
+                                    NetworkConfig.shared.autoApproveOperate = newValue
+                                }
+                        }
+                        .padding(.vertical, 13)
                     }
 
                     section(title: L("me.general")) {

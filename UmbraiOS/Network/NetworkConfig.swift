@@ -11,6 +11,8 @@ class NetworkConfig: ObservableObject {
     private let tokenKey = "umbra.token"
     private let clientIdKey = "umbra.clientId"
     private let deviceNameKey = "umbra.deviceName"
+    private let allowDeviceSendKey = "umbra.allowDeviceSend"
+    private let autoApproveOperateKey = "umbra.autoApproveOperate"
 
     var serverUrl: String {
         get {
@@ -42,6 +44,24 @@ class NetworkConfig: ObservableObject {
         }
         set {
             defaults.set(newValue, forKey: deviceNameKey)
+        }
+    }
+
+    // 是否允许向设备会话发送消息（默认关，设备会话仅查看）。
+    var allowDeviceSend: Bool {
+        get { defaults.bool(forKey: allowDeviceSendKey) }
+        set {
+            defaults.set(newValue, forKey: allowDeviceSendKey)
+            objectWillChange.send()
+        }
+    }
+
+    // 是否自动批准电脑操作(operate)授权卡（默认关；开了则确认卡自动批准）。
+    var autoApproveOperate: Bool {
+        get { defaults.bool(forKey: autoApproveOperateKey) }
+        set {
+            defaults.set(newValue, forKey: autoApproveOperateKey)
+            objectWillChange.send()
         }
     }
 

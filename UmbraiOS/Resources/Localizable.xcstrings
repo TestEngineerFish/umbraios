@@ -220,6 +220,36 @@
         }
       }
     },
+    "chat.confirm.approveAlways" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Always allow" }
+        },
+        "zh-Hans" : {
+          "stringUnit" : { "state" : "translated", "value" : "总是允许" }
+        }
+      }
+    },
+    "me.autoApproveOperate" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "Auto-approve computer control" }
+        },
+        "zh-Hans" : {
+          "stringUnit" : { "state" : "translated", "value" : "自动批准电脑操作" }
+        }
+      }
+    },
+    "me.autoApproveOperate.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : { "state" : "translated", "value" : "When on, computer-control approval cards are auto-approved. Use with care." }
+        },
+        "zh-Hans" : {
+          "stringUnit" : { "state" : "translated", "value" : "开启后电脑操作的授权卡会自动批准，请谨慎开启。" }
+        }
+      }
+    },
     "chat.confirm.deny" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -267,6 +297,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "已连接 · 此设备可执行"
+          }
+        }
+      }
+    },
+    "chat.conv.secretary" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Secretary"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "秘书"
+          }
+        }
+      }
+    },
+    "chat.conv.readonly" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Read-only: the server's conversation with this device. Enable sending in Me."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "只读：服务端与该设备的对话。可在“我的”里开启发送。"
+          }
+        }
+      }
+    },
+    "me.allowDeviceSend" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow sending to devices"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许向设备发送消息"
+          }
+        }
+      }
+    },
+    "me.allowDeviceSend.desc" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When off, device conversations are view-only; only Secretary can send."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭时设备会话仅供查看；仅“与秘书”可发送。"
           }
         }
       }

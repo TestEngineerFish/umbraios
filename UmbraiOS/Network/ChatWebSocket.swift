@@ -202,6 +202,9 @@ struct ChatMessage {
     var chatText: String? { json["text"] as? String }
     var created_at: String? { json["created_at"] as? String }
 
+    // 会话归属（job_update 带 'device:<id>'；无则视为主会话 'assistant'）
+    var conversation: String? { json["conversation"] as? String }
+
     // error
     var errorMessage: String? { json["message"] as? String }
 }
