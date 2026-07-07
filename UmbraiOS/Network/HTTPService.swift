@@ -33,6 +33,17 @@ class HTTPService {
         return await request(url)
     }
 
+    // 清空指定会话历史（默认主会话；传 device:<id> 清某设备房间）。
+    func clearHistory(conversation: String = "assistant") async {
+        guard let url = URL(string: "\(baseUrl)/history/clear") else { return }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
+        req.httpBody = try? JSONSerialization.data(withJSONObject: ["conversation": conversation])
+        _ = try? await URLSession.shared.data(for: req)
+    }
+
     // MARK: - Jobs
     func fetchJobs(limit: Int = 30, status: String? = nil) async -> [Job] {
         var components = URLComponents(string: "\(baseUrl)/jobs")

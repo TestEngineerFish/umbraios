@@ -192,6 +192,20 @@ class ChatViewModel: ObservableObject {
         ws.sendMessage(text)
     }
 
+    // 清空【当前会话】历史：本地立即清 + 服务端删除。
+    func clearActiveHistory() {
+        let conv = activeConv
+        let s = store(conv)
+        s.blocks.removeAll()
+        s.assistantIdx = nil
+        s.jobMap.removeAll()
+        s.oldestId = nil
+        s.hasMoreHistory = false
+        s.loaded = true
+        reflect(conv)
+        Task { await HTTPService.shared.clearHistory(conversation: conv) }
+    }
+
     func newSession() {
         let s = mainStore
         s.blocks.removeAll()

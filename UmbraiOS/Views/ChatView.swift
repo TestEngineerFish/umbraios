@@ -165,7 +165,7 @@ struct ChatView: View {
             Button {
                 showNewChatConfirm = true
             } label: {
-                Image(systemName: "square.and.pencil")
+                Image(systemName: "trash")
                     .frame(width: 34, height: 34)
             }
         }
@@ -179,8 +179,8 @@ struct ChatView: View {
                 .foregroundColor(umbraColor(\.border)),
             alignment: .bottom
         )
-        .confirmationDialog(L("chat.newSession.confirm"), isPresented: $showNewChatConfirm, titleVisibility: .visible) {
-            Button(L("chat.newSession.title"), role: .destructive) { viewModel.newSession() }
+        .confirmationDialog(L("chat.clear.confirm"), isPresented: $showNewChatConfirm, titleVisibility: .visible) {
+            Button(L("chat.clear.title"), role: .destructive) { viewModel.clearActiveHistory() }
             Button(L("common.cancel"), role: .cancel) { }
         }
     }
@@ -328,6 +328,7 @@ struct ChatView: View {
                         .padding(.trailing, 4)
                 }
             }
+            .contextMenu { copyButton(text) }
         case .assistant(let data):
             VStack(alignment: .leading, spacing: 4) {
                 assistantBubble(data, at: index)
@@ -338,6 +339,7 @@ struct ChatView: View {
                         .padding(.leading, 4)
                 }
             }
+            .contextMenu { copyButton(data.text) }
         case .device(_, let text, let ts):
             VStack(alignment: .trailing, spacing: 4) {
                 deviceBubble(text)
@@ -348,6 +350,7 @@ struct ChatView: View {
                         .padding(.trailing, 4)
                 }
             }
+            .contextMenu { copyButton(text) }
         case .job(let data):
             jobCard(data)
         case .done(_, let goal, let results):
@@ -356,6 +359,16 @@ struct ChatView: View {
             confirmCard(data)
         case .error(_, let text):
             errorBubble(text)
+        }
+    }
+
+    // 长按消息 → 复制到剪贴板（常见 IM 操作）。
+    @ViewBuilder
+    private func copyButton(_ text: String) -> some View {
+        Button {
+            UIPasteboard.general.string = text
+        } label: {
+            Label(L("chat.copy"), systemImage: "doc.on.doc")
         }
     }
 

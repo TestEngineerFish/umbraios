@@ -221,33 +221,38 @@
       }
     },
     "chat.confirm.approveAlways" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
-          "stringUnit" : { "state" : "translated", "value" : "Always allow" }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Always allow"
+          }
         },
         "zh-Hans" : {
-          "stringUnit" : { "state" : "translated", "value" : "总是允许" }
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "总是允许"
+          }
         }
       }
     },
-    "me.autoApproveOperate" : {
+    "chat.copy" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : { "state" : "translated", "value" : "Auto-approve computer control" }
-        },
-        "zh-Hans" : {
-          "stringUnit" : { "state" : "translated", "value" : "自动批准电脑操作" }
-        }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制" } }
       }
     },
-    "me.autoApproveOperate.desc" : {
+    "chat.clear.title" : {
       "localizations" : {
-        "en" : {
-          "stringUnit" : { "state" : "translated", "value" : "When on, computer-control approval cards are auto-approved. Use with care." }
-        },
-        "zh-Hans" : {
-          "stringUnit" : { "state" : "translated", "value" : "开启后电脑操作的授权卡会自动批准，请谨慎开启。" }
-        }
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear chat" } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清空聊天" } }
+      }
+    },
+    "chat.clear.confirm" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear this conversation's history? This cannot be undone." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确认清空当前会话的聊天记录？此操作不可撤销。" } }
       }
     },
     "chat.confirm.deny" : {
@@ -301,23 +306,8 @@
         }
       }
     },
-    "chat.conv.secretary" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Secretary"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "秘书"
-          }
-        }
-      }
-    },
     "chat.conv.readonly" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -333,34 +323,19 @@
         }
       }
     },
-    "me.allowDeviceSend" : {
+    "chat.conv.secretary" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Allow sending to devices"
+            "value" : "Secretary"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "允许向设备发送消息"
-          }
-        }
-      }
-    },
-    "me.allowDeviceSend.desc" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "When off, device conversations are view-only; only Secretary can send."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关闭时设备会话仅供查看；仅“与秘书”可发送。"
+            "value" : "秘书"
           }
         }
       }
@@ -840,6 +815,74 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "访问 Token"
+          }
+        }
+      }
+    },
+    "me.allowDeviceSend" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Allow sending to devices"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "允许向设备发送消息"
+          }
+        }
+      }
+    },
+    "me.allowDeviceSend.desc" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When off, device conversations are view-only; only Secretary can send."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "关闭时设备会话仅供查看；仅“与秘书”可发送。"
+          }
+        }
+      }
+    },
+    "me.autoApproveOperate" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-approve computer control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动批准电脑操作"
+          }
+        }
+      }
+    },
+    "me.autoApproveOperate.desc" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "When on, computer-control approval cards are auto-approved. Use with care."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "开启后电脑操作的授权卡会自动批准，请谨慎开启。"
           }
         }
       }
