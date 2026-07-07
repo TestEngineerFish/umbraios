@@ -27,6 +27,30 @@ class ChatViewModel: ObservableObject {
 
     let ws = ChatWebSocket()
 
+    // 回复超时兜底：发出后一段时间没有任何回复/流式内容，就把「思考中」气泡收尾为错误，
+    // 避免连接中途断开时界面永远 loading。
+    private var replyTimeout: Task<Void, Never>?
+    private func armReplyTimeout() {
+        replyTimeout?.cancel()
+        replyTimeout = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 60_000_000_000)  // 60s 无响应
+            guard let self, !Task.isCancelled else { return }
+            self.failPendingTurn()
+        }
+    }
+    private func failPendingTurn() {
+        let s = mainStore
+        guard let idx = s.assistantIdx, idx < s.blocks.count else { return }
+        if case .assistant(var a) = s.blocks[idx] {
+            a.thinking = false
+            a.streaming = false
+            s.blocks[idx] = .assistant(a)
+        }
+        s.assistantIdx = nil
+        s.blocks.append(.error(id: UUID(), text: L("chat.status.timeout")))
+        reflect(ChatViewModel.mainConv)
+    }
+
     // 每个会话的独立状态
     private final class ConvStore {
         var blocks: [ChatBlock] = []
@@ -79,7 +103,14 @@ class ChatViewModel: ObservableObject {
     // MARK: - Setup / history
     private func setupWebSocket() {
         ws.onMessage = { [weak self] msg in self?.handleMessage(msg) }
-        ws.onStatusChange = { [weak self] _ in _ = self }
+        ws.onStatusChange = { [weak self] status in
+            // 连接掉线且此时有「思考中」的回合在等 → 立即收尾为错误，不用干等超时。
+            guard let self else { return }
+            if status == .offline, self.mainStore.assistantIdx != nil {
+                self.replyTimeout?.cancel()
+                self.failPendingTurn()
+            }
+        }
         ws.connect()
         loadHistory()
         loadConversationsList()
@@ -190,6 +221,7 @@ class ChatViewModel: ObservableObject {
         s.assistantIdx = s.blocks.count - 1
         reflect(ChatViewModel.mainConv)
         ws.sendMessage(text)
+        armReplyTimeout()
     }
 
     // 清空【当前会话】历史：本地立即清 + 服务端删除。
@@ -254,6 +286,7 @@ class ChatViewModel: ObservableObject {
         switch msg.type {
         case "delta":
             if var a = currentAssistant { a.text += msg.deltaText ?? ""; a.thinking = false; updateAssistant(a) }
+            armReplyTimeout()  // 有流式内容 → 重置超时（避免长回复被误判超时）
 
         case "tool_call":
             if var a = currentAssistant {
@@ -276,6 +309,7 @@ class ChatViewModel: ObservableObject {
             }
 
         case "reply":
+            replyTimeout?.cancel()
             if var a = currentAssistant { a.text = msg.text ?? a.text; a.thinking = false; a.streaming = false; updateAssistant(a) }
             mainStore.assistantIdx = nil
 
@@ -319,6 +353,7 @@ class ChatViewModel: ObservableObject {
             reflect(ChatViewModel.mainConv)
 
         case "error":
+            replyTimeout?.cancel()
             let s = mainStore
             if s.assistantIdx != nil {
                 if var a = currentAssistant { a.thinking = false; a.streaming = false; updateAssistant(a) }

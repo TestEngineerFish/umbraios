@@ -203,6 +203,40 @@
         }
       }
     },
+    "chat.clear.confirm" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear this conversation's history? This cannot be undone."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "确认清空当前会话的聊天记录？此操作不可撤销。"
+          }
+        }
+      }
+    },
+    "chat.clear.title" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Clear chat"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清空聊天"
+          }
+        }
+      }
+    },
     "chat.confirm.approve" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -235,24 +269,6 @@
             "value" : "总是允许"
           }
         }
-      }
-    },
-    "chat.copy" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Copy" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "复制" } }
-      }
-    },
-    "chat.clear.title" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear chat" } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "清空聊天" } }
-      }
-    },
-    "chat.clear.confirm" : {
-      "localizations" : {
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Clear this conversation's history? This cannot be undone." } },
-        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "确认清空当前会话的聊天记录？此操作不可撤销。" } }
       }
     },
     "chat.confirm.deny" : {
@@ -336,6 +352,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "秘书"
+          }
+        }
+      }
+    },
+    "chat.copy" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制"
           }
         }
       }
@@ -525,6 +558,12 @@
             "value" : "已拒绝"
           }
         }
+      }
+    },
+    "chat.status.timeout" : {
+      "localizations" : {
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connection interrupted or timed out. Please resend." } },
+        "zh-Hans" : { "stringUnit" : { "state" : "translated", "value" : "连接中断或响应超时，请重新发送。" } }
       }
     },
     "chat.status.error" : {

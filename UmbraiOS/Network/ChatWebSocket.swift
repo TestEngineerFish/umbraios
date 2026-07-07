@@ -108,7 +108,7 @@ class ChatWebSocket: ObservableObject {
     }
 
     private func startReceiving(task: URLSessionWebSocketTask) {
-        receiveTask = Task {
+        receiveTask = Task { @MainActor in
             while !Task.isCancelled {
                 do {
                     let message = try await task.receive()
@@ -116,6 +116,13 @@ class ChatWebSocket: ObservableObject {
                 } catch {
                     if !Task.isCancelled {
                         print("[ChatWebSocket] Receive error: \(error)")
+                        // 连接中途断开（如 Socket not connected）：标记离线并自动重连，
+                        // 否则界面会永远卡在 loading 等一个不会来的回复。
+                        if self.webSocketTask === task {
+                            self.webSocketTask = nil
+                            self.setStatus(.offline)
+                            self.scheduleReconnect()
+                        }
                     }
                     break
                 }
