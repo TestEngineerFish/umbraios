@@ -357,6 +357,10 @@ struct ChatView: View {
             doneCard(goal: goal, results: results)
         case .confirm(let data):
             confirmCard(data)
+        case .locate(let data):
+            LocateCard(data: data,
+                       onLocate: { nx, ny in viewModel.handleLocate(taskId: data.taskId, nx: nx, ny: ny) },
+                       onCancel: { viewModel.handleLocateCancel(taskId: data.taskId) })
         case .error(_, let text):
             errorBubble(text)
         }
@@ -1030,5 +1034,125 @@ struct ImageLightboxView: View {
             }
         }
         .ignoresSafeArea()
+    }
+}
+
+// MARK: - Locate Card（人工箭头指位）
+// 显示 operate 当前截图；用户在图上拖一个箭头，箭头尖端(tip)=要点击的位置。
+// tip 换算成相对图片的归一化坐标(0-1000)回传，与服务端/设备的 click nx,ny 对齐。
+struct LocateCard: View {
+    let data: ChatBlock.LocateBlock
+    let onLocate: (Int, Int) -> Void
+    let onCancel: () -> Void
+
+    @State private var image: UIImage?
+    @State private var loadFailed = false
+    @State private var arrowStart: CGPoint?     // 图内像素坐标（画箭头用）
+    @State private var arrowTip: CGPoint?
+    @State private var tipNorm: CGPoint?         // 归一化 0-1000（回传用）
+
+    private var fullURL: URL? {
+        if data.imageUrl.hasPrefix("http") { return URL(string: data.imageUrl) }
+        return URL(string: NetworkConfig.shared.serverUrl + data.imageUrl)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                Image(systemName: "hand.point.up.left.fill").foregroundColor(.orangeText)
+                Text(L("operate.locate.title"))
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundColor(.orangeText)
+            }
+            Text(data.hint).font(.system(size: 12.5)).lineSpacing(4)
+
+            if let resolved = data.resolved {
+                Text(resolved == .located ? L("operate.locate.done") : L("operate.locate.cancelled"))
+                    .font(.system(size: 12)).foregroundColor(.umbraMuted)
+            } else if let image {
+                imageWithArrow(image)
+                HStack(spacing: 9) {
+                    Button(L("operate.locate.confirm")) {
+                        if let n = tipNorm { onLocate(Int(n.x), Int(n.y)) }
+                    }
+                    .buttonStyle(.borderedProminent).tint(.orange)
+                    .disabled(tipNorm == nil)
+                    .frame(maxWidth: .infinity)
+                    Button(L("operate.locate.manual")) { onCancel() }
+                        .buttonStyle(.bordered).tint(.gray)
+                        .frame(maxWidth: .infinity)
+                }
+            } else if loadFailed {
+                Text(L("operate.locate.loadFailed")).font(.system(size: 12)).foregroundColor(.red)
+                Button(L("operate.locate.manual")) { onCancel() }.buttonStyle(.bordered).tint(.gray)
+            } else {
+                ProgressView().frame(maxWidth: .infinity, minHeight: 80)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 13)
+        .background(Color.orange.opacity(0.08))
+        .clipShape(RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange, lineWidth: 1))
+        .frame(maxWidth: UIScreen.main.bounds.width * 0.92)
+        .task { await load() }
+    }
+
+    private func imageWithArrow(_ img: UIImage) -> some View {
+        let aspect = img.size.width / max(img.size.height, 1)
+        return GeometryReader { geo in
+            let w = geo.size.width
+            let h = w / aspect
+            ZStack {
+                Image(uiImage: img).resizable().frame(width: w, height: h)
+                if let start = arrowStart, let tip = arrowTip {
+                    ArrowShape(from: start, to: tip)
+                        .stroke(Color.red, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                    Circle().fill(Color.red).frame(width: 10, height: 10).position(tip)
+                }
+            }
+            .frame(width: w, height: h)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { v in
+                        if arrowStart == nil { arrowStart = v.startLocation }
+                        let tip = CGPoint(x: min(max(v.location.x, 0), w), y: min(max(v.location.y, 0), h))
+                        arrowTip = tip
+                        tipNorm = CGPoint(x: tip.x / w * 1000, y: tip.y / h * 1000)
+                    }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .aspectRatio(aspect, contentMode: .fit)
+    }
+
+    private func load() async {
+        guard let url = fullURL else { loadFailed = true; return }
+        do {
+            let (bytes, _) = try await URLSession.shared.data(from: url)
+            if let ui = UIImage(data: bytes) { image = ui } else { loadFailed = true }
+        } catch {
+            loadFailed = true
+        }
+    }
+}
+
+// 从 from 画到 to 的箭头（含箭头尖）。
+struct ArrowShape: Shape {
+    let from: CGPoint
+    let to: CGPoint
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path()
+        p.move(to: from)
+        p.addLine(to: to)
+        let angle = atan2(to.y - from.y, to.x - from.x)
+        let headLen: CGFloat = 14
+        let spread: CGFloat = .pi / 7
+        let left = CGPoint(x: to.x - headLen * cos(angle - spread), y: to.y - headLen * sin(angle - spread))
+        let right = CGPoint(x: to.x - headLen * cos(angle + spread), y: to.y - headLen * sin(angle + spread))
+        p.move(to: to); p.addLine(to: left)
+        p.move(to: to); p.addLine(to: right)
+        return p
     }
 }

@@ -1451,6 +1451,125 @@
         }
       }
     },
+    "operate.locate.cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused — you chose to handle it yourself"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你选择自己处理，已暂停"
+          }
+        }
+      }
+    },
+    "operate.locate.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click the arrow tip"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就点箭头尖端"
+          }
+        }
+      }
+    },
+    "operate.locate.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuing at the spot you pointed to"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已按你指的位置继续"
+          }
+        }
+      }
+    },
+    "operate.locate.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I can't locate it — drag an arrow on the screenshot pointing at the target (the tip is where I'll click)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我定位不准，请在截图上拖一个箭头指向目标（箭头尖端就是要点的位置）。"
+          }
+        }
+      }
+    },
+    "operate.locate.loadFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to load screenshot"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图加载失败"
+          }
+        }
+      }
+    },
+    "operate.locate.manual": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I'll do it"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我自己来"
+          }
+        }
+      }
+    },
+    "operate.locate.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point it out for me"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帮我指个位置"
+          }
+        }
+      }
+    },
     "settings.followSystem": {
       "extractionState": "stale",
       "localizations": {

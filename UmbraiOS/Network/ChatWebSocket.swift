@@ -97,6 +97,19 @@ class ChatWebSocket: ObservableObject {
         sendJSON(msg)
     }
 
+    // operate 人工箭头指位回传：nx,ny 为箭头尖端的归一化坐标(0-1000)；cancelled=用户选择手动处理。
+    func sendLocate(taskId: String, nx: Int? = nil, ny: Int? = nil, cancelled: Bool = false) {
+        guard let task = webSocketTask, task.state == .running else { return }
+        var msg: [String: Any] = ["type": "operate_locate_response", "task_id": taskId]
+        if cancelled {
+            msg["cancelled"] = true
+        } else if let nx, let ny {
+            msg["nx"] = nx
+            msg["ny"] = ny
+        }
+        sendJSON(msg)
+    }
+
     func sendNewSession() {
         sendMessage("/new")
     }
@@ -210,6 +223,11 @@ struct ChatMessage {
     var confirmSummary: String? { json["summary"] as? String }
     var confirmDetail: Any? { json["detail"] }
     var confirmApproved: Bool? { json["approved"] as? Bool }
+
+    // operate_locate_request（人工箭头指位）
+    var locateImageUrl: String? { json["image_url"] as? String }
+    var locateTarget: String? { json["target"] as? String }
+    var locateHint: String? { json["hint"] as? String }
 
     // chat_message (cross-end sync)
     var chatRole: String? { json["role"] as? String }

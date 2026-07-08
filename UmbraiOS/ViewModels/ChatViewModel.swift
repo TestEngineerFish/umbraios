@@ -271,6 +271,29 @@ class ChatViewModel: ObservableObject {
         handleConfirm(taskId: taskId, approved: true)
     }
 
+    // 用户在截图上拖箭头指了目标：nx,ny 为箭头尖端归一化坐标(0-1000)。
+    func handleLocate(taskId: String, nx: Int, ny: Int) {
+        ws.sendLocate(taskId: taskId, nx: nx, ny: ny)
+        resolveLocate(taskId: taskId, status: .located)
+    }
+
+    // 用户选择自己手动处理。
+    func handleLocateCancel(taskId: String) {
+        ws.sendLocate(taskId: taskId, cancelled: true)
+        resolveLocate(taskId: taskId, status: .cancelled)
+    }
+
+    private func resolveLocate(taskId: String, status: ChatBlock.LocateStatus) {
+        let s = mainStore
+        for i in s.blocks.indices {
+            if case .locate(var l) = s.blocks[i], l.taskId == taskId, l.resolved == nil {
+                l.resolved = status
+                s.blocks[i] = .locate(l)
+            }
+        }
+        reflect(ChatViewModel.mainConv)
+    }
+
     private var autoApprovedTasks: Set<String> = []
     // 满足自动批准就直接批准；返回是否已自动处理。
     private func autoApproveIfEnabled(_ taskId: String) -> Bool {
@@ -341,6 +364,20 @@ class ChatViewModel: ObservableObject {
                     reflect(ChatViewModel.mainConv)
                 }
                 _ = autoApproveIfEnabled(taskId)
+            }
+
+        case "operate_locate_request":
+            if let taskId = msg.taskId, let img = msg.locateImageUrl {
+                let s = mainStore
+                let exists = s.blocks.contains { if case .locate(let l) = $0 { return l.taskId == taskId } else { return false } }
+                if !exists {
+                    s.blocks.append(.locate(ChatBlock.LocateBlock(
+                        taskId: taskId, imageUrl: img,
+                        target: msg.locateTarget ?? "",
+                        hint: msg.locateHint ?? L("operate.locate.hint"),
+                        resolved: nil)))
+                    reflect(ChatViewModel.mainConv)
+                }
             }
 
         case "confirm_resolved":
@@ -452,6 +489,7 @@ enum ChatBlock: Identifiable {
     case job(JobBlock)
     case done(id: UUID, goal: String, results: [[String: String]])
     case confirm(ConfirmBlock)
+    case locate(LocateBlock)
     case error(id: UUID, text: String)
 
     // 稳定 id：每个块创建时就固定，供 SwiftUI 做行身份识别。
@@ -463,6 +501,7 @@ enum ChatBlock: Identifiable {
         case .job(let j): return j.id.uuidString
         case .done(let id, _, _): return id.uuidString
         case .confirm(let c): return c.id.uuidString
+        case .locate(let l): return l.id.uuidString
         case .error(let id, _): return id.uuidString
         }
     }
@@ -497,7 +536,18 @@ extension ChatBlock {
         var resolved: ConfirmStatus?
     }
 
+    // operate 人工箭头指位：显示截图，用户拖箭头指目标，tip 坐标回传。
+    struct LocateBlock: Hashable {
+        let id = UUID()
+        var taskId: String
+        var imageUrl: String       // 服务端相对路径（如 /files/<id>），显示时拼 baseUrl
+        var target: String
+        var hint: String
+        var resolved: LocateStatus?
+    }
+
     enum ConfirmStatus: Hashable { case approved, denied }
+    enum LocateStatus: Hashable { case located, cancelled }
 
     // Helper factory methods (enums don't provide these automatically with labels)
     static func assistantBlock(text: String, ts: String?) -> ChatBlock {
