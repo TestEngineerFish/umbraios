@@ -1057,8 +1057,9 @@ struct LocateCard: View {
     @State private var arrowTip: CGPoint?        // 箭头尖端（图内像素坐标）
     @State private var tipNorm: CGPoint?         // 尖端归一化 0-1000（回传用）
     @State private var feedbackText = ""
-    // 缩放（放大后点小目标更准）：以尖端为锚点放大。
+    // 缩放（放大后点小目标更准）：支持双指捏合 + 右上角 ＋/－ 按钮，以尖端为锚点放大。
     @State private var zoom: CGFloat = 1
+    @State private var pinchBase: CGFloat = 1
     // 拖拽模式：创建新箭头 vs 抓住箭杆整体平移（避免手指挡住尖端）。
     @State private var dragMode: LocateDragMode?
     @State private var moveGrab: CGPoint?        // 平移时的抓取起点
@@ -1176,6 +1177,11 @@ struct LocateCard: View {
                 .scaleEffect(zoom, anchor: anchor)
                 .contentShape(Rectangle())
                 .gesture(arrowDrag(w: w, h: h))
+                .simultaneousGesture(  // 双指捏合缩放（与单指画箭头互不冲突）
+                    MagnificationGesture()
+                        .onChanged { v in zoom = min(max(pinchBase * v, 1), 4) }
+                        .onEnded { _ in pinchBase = zoom }
+                )
 
                 zoomButtons  // 右上角 ＋/－
             }
@@ -1188,8 +1194,8 @@ struct LocateCard: View {
     // 右上角缩放按钮。
     private var zoomButtons: some View {
         HStack(spacing: 6) {
-            zoomBtn("minus.magnifyingglass") { zoom = max(zoom - 0.5, 1) }
-            zoomBtn("plus.magnifyingglass") { zoom = min(zoom + 0.5, 4) }
+            zoomBtn("minus.magnifyingglass") { zoom = max(zoom - 0.5, 1); pinchBase = zoom }
+            zoomBtn("plus.magnifyingglass") { zoom = min(zoom + 0.5, 4); pinchBase = zoom }
         }
         .padding(6)
     }
