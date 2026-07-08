@@ -2012,6 +2012,23 @@
         }
       }
     },
+    "tasks.screenshots": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshots"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图"
+          }
+        }
+      }
+    },
     "tasks.steps": {
       "extractionState": "stale",
       "localizations": {

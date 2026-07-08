@@ -270,6 +270,30 @@ struct JobDetailView: View {
                             }
                         }
                     }
+
+                    // Screenshots（步骤/最终截图，便于核对是否真的完成）
+                    let shots = screenshotURLs
+                    if !shots.isEmpty {
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text(L("tasks.screenshots"))
+                                .font(.system(size: 12, weight: .semibold))
+                                .foregroundColor(.umbraMuted)
+                            ForEach(shots, id: \.self) { url in
+                                AsyncImage(url: url) { phase in
+                                    switch phase {
+                                    case .success(let image):
+                                        image.resizable().scaledToFit()
+                                            .clipShape(RoundedRectangle(cornerRadius: 8))
+                                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(umbraColor(\.border), lineWidth: 1))
+                                    case .failure:
+                                        Color.clear.frame(height: 0)
+                                    default:
+                                        ProgressView().frame(maxWidth: .infinity, minHeight: 60)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
@@ -289,6 +313,22 @@ struct JobDetailView: View {
         let done = detail.subtasks.filter { $0.status == "done" }.count
         guard detail.subtasks.count > 0 else { return detail.job.status == "done" ? 100 : 0 }
         return Int(Double(done) / Double(detail.subtasks.count) * 100)
+    }
+
+    // 从各步骤 result_json 里解析截图链接（相对路径拼 baseUrl），去重、按步骤顺序。
+    private var screenshotURLs: [URL] {
+        var seen = Set<String>()
+        var out: [URL] = []
+        for sub in detail.subtasks.sorted(by: { $0.seq < $1.seq }) {
+            guard let raw = sub.result_json,
+                  let data = raw.data(using: .utf8),
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  let s = obj["url"] as? String, !s.isEmpty, !seen.contains(s) else { continue }
+            seen.insert(s)
+            let full = s.hasPrefix("http") ? s : NetworkConfig.shared.serverUrl + s
+            if let u = URL(string: full) { out.append(u) }
+        }
+        return out
     }
 
     private var barColor: Color {
