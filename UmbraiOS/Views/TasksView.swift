@@ -218,18 +218,32 @@ struct JobDetailView: View {
                         .frame(height: 6)
                     }
 
-                    // Steps
+                    // Steps（每步下方显示「该步完成后」的状态截图）
                     if !detail.subtasks.isEmpty {
-                        VStack(alignment: .leading, spacing: 9) {
+                        VStack(alignment: .leading, spacing: 12) {
                             Text(L("tasks.steps"))
                                 .font(.system(size: 12, weight: .semibold))
                                 .foregroundColor(.umbraMuted)
                             ForEach(detail.subtasks.sorted(by: { $0.seq < $1.seq })) { sub in
-                                HStack(spacing: 9) {
-                                    stepIcon(status: sub.status)
-                                    Text(sub.title ?? "\(sub.provider ?? "").\(sub.skill ?? "")")
-                                        .font(.system(size: 13))
-                                        .foregroundColor(sub.status == "pending" ? .umbraMuted : .primary)
+                                VStack(alignment: .leading, spacing: 7) {
+                                    HStack(spacing: 9) {
+                                        stepIcon(status: sub.status)
+                                        Text(sub.title ?? "\(sub.provider ?? "").\(sub.skill ?? "")")
+                                            .font(.system(size: 13))
+                                            .foregroundColor(sub.status == "pending" ? .umbraMuted : .primary)
+                                    }
+                                    if let url = stepShotURL(sub) {
+                                        AsyncImage(url: url) { phase in
+                                            if case .success(let image) = phase {
+                                                image.resizable().scaledToFit()
+                                                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                                                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(umbraColor(\.border), lineWidth: 1))
+                                            } else if case .empty = phase {
+                                                ProgressView().frame(maxWidth: .infinity, minHeight: 50)
+                                            }
+                                        }
+                                        .padding(.leading, 27)
+                                    }
                                 }
                             }
                         }
@@ -271,29 +285,6 @@ struct JobDetailView: View {
                         }
                     }
 
-                    // Screenshots（步骤/最终截图，便于核对是否真的完成）
-                    let shots = screenshotURLs
-                    if !shots.isEmpty {
-                        VStack(alignment: .leading, spacing: 10) {
-                            Text(L("tasks.screenshots"))
-                                .font(.system(size: 12, weight: .semibold))
-                                .foregroundColor(.umbraMuted)
-                            ForEach(shots, id: \.self) { url in
-                                AsyncImage(url: url) { phase in
-                                    switch phase {
-                                    case .success(let image):
-                                        image.resizable().scaledToFit()
-                                            .clipShape(RoundedRectangle(cornerRadius: 8))
-                                            .overlay(RoundedRectangle(cornerRadius: 8).stroke(umbraColor(\.border), lineWidth: 1))
-                                    case .failure:
-                                        Color.clear.frame(height: 0)
-                                    default:
-                                        ProgressView().frame(maxWidth: .infinity, minHeight: 60)
-                                    }
-                                }
-                            }
-                        }
-                    }
                 }
                 .padding(.horizontal, 20)
                 .padding(.top, 18)
@@ -315,20 +306,14 @@ struct JobDetailView: View {
         return Int(Double(done) / Double(detail.subtasks.count) * 100)
     }
 
-    // 从各步骤 result_json 里解析截图链接（相对路径拼 baseUrl），去重、按步骤顺序。
-    private var screenshotURLs: [URL] {
-        var seen = Set<String>()
-        var out: [URL] = []
-        for sub in detail.subtasks.sorted(by: { $0.seq < $1.seq }) {
-            guard let raw = sub.result_json,
-                  let data = raw.data(using: .utf8),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let s = obj["url"] as? String, !s.isEmpty, !seen.contains(s) else { continue }
-            seen.insert(s)
-            let full = s.hasPrefix("http") ? s : NetworkConfig.shared.serverUrl + s
-            if let u = URL(string: full) { out.append(u) }
-        }
-        return out
+    // 单个步骤的「完成后」状态截图链接（result_json.url，相对路径拼 baseUrl）。
+    private func stepShotURL(_ sub: Subtask) -> URL? {
+        guard let raw = sub.result_json,
+              let data = raw.data(using: .utf8),
+              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let s = obj["url"] as? String, !s.isEmpty else { return nil }
+        let full = s.hasPrefix("http") ? s : NetworkConfig.shared.serverUrl + s
+        return URL(string: full)
     }
 
     private var barColor: Color {
