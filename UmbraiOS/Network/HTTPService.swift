@@ -59,6 +59,56 @@ class HTTPService {
         return await request(url)
     }
 
+    // MARK: - Inspirations（灵感速记）
+    func fetchInspirations(status: String? = nil) async -> [Inspiration] {
+        var components = URLComponents(string: "\(baseUrl)/inspirations")
+        if let status, !status.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "status", value: status)]
+        }
+        guard let url = components?.url else { return [] }
+        do {
+            var req = URLRequest(url: url)
+            for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+            let (data, _) = try await URLSession.shared.data(for: req)
+            return (try? JSONDecoder().decode([Inspiration].self, from: data)) ?? []
+        } catch {
+            return []
+        }
+    }
+
+    @discardableResult
+    func createInspiration(raw: String, title: String, summary: String, tags: [String]) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/inspirations") else { return false }
+        let body: [String: Any] = ["raw": raw, "title": title, "summary": summary, "tags": tags]
+        return await sendJSON(url, method: "POST", body: body)
+    }
+
+    @discardableResult
+    func updateInspiration(id: Int, patch: [String: Any]) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/inspirations/\(id)") else { return false }
+        return await sendJSON(url, method: "PATCH", body: patch)
+    }
+
+    @discardableResult
+    func deleteInspiration(id: Int) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/inspirations/\(id)") else { return false }
+        return await sendJSON(url, method: "DELETE", body: nil)
+    }
+
+    // 通用 JSON 请求（灵感增改删共用）。返回是否成功（<400）。
+    private func sendJSON(_ url: URL, method: String, body: [String: Any]?) async -> Bool {
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        if let body { req.httpBody = try? JSONSerialization.data(withJSONObject: body) }
+        do {
+            let (_, response) = try await URLSession.shared.data(for: req)
+            return (response as? HTTPURLResponse).map { $0.statusCode < 400 } ?? false
+        } catch {
+            return false
+        }
+    }
+
     // MARK: - Capabilities
     func fetchCapabilities() async -> [Capability] {
         guard let url = URL(string: "\(baseUrl)/capabilities") else { return [] }

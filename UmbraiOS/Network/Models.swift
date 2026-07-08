@@ -80,3 +80,16 @@ struct UploadResponse: Codable {
     let filename: String
     let url: String
 }
+
+// 灵感速记：raw 原文一字不改；title/summary/tags 是秘书的轻整理。
+struct Inspiration: Codable, Identifiable {
+    let id: Int
+    let raw: String
+    let title: String
+    let summary: String
+    let tags: [String]
+    let status: String          // open/done/archived
+    let source_channel: String?
+    let created_at: String?
+    let updated_at: String?
+}

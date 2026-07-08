@@ -25,6 +25,8 @@
 		A1000001266A000000000060 /* TTSService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000061 /* TTSService.swift */; };
 		A1000001266A000000000062 /* LanguageManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000063 /* LanguageManager.swift */; };
 		A1000001266A000000000068 /* StringCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000069 /* StringCatalog.swift */; };
+		A1000001266A0000000000A0 /* InspirationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000A1 /* InspirationsView.swift */; };
+		A1000001266A0000000000A2 /* InspirationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000A3 /* InspirationsViewModel.swift */; };
 		A1000001266A000000000064 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000065 /* Localizable.xcstrings */; };
 		A1000001266A000000000066 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000067 /* InfoPlist.xcstrings */; };
 /* End PBXBuildFile section */
@@ -49,6 +51,8 @@
 		A1000001266A000000000061 /* TTSService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TTSService.swift; sourceTree = "<group>"; };
 		A1000001266A000000000063 /* LanguageManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageManager.swift; sourceTree = "<group>"; };
 		A1000001266A000000000069 /* StringCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StringCatalog.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000A1 /* InspirationsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspirationsView.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000A3 /* InspirationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspirationsViewModel.swift; sourceTree = "<group>"; };
 		A1000001266A000000000065 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		A1000001266A000000000067 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -81,6 +85,7 @@
 				A1000001266A000000000033 /* ContentView.swift */,
 				A1000001266A000000000035 /* ChatView.swift */,
 				A1000001266A000000000037 /* TasksView.swift */,
+				A1000001266A0000000000A1 /* InspirationsView.swift */,
 				A1000001266A000000000039 /* AbilitiesView.swift */,
 				A1000001266A000000000041 /* MeView.swift */,
 			);
@@ -92,6 +97,7 @@
 			children = (
 				A1000001266A000000000043 /* ChatViewModel.swift */,
 				A1000001266A000000000045 /* TasksViewModel.swift */,
+				A1000001266A0000000000A3 /* InspirationsViewModel.swift */,
 				A1000001266A000000000047 /* AbilitiesViewModel.swift */,
 			);
 			path = UmbraiOS/ViewModels;
@@ -217,6 +223,8 @@
 				A1000001266A000000000060 /* TTSService.swift in Sources */,
 				A1000001266A000000000062 /* LanguageManager.swift in Sources */,
 				A1000001266A000000000068 /* StringCatalog.swift in Sources */,
+				A1000001266A0000000000A0 /* InspirationsView.swift in Sources */,
+				A1000001266A0000000000A2 /* InspirationsViewModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

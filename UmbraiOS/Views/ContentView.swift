@@ -21,6 +21,12 @@ struct ContentView: View {
                     Text(L("tab.tasks"))
                 }
 
+            InspirationsView()
+                .tabItem {
+                    Image(systemName: "lightbulb")
+                    Text(L("tab.inspiration"))
+                }
+
             AbilitiesView()
                 .tabItem {
                     Image(systemName: "square.grid.2x2")

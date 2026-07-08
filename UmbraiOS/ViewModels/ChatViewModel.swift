@@ -313,6 +313,10 @@ class ChatViewModel: ObservableObject {
             if var a = currentAssistant { a.text = msg.text ?? a.text; a.thinking = false; a.streaming = false; updateAssistant(a) }
             mainStore.assistantIdx = nil
 
+        case "inspiration_saved", "inspiration_updated", "inspiration_deleted":
+            // 灵感变更（可能来自任意端）→ 通知灵感页刷新。
+            NotificationCenter.default.post(name: .inspirationChanged, object: nil)
+
         case "job_update":
             handleJobUpdate(msg)
 
