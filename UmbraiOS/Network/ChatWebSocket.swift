@@ -97,17 +97,27 @@ class ChatWebSocket: ObservableObject {
         sendJSON(msg)
     }
 
-    // operate 人工箭头指位回传：nx,ny 为箭头尖端的归一化坐标(0-1000)；cancelled=用户选择手动处理。
-    func sendLocate(taskId: String, nx: Int? = nil, ny: Int? = nil, cancelled: Bool = false) {
+    // operate 人工求助回传，三选一：
+    //   箭头指位 nx,ny(归一化0-1000) / 文字纠偏 feedback / 暂停我来 paused。
+    func sendLocate(taskId: String, nx: Int? = nil, ny: Int? = nil,
+                    feedback: String? = nil, paused: Bool = false) {
         guard let task = webSocketTask, task.state == .running else { return }
         var msg: [String: Any] = ["type": "operate_locate_response", "task_id": taskId]
-        if cancelled {
-            msg["cancelled"] = true
+        if paused {
+            msg["paused"] = true
+        } else if let feedback, !feedback.isEmpty {
+            msg["feedback"] = feedback
         } else if let nx, let ny {
             msg["nx"] = nx
             msg["ny"] = ny
         }
         sendJSON(msg)
+    }
+
+    // operate 暂停后「继续」：让服务端重新看屏、从当前状态接着干。
+    func sendResume(jobId: String) {
+        guard let task = webSocketTask, task.state == .running else { return }
+        sendJSON(["type": "operate_resume", "job_id": jobId])
     }
 
     func sendNewSession() {

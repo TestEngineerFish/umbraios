@@ -1502,6 +1502,40 @@
         }
       }
     },
+    "operate.locate.feedbackPlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell me what's wrong…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用文字告诉我哪错了…"
+          }
+        }
+      }
+    },
+    "operate.locate.feedbackSent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent to the assistant — it'll adjust accordingly."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已把提示发给 AI，它会据此调整。"
+          }
+        }
+      }
+    },
     "operate.locate.hint": {
       "extractionState": "manual",
       "localizations": {
@@ -1542,13 +1576,81 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "I'll do it"
+            "value": "I'll handle it"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "我自己来"
+            "value": "我自己来处理"
+          }
+        }
+      }
+    },
+    "operate.locate.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused. Handle it manually, then tap Continue and I'll pick up from the current state."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已暂停。你手动处理好后点『继续』，我会重新看屏接着干。"
+          }
+        }
+      }
+    },
+    "operate.locate.resume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done — continue"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我处理好了，继续"
+          }
+        }
+      }
+    },
+    "operate.locate.resumed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resumed."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已继续。"
+          }
+        }
+      }
+    },
+    "operate.locate.sendFeedback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送"
           }
         }
       }

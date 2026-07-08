@@ -271,24 +271,42 @@ class ChatViewModel: ObservableObject {
         handleConfirm(taskId: taskId, approved: true)
     }
 
-    // 用户在截图上拖箭头指了目标：nx,ny 为箭头尖端归一化坐标(0-1000)。
+    // ① 箭头指位：nx,ny 为箭头尖端归一化坐标(0-1000)。
     func handleLocate(taskId: String, nx: Int, ny: Int) {
         ws.sendLocate(taskId: taskId, nx: nx, ny: ny)
         resolveLocate(taskId: taskId, status: .located)
     }
 
-    // 用户选择自己手动处理。
-    func handleLocateCancel(taskId: String) {
-        ws.sendLocate(taskId: taskId, cancelled: true)
-        resolveLocate(taskId: taskId, status: .cancelled)
+    // ② 文字纠偏：把「哪错了」发给 AI，让它自己调整步骤/判断。
+    func handleLocateFeedback(taskId: String, text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        ws.sendLocate(taskId: taskId, feedback: t)
+        resolveLocate(taskId: taskId, status: .feedbackSent)
+    }
+
+    // ③ 暂停我来：任务挂起，用户手动处理；卡片随后出现「继续」。
+    func handleLocatePause(taskId: String) {
+        ws.sendLocate(taskId: taskId, paused: true)
+        resolveLocate(taskId: taskId, status: .paused)
+    }
+
+    // 用户手动处理完点「继续」：唤醒任务，AI 重新看屏接着干。
+    func handleResume(jobId: String, taskId: String) {
+        guard !jobId.isEmpty else { return }
+        ws.sendResume(jobId: jobId)
+        resolveLocate(taskId: taskId, status: .resumed)
     }
 
     private func resolveLocate(taskId: String, status: ChatBlock.LocateStatus) {
         let s = mainStore
         for i in s.blocks.indices {
-            if case .locate(var l) = s.blocks[i], l.taskId == taskId, l.resolved == nil {
-                l.resolved = status
-                s.blocks[i] = .locate(l)
+            if case .locate(var l) = s.blocks[i], l.taskId == taskId {
+                // paused → resumed 允许再次更新；其它状态定型后不再改。
+                if l.resolved == nil || (l.resolved == .paused && status == .resumed) {
+                    l.resolved = status
+                    s.blocks[i] = .locate(l)
+                }
             }
         }
         reflect(ChatViewModel.mainConv)
@@ -372,7 +390,7 @@ class ChatViewModel: ObservableObject {
                 let exists = s.blocks.contains { if case .locate(let l) = $0 { return l.taskId == taskId } else { return false } }
                 if !exists {
                     s.blocks.append(.locate(ChatBlock.LocateBlock(
-                        taskId: taskId, imageUrl: img,
+                        taskId: taskId, jobId: msg.jobId ?? "", imageUrl: img,
                         target: msg.locateTarget ?? "",
                         hint: msg.locateHint ?? L("operate.locate.hint"),
                         resolved: nil)))
@@ -536,10 +554,11 @@ extension ChatBlock {
         var resolved: ConfirmStatus?
     }
 
-    // operate 人工箭头指位：显示截图，用户拖箭头指目标，tip 坐标回传。
+    // operate 人工求助：显示截图；用户可①拖箭头指位 ②文字纠偏 ③暂停我来（之后可继续）。
     struct LocateBlock: Hashable {
         let id = UUID()
         var taskId: String
+        var jobId: String
         var imageUrl: String       // 服务端相对路径（如 /files/<id>），显示时拼 baseUrl
         var target: String
         var hint: String
@@ -547,7 +566,8 @@ extension ChatBlock {
     }
 
     enum ConfirmStatus: Hashable { case approved, denied }
-    enum LocateStatus: Hashable { case located, cancelled }
+    // located=已指位；feedbackSent=已发纠偏；paused=已暂停(可继续)；resumed=已点继续
+    enum LocateStatus: Hashable { case located, feedbackSent, paused, resumed }
 
     // Helper factory methods (enums don't provide these automatically with labels)
     static func assistantBlock(text: String, ts: String?) -> ChatBlock {

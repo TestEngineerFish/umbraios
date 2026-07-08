@@ -358,9 +358,12 @@ struct ChatView: View {
         case .confirm(let data):
             confirmCard(data)
         case .locate(let data):
-            LocateCard(data: data,
-                       onLocate: { nx, ny in viewModel.handleLocate(taskId: data.taskId, nx: nx, ny: ny) },
-                       onCancel: { viewModel.handleLocateCancel(taskId: data.taskId) })
+            LocateCard(
+                data: data,
+                onLocate: { nx, ny in viewModel.handleLocate(taskId: data.taskId, nx: nx, ny: ny) },
+                onFeedback: { text in viewModel.handleLocateFeedback(taskId: data.taskId, text: text) },
+                onPause: { viewModel.handleLocatePause(taskId: data.taskId) },
+                onResume: { viewModel.handleResume(jobId: data.jobId, taskId: data.taskId) })
         case .error(_, let text):
             errorBubble(text)
         }
@@ -1037,19 +1040,21 @@ struct ImageLightboxView: View {
     }
 }
 
-// MARK: - Locate Card（人工箭头指位）
-// 显示 operate 当前截图；用户在图上拖一个箭头，箭头尖端(tip)=要点击的位置。
-// tip 换算成相对图片的归一化坐标(0-1000)回传，与服务端/设备的 click nx,ny 对齐。
+// MARK: - Locate Card（人工求助：箭头指位 / 文字纠偏 / 暂停我来 → 继续）
+// 显示 operate 当前截图；箭头尖端(tip)=要点的位置，换算成归一化(0-1000)回传。
 struct LocateCard: View {
     let data: ChatBlock.LocateBlock
     let onLocate: (Int, Int) -> Void
-    let onCancel: () -> Void
+    let onFeedback: (String) -> Void
+    let onPause: () -> Void
+    let onResume: () -> Void
 
     @State private var image: UIImage?
     @State private var loadFailed = false
     @State private var arrowStart: CGPoint?     // 图内像素坐标（画箭头用）
     @State private var arrowTip: CGPoint?
     @State private var tipNorm: CGPoint?         // 归一化 0-1000（回传用）
+    @State private var feedbackText = ""
 
     private var fullURL: URL? {
         if data.imageUrl.hasPrefix("http") { return URL(string: data.imageUrl) }
@@ -1067,24 +1072,12 @@ struct LocateCard: View {
             Text(data.hint).font(.system(size: 12.5)).lineSpacing(4)
 
             if let resolved = data.resolved {
-                Text(resolved == .located ? L("operate.locate.done") : L("operate.locate.cancelled"))
-                    .font(.system(size: 12)).foregroundColor(.umbraMuted)
+                resolvedView(resolved)
             } else if let image {
-                imageWithArrow(image)
-                HStack(spacing: 9) {
-                    Button(L("operate.locate.confirm")) {
-                        if let n = tipNorm { onLocate(Int(n.x), Int(n.y)) }
-                    }
-                    .buttonStyle(.borderedProminent).tint(.orange)
-                    .disabled(tipNorm == nil)
-                    .frame(maxWidth: .infinity)
-                    Button(L("operate.locate.manual")) { onCancel() }
-                        .buttonStyle(.bordered).tint(.gray)
-                        .frame(maxWidth: .infinity)
-                }
+                activeView(image)
             } else if loadFailed {
                 Text(L("operate.locate.loadFailed")).font(.system(size: 12)).foregroundColor(.red)
-                Button(L("operate.locate.manual")) { onCancel() }.buttonStyle(.bordered).tint(.gray)
+                actionRow()  // 加载失败也允许纠偏/暂停
             } else {
                 ProgressView().frame(maxWidth: .infinity, minHeight: 80)
             }
@@ -1095,6 +1088,60 @@ struct LocateCard: View {
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(Color.orange, lineWidth: 1))
         .frame(maxWidth: UIScreen.main.bounds.width * 0.92)
         .task { await load() }
+    }
+
+    // 已处理后的状态显示（暂停可再点「继续」）。
+    @ViewBuilder
+    private func resolvedView(_ status: ChatBlock.LocateStatus) -> some View {
+        switch status {
+        case .located:
+            Text(L("operate.locate.done")).font(.system(size: 12)).foregroundColor(.umbraMuted)
+        case .feedbackSent:
+            Text(L("operate.locate.feedbackSent")).font(.system(size: 12)).foregroundColor(.umbraMuted)
+        case .resumed:
+            Text(L("operate.locate.resumed")).font(.system(size: 12)).foregroundColor(.umbraMuted)
+        case .paused:
+            VStack(alignment: .leading, spacing: 8) {
+                Text(L("operate.locate.paused")).font(.system(size: 12)).foregroundColor(.umbraMuted)
+                Button(L("operate.locate.resume")) { onResume() }
+                    .buttonStyle(.borderedProminent).tint(.orange)
+                    .frame(maxWidth: .infinity)
+            }
+        }
+    }
+
+    // 未处理时的完整交互：截图+箭头、确定指位、文字纠偏、暂停我来。
+    private func activeView(_ img: UIImage) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            imageWithArrow(img)
+            Button(L("operate.locate.confirm")) {
+                if let n = tipNorm { onLocate(Int(n.x), Int(n.y)) }
+            }
+            .buttonStyle(.borderedProminent).tint(.orange)
+            .disabled(tipNorm == nil)
+            .frame(maxWidth: .infinity)
+            actionRow()
+        }
+    }
+
+    // 文字纠偏输入 + 暂停按钮（指位之外的两条路）。
+    private func actionRow() -> some View {
+        VStack(spacing: 8) {
+            HStack(spacing: 8) {
+                TextField(L("operate.locate.feedbackPlaceholder"), text: $feedbackText, axis: .vertical)
+                    .font(.system(size: 12.5))
+                    .textFieldStyle(.roundedBorder)
+                    .lineLimit(1...3)
+                Button(L("operate.locate.sendFeedback")) { onFeedback(feedbackText) }
+                    .font(.system(size: 12.5))
+                    .buttonStyle(.bordered).tint(.orange)
+                    .disabled(feedbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            Button(L("operate.locate.manual")) { onPause() }
+                .font(.system(size: 12.5))
+                .buttonStyle(.bordered).tint(.gray)
+                .frame(maxWidth: .infinity)
+        }
     }
 
     private func imageWithArrow(_ img: UIImage) -> some View {
