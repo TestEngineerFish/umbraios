@@ -257,10 +257,12 @@ struct ChatView: View {
                             blockView(block, at: index)
                         }
                     }
+                    // 底部锚点：用零高标记而非把 .id 放到整个 LazyVStack 上——
+                    // 后者会在某个卡片（如求助卡输入完成后收起）改变高度时丢失滚动位置、把列表顶到最上方。
+                    Color.clear.frame(height: 1).id("bottom")
                 }
                 .padding(.horizontal, 14)
                 .padding(.vertical, 16)
-                .id("bottom")
             }
             .scrollDismissesKeyboard(.interactively)
             .onChange(of: viewModel.blocks.count) { _ in
@@ -1051,10 +1053,17 @@ struct LocateCard: View {
 
     @State private var image: UIImage?
     @State private var loadFailed = false
-    @State private var arrowStart: CGPoint?     // 图内像素坐标（画箭头用）
-    @State private var arrowTip: CGPoint?
-    @State private var tipNorm: CGPoint?         // 归一化 0-1000（回传用）
+    @State private var arrowTail: CGPoint?       // 箭尾（图内像素坐标）
+    @State private var arrowTip: CGPoint?        // 箭头尖端（图内像素坐标）
+    @State private var tipNorm: CGPoint?         // 尖端归一化 0-1000（回传用）
     @State private var feedbackText = ""
+    // 缩放（放大后点小目标更准）：以尖端为锚点放大。
+    @State private var zoom: CGFloat = 1
+    // 拖拽模式：创建新箭头 vs 抓住箭杆整体平移（避免手指挡住尖端）。
+    @State private var dragMode: LocateDragMode?
+    @State private var moveGrab: CGPoint?        // 平移时的抓取起点
+    @State private var moveTail0: CGPoint?       // 平移起始的箭尾
+    @State private var moveTip0: CGPoint?        // 平移起始的尖端
 
     private var fullURL: URL? {
         if data.imageUrl.hasPrefix("http") { return URL(string: data.imageUrl) }
@@ -1113,6 +1122,8 @@ struct LocateCard: View {
     // 未处理时的完整交互：截图+箭头、确定指位、文字纠偏、暂停我来。
     private func activeView(_ img: UIImage) -> some View {
         VStack(alignment: .leading, spacing: 8) {
+            Text(L("operate.locate.arrowHint"))
+                .font(.system(size: 11)).foregroundColor(.umbraMuted)
             imageWithArrow(img)
             Button(L("operate.locate.confirm")) {
                 if let n = tipNorm { onLocate(Int(n.x), Int(n.y)) }
@@ -1149,28 +1160,92 @@ struct LocateCard: View {
         return GeometryReader { geo in
             let w = geo.size.width
             let h = w / aspect
-            ZStack {
-                Image(uiImage: img).resizable().frame(width: w, height: h)
-                if let start = arrowStart, let tip = arrowTip {
-                    ArrowShape(from: start, to: tip)
-                        .stroke(Color.red, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
-                    Circle().fill(Color.red).frame(width: 10, height: 10).position(tip)
+            // 以尖端为锚点放大，这样放大时目标区域就在视野里。
+            let anchor: UnitPoint = arrowTip.map { UnitPoint(x: $0.x / w, y: $0.y / h) } ?? .center
+            ZStack(alignment: .topTrailing) {
+                ZStack {
+                    Image(uiImage: img).resizable().frame(width: w, height: h)
+                    if let tail = arrowTail, let tip = arrowTip {
+                        ArrowShape(from: tail, to: tip)
+                            .stroke(Color.red, style: StrokeStyle(lineWidth: 2.5, lineCap: .round, lineJoin: .round))
+                        Circle().stroke(Color.red, lineWidth: 2).frame(width: 16, height: 16).position(tip)
+                        Circle().fill(Color.red).frame(width: 5, height: 5).position(tip)
+                    }
                 }
+                .frame(width: w, height: h)
+                .scaleEffect(zoom, anchor: anchor)
+                .contentShape(Rectangle())
+                .gesture(arrowDrag(w: w, h: h))
+
+                zoomButtons  // 右上角 ＋/－
             }
             .frame(width: w, height: h)
-            .contentShape(Rectangle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { v in
-                        if arrowStart == nil { arrowStart = v.startLocation }
-                        let tip = CGPoint(x: min(max(v.location.x, 0), w), y: min(max(v.location.y, 0), h))
-                        arrowTip = tip
-                        tipNorm = CGPoint(x: tip.x / w * 1000, y: tip.y / h * 1000)
-                    }
-            )
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
         .aspectRatio(aspect, contentMode: .fit)
+    }
+
+    // 右上角缩放按钮。
+    private var zoomButtons: some View {
+        HStack(spacing: 6) {
+            zoomBtn("minus.magnifyingglass") { zoom = max(zoom - 0.5, 1) }
+            zoomBtn("plus.magnifyingglass") { zoom = min(zoom + 0.5, 4) }
+        }
+        .padding(6)
+    }
+    private func zoomBtn(_ icon: String, _ act: @escaping () -> Void) -> some View {
+        Button(action: act) {
+            Image(systemName: icon).font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.white).padding(6)
+                .background(Color.black.opacity(0.45)).clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    // 拖拽手势：第一次拖 = 画箭头(尾→尖)；之后按住箭杆拖 = 整体平移(手指在杆上、尖端可见)。
+    private func arrowDrag(w: CGFloat, h: CGFloat) -> some Gesture {
+        // 放大后拖动距离需按 zoom 缩小，才与视觉一致。
+        DragGesture(minimumDistance: 0)
+            .onChanged { v in
+                let loc = CGPoint(x: v.location.x, y: v.location.y)
+                if dragMode == nil {
+                    if let tail = arrowTail, let tip = arrowTip,
+                       distanceToSegment(v.startLocation, tail, tip) < 26 {
+                        dragMode = .move
+                        moveGrab = v.startLocation; moveTail0 = tail; moveTip0 = tip
+                    } else {
+                        dragMode = .create
+                        arrowTail = clampPt(v.startLocation, w, h)
+                    }
+                }
+                if dragMode == .create {
+                    setTip(clampPt(loc, w, h), w: w, h: h)
+                } else if let grab = moveGrab, let t0 = moveTail0, let p0 = moveTip0 {
+                    // 手势坐标本就在未缩放的本地空间，delta 直接用即可（与 create 模式一致）。
+                    let dx = loc.x - grab.x, dy = loc.y - grab.y
+                    arrowTail = clampPt(CGPoint(x: t0.x + dx, y: t0.y + dy), w, h)
+                    setTip(clampPt(CGPoint(x: p0.x + dx, y: p0.y + dy), w, h), w: w, h: h)
+                }
+            }
+            .onEnded { _ in dragMode = nil; moveGrab = nil }
+    }
+
+    private func setTip(_ p: CGPoint, w: CGFloat, h: CGFloat) {
+        arrowTip = p
+        tipNorm = CGPoint(x: p.x / w * 1000, y: p.y / h * 1000)
+    }
+    private func clampPt(_ p: CGPoint, _ w: CGFloat, _ h: CGFloat) -> CGPoint {
+        CGPoint(x: min(max(p.x, 0), w), y: min(max(p.y, 0), h))
+    }
+    // 点到线段距离（判断是否按在箭杆上）。
+    private func distanceToSegment(_ p: CGPoint, _ a: CGPoint, _ b: CGPoint) -> CGFloat {
+        let dx = b.x - a.x, dy = b.y - a.y
+        let len2 = dx * dx + dy * dy
+        if len2 == 0 { return hypot(p.x - a.x, p.y - a.y) }
+        var t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2
+        t = min(max(t, 0), 1)
+        let proj = CGPoint(x: a.x + t * dx, y: a.y + t * dy)
+        return hypot(p.x - proj.x, p.y - proj.y)
     }
 
     private func load() async {
@@ -1183,6 +1258,8 @@ struct LocateCard: View {
         }
     }
 }
+
+enum LocateDragMode { case create, move }
 
 // 从 from 画到 to 的箭头（含箭头尖）。
 struct ArrowShape: Shape {

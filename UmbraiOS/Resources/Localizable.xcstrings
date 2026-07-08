@@ -1451,6 +1451,23 @@
         }
       }
     },
+    "operate.locate.arrowHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag to draw an arrow, then hold the shaft to nudge the tip onto the target; zoom via the top-right."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "先拖出箭头，再按住箭杆微调让尖端对准目标；右上角可放大。"
+          }
+        }
+      }
+    },
     "operate.locate.cancelled": {
       "extractionState": "manual",
       "localizations": {
@@ -1927,6 +1944,23 @@
         }
       }
     },
+    "tasks.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已暂停"
+          }
+        }
+      }
+    },
     "tasks.pending": {
       "extractionState": "stale",
       "localizations": {
@@ -1991,6 +2025,40 @@
           "stringUnit": {
             "state": "translated",
             "value": "步骤"
+          }
+        }
+      }
+    },
+    "tasks.stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End task"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "结束任务"
+          }
+        }
+      }
+    },
+    "tasks.stopConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force-end this task?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确定强制结束这个任务吗？"
           }
         }
       }

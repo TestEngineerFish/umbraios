@@ -37,10 +37,12 @@ struct TasksView: View {
                                 .frame(maxWidth: .infinity, minHeight: 200)
                         } else {
                             ForEach(viewModel.jobs) { job in
-                                TaskRow(job: job)
-                                    .onTapGesture {
-                                        Task { await viewModel.loadJobDetail(id: job.id) }
-                                    }
+                                TaskRow(job: job, onStop: {
+                                    Task { await viewModel.stopJob(id: job.id) }
+                                })
+                                .onTapGesture {
+                                    Task { await viewModel.loadJobDetail(id: job.id) }
+                                }
                             }
                         }
                     }
@@ -69,6 +71,8 @@ struct TasksView: View {
 // MARK: - Task Row
 struct TaskRow: View {
     let job: Job
+    var onStop: (() -> Void)? = nil
+    @State private var confirmingStop = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
@@ -92,10 +96,27 @@ struct TaskRow: View {
             }
             .frame(height: 5)
 
-            Text(taskSubtitle(for: job))
-                .font(.system(size: 11.5))
-                .foregroundColor(.umbraMuted)
-                .lineLimit(1)
+            HStack {
+                Text(taskSubtitle(for: job))
+                    .font(.system(size: 11.5))
+                    .foregroundColor(.umbraMuted)
+                    .lineLimit(1)
+                Spacer()
+                // 运行/待执行/暂停中的任务可强制结束（放在任务列表上）。
+                if onStop != nil, TasksViewModel.isActive(job.status) {
+                    Button(role: .destructive) {
+                        confirmingStop = true
+                    } label: {
+                        Text(L("tasks.stop"))
+                            .font(.system(size: 11.5, weight: .semibold))
+                            .foregroundColor(.red)
+                            .padding(.horizontal, 10).padding(.vertical, 3)
+                            .background(Color.red.opacity(0.1))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
         }
         .padding(.horizontal, 15)
         .padding(.vertical, 13)
@@ -105,6 +126,10 @@ struct TaskRow: View {
             RoundedRectangle(cornerRadius: 14)
                 .stroke(job.status == "running" ? Color.orange : umbraColor(\.border), lineWidth: 1)
         )
+        .confirmationDialog(L("tasks.stopConfirm"), isPresented: $confirmingStop, titleVisibility: .visible) {
+            Button(L("tasks.stop"), role: .destructive) { onStop?() }
+            Button(L("common.cancel"), role: .cancel) {}
+        }
     }
 
     private func taskSubtitle(for job: Job) -> String {
@@ -123,6 +148,7 @@ struct TaskRow: View {
             case "done": return (L("tasks.done"), .green)
             case "running": return (L("tasks.running"), .orange)
             case "pending": return (L("tasks.pending"), .umbraMuted)
+            case "paused": return (L("tasks.paused"), .orange)
             case "failed": return (L("tasks.failed"), .red)
             default: return (job.status, .umbraMuted)
             }

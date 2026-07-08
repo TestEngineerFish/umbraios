@@ -59,6 +59,21 @@ class HTTPService {
         return await request(url)
     }
 
+    // 强制结束一个正在跑/暂停中的 operate 任务（任务列表「结束任务」）。
+    @discardableResult
+    func stopJob(id: String) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/jobs/\(id)/stop") else { return false }
+        var req = URLRequest(url: url)
+        req.httpMethod = "POST"
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: req)
+            return (resp as? HTTPURLResponse).map { $0.statusCode < 400 } ?? false
+        } catch {
+            return false
+        }
+    }
+
     // MARK: - Inspirations（灵感速记）
     func fetchInspirations(status: String? = nil) async -> [Inspiration] {
         var components = URLComponents(string: "\(baseUrl)/inspirations")

@@ -46,6 +46,17 @@ class TasksViewModel: ObservableObject {
         jobDetail = nil
     }
 
+    // 强制结束一个正在跑/暂停中的任务，然后刷新列表。
+    func stopJob(id: String) async {
+        await HTTPService.shared.stopJob(id: id)
+        await loadJobs()
+    }
+
+    // 是否可「结束任务」：运行/待执行/暂停中才显示按钮。
+    static func isActive(_ status: String) -> Bool {
+        ["running", "pending", "paused", "dispatched"].contains(status)
+    }
+
     func startPolling() {
         stopPolling()
         Task { await loadJobs() }
