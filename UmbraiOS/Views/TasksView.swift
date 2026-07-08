@@ -133,6 +133,10 @@ struct TaskRow: View {
     }
 
     private func taskSubtitle(for job: Job) -> String {
+        // 优先展示步骤进度（x/y 步）。
+        if let total = job.steps_total, total > 0, let done = job.steps_done, job.status != "done" {
+            return L("tasks.stepsProgress", "\(done)/\(total)")
+        }
         if let summary = job.result_summary, !summary.isEmpty {
             return String(summary.prefix(70))
         }
@@ -172,7 +176,12 @@ struct TaskRow: View {
     }
 
     private var barPct: Double {
-        job.status == "done" ? 1.0 : (job.status == "running" ? 0.38 : 0)
+        if job.status == "done" { return 1.0 }
+        // 有真实步骤统计就按「已完成/总数」显示，否则退回粗略估计。
+        if let total = job.steps_total, total > 0, let done = job.steps_done {
+            return min(1.0, Double(done) / Double(total))
+        }
+        return job.status == "running" ? 0.38 : 0
     }
 }
 

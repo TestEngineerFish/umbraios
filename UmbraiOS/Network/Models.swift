@@ -26,6 +26,9 @@ struct Job: Codable, Identifiable {
     let channel: String?
     let created_at: String?
     let updated_at: String?
+    // 步骤统计（列表接口附带）：用于任务列表按真实完成步数显示进度。
+    var steps_total: Int? = nil
+    var steps_done: Int? = nil
 }
 
 struct Subtask: Codable, Identifiable {

@@ -1062,9 +1062,13 @@ struct LocateCard: View {
     @State private var pinchBase: CGFloat = 1
     // 拖拽模式：创建新箭头 vs 抓住箭杆整体平移（避免手指挡住尖端）。
     @State private var dragMode: LocateDragMode?
-    @State private var moveGrab: CGPoint?        // 平移时的抓取起点
+    @State private var moveGrab: CGPoint?        // 平移时的抓取起点（未缩放图内坐标）
     @State private var moveTail0: CGPoint?       // 平移起始的箭尾
     @State private var moveTip0: CGPoint?        // 平移起始的尖端
+    // 画箭头 / 拖动画面：默认「画箭头」；放大后关掉它就能拖动查看图片其它区域。
+    @State private var drawArrow = true
+    @State private var panOffset: CGSize = .zero
+    @State private var panBase: CGSize?
 
     private var fullURL: URL? {
         if data.imageUrl.hasPrefix("http") { return URL(string: data.imageUrl) }
@@ -1161,8 +1165,6 @@ struct LocateCard: View {
         return GeometryReader { geo in
             let w = geo.size.width
             let h = w / aspect
-            // 以尖端为锚点放大，这样放大时目标区域就在视野里。
-            let anchor: UnitPoint = arrowTip.map { UnitPoint(x: $0.x / w, y: $0.y / h) } ?? .center
             ZStack(alignment: .topTrailing) {
                 ZStack {
                     Image(uiImage: img).resizable().frame(width: w, height: h)
@@ -1174,27 +1176,36 @@ struct LocateCard: View {
                     }
                 }
                 .frame(width: w, height: h)
-                .scaleEffect(zoom, anchor: anchor)
+                .scaleEffect(zoom, anchor: .center)   // 从中心缩放，配合 panOffset 平移查看
+                .offset(panOffset)
+                .frame(width: w, height: h)
                 .contentShape(Rectangle())
-                .gesture(arrowDrag(w: w, h: h))
-                .simultaneousGesture(  // 双指捏合缩放（与单指画箭头互不冲突）
+                .gesture(unifiedDrag(w: w, h: h))
+                .simultaneousGesture(  // 双指捏合缩放（与单指手势互不冲突）
                     MagnificationGesture()
                         .onChanged { v in zoom = min(max(pinchBase * v, 1), 4) }
-                        .onEnded { _ in pinchBase = zoom }
+                        .onEnded { _ in pinchBase = zoom; if zoom <= 1 { panOffset = .zero } }
                 )
 
-                zoomButtons  // 右上角 ＋/－
+                toolbar  // 右上角：箭头开关 + ＋/－
             }
             .frame(width: w, height: h)
             .clipShape(RoundedRectangle(cornerRadius: 8))
+            .coordinateSpace(name: "loc")
         }
         .aspectRatio(aspect, contentMode: .fit)
     }
 
-    // 右上角缩放按钮。
-    private var zoomButtons: some View {
+    // 右上角工具：箭头开关（默认开，选中才画箭头；关掉后拖动=移动画面）+ 缩放。
+    private var toolbar: some View {
         HStack(spacing: 6) {
-            zoomBtn("minus.magnifyingglass") { zoom = max(zoom - 0.5, 1); pinchBase = zoom }
+            Button { drawArrow.toggle() } label: {
+                Image(systemName: "arrow.up.left").font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.white).padding(6)
+                    .background(drawArrow ? Color.orange : Color.black.opacity(0.45))
+                    .clipShape(Circle())
+            }.buttonStyle(.plain)
+            zoomBtn("minus.magnifyingglass") { zoom = max(zoom - 0.5, 1); pinchBase = zoom; if zoom <= 1 { panOffset = .zero } }
             zoomBtn("plus.magnifyingglass") { zoom = min(zoom + 0.5, 4); pinchBase = zoom }
         }
         .padding(6)
@@ -1208,32 +1219,44 @@ struct LocateCard: View {
         .buttonStyle(.plain)
     }
 
-    // 拖拽手势：第一次拖 = 画箭头(尾→尖)；之后按住箭杆拖 = 整体平移(手指在杆上、尖端可见)。
-    private func arrowDrag(w: CGFloat, h: CGFloat) -> some Gesture {
-        // 放大后拖动距离需按 zoom 缩小，才与视觉一致。
-        DragGesture(minimumDistance: 0)
+    // 单指拖拽：箭头模式=画/移箭头；关掉箭头模式=平移画面（放大后可查看别处）。
+    private func unifiedDrag(w: CGFloat, h: CGFloat) -> some Gesture {
+        DragGesture(minimumDistance: 0, coordinateSpace: .named("loc"))
             .onChanged { v in
-                let loc = CGPoint(x: v.location.x, y: v.location.y)
+                if !drawArrow {
+                    if panBase == nil { panBase = panOffset }
+                    panOffset = CGSize(width: (panBase?.width ?? 0) + v.translation.width,
+                                       height: (panBase?.height ?? 0) + v.translation.height)
+                    return
+                }
+                // 把屏幕坐标反算回未缩放图内坐标（考虑当前缩放与平移）。
+                let p = unscaled(v.location, w: w, h: h)
                 if dragMode == nil {
                     if let tail = arrowTail, let tip = arrowTip,
-                       distanceToSegment(v.startLocation, tail, tip) < 26 {
+                       distanceToSegment(unscaled(v.startLocation, w: w, h: h), tail, tip) < 26 {
                         dragMode = .move
-                        moveGrab = v.startLocation; moveTail0 = tail; moveTip0 = tip
+                        moveGrab = unscaled(v.startLocation, w: w, h: h); moveTail0 = tail; moveTip0 = tip
                     } else {
                         dragMode = .create
-                        arrowTail = clampPt(v.startLocation, w, h)
+                        arrowTail = clampPt(unscaled(v.startLocation, w: w, h: h), w, h)
                     }
                 }
                 if dragMode == .create {
-                    setTip(clampPt(loc, w, h), w: w, h: h)
+                    setTip(clampPt(p, w, h), w: w, h: h)
                 } else if let grab = moveGrab, let t0 = moveTail0, let p0 = moveTip0 {
-                    // 手势坐标本就在未缩放的本地空间，delta 直接用即可（与 create 模式一致）。
-                    let dx = loc.x - grab.x, dy = loc.y - grab.y
+                    let dx = p.x - grab.x, dy = p.y - grab.y
                     arrowTail = clampPt(CGPoint(x: t0.x + dx, y: t0.y + dy), w, h)
                     setTip(clampPt(CGPoint(x: p0.x + dx, y: p0.y + dy), w, h), w: w, h: h)
                 }
             }
-            .onEnded { _ in dragMode = nil; moveGrab = nil }
+            .onEnded { _ in dragMode = nil; moveGrab = nil; panBase = nil }
+    }
+
+    // 屏幕("loc" 空间)坐标 → 未缩放图内坐标：p = center + (V - center - pan)/zoom
+    private func unscaled(_ v: CGPoint, w: CGFloat, h: CGFloat) -> CGPoint {
+        let cx = w / 2, cy = h / 2
+        return CGPoint(x: cx + (v.x - cx - panOffset.width) / zoom,
+                       y: cy + (v.y - cy - panOffset.height) / zoom)
     }
 
     private func setTip(_ p: CGPoint, w: CGFloat, h: CGFloat) {

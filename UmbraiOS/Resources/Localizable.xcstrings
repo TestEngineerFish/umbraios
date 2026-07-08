@@ -1457,13 +1457,13 @@
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Drag to draw an arrow, then hold the shaft to nudge the tip onto the target. Pinch or use the top-right buttons to zoom."
+            "value": "Drag to draw an arrow, hold the shaft to nudge the tip. Pinch or +/- to zoom; turn off the arrow button to pan the image."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "先拖出箭头，再按住箭杆微调让尖端对准目标；双指捏合或右上角按钮可放大。"
+            "value": "拖出箭头、按住箭杆微调尖端；捏合或 +/- 放大；关掉右上角箭头按钮即可拖动查看图片其它区域。"
           }
         }
       }
@@ -2025,6 +2025,23 @@
           "stringUnit": {
             "state": "translated",
             "value": "步骤"
+          }
+        }
+      }
+    },
+    "tasks.stepsProgress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "进度 %@ 步"
           }
         }
       }
