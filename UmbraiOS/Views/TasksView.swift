@@ -189,6 +189,7 @@ struct TaskRow: View {
 struct JobDetailView: View {
     let detail: JobDetail
     @Environment(\.dismiss) private var dismiss
+    @State private var previewURL: URL?
 
     var body: some View {
         NavigationStack {
@@ -238,6 +239,7 @@ struct JobDetailView: View {
                                                 image.resizable().scaledToFit()
                                                     .clipShape(RoundedRectangle(cornerRadius: 8))
                                                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(umbraColor(\.border), lineWidth: 1))
+                                                    .onTapGesture { previewURL = url }   // 点击全屏预览
                                             } else if case .empty = phase {
                                                 ProgressView().frame(maxWidth: .infinity, minHeight: 50)
                                             }
@@ -297,6 +299,9 @@ struct JobDetailView: View {
                         .tint(Color.umbraOrange)
                 }
             }
+            .fullScreenCover(item: $previewURL) { url in
+                ImagePreview(url: url) { previewURL = nil }
+            }
         }
     }
 
@@ -349,6 +354,78 @@ struct JobDetailView: View {
                 Circle()
                     .stroke(umbraColor(\.border), lineWidth: 2)
                     .frame(width: 18, height: 18)
+            }
+        }
+    }
+}
+
+// 让 URL 可用于 .fullScreenCover(item:)。
+extension URL: Identifiable { public var id: String { absoluteString } }
+
+// MARK: - 全屏图片预览（缩放/拖动/双击复位/分享）。图片走 URLCache（服务端已设长缓存），不重复下载。
+struct ImagePreview: View {
+    let url: URL
+    let onClose: () -> Void
+
+    @State private var image: UIImage?
+    @State private var scale: CGFloat = 1
+    @State private var base: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var offBase: CGSize = .zero
+
+    var body: some View {
+        ZStack {
+            Color.black.ignoresSafeArea()
+            if let image {
+                Image(uiImage: image)
+                    .resizable().scaledToFit()
+                    .scaleEffect(scale)
+                    .offset(offset)
+                    .gesture(
+                        MagnificationGesture()
+                            .onChanged { v in scale = min(max(base * v, 1), 6) }
+                            .onEnded { _ in base = scale; if scale <= 1 { offset = .zero; offBase = .zero } }
+                    )
+                    .simultaneousGesture(
+                        DragGesture()
+                            .onChanged { v in
+                                guard scale > 1 else { return }
+                                offset = CGSize(width: offBase.width + v.translation.width,
+                                                height: offBase.height + v.translation.height)
+                            }
+                            .onEnded { _ in offBase = offset }
+                    )
+                    .onTapGesture(count: 2) {
+                        withAnimation { if scale > 1 { scale = 1; base = 1; offset = .zero; offBase = .zero } else { scale = 2.5; base = 2.5 } }
+                    }
+            } else {
+                ProgressView().tint(.white)
+            }
+            VStack {
+                HStack {
+                    Button { onClose() } label: {
+                        Image(systemName: "xmark").font(.system(size: 15, weight: .semibold))
+                            .foregroundColor(.white).padding(10)
+                            .background(Color.white.opacity(0.18)).clipShape(Circle())
+                    }
+                    Spacer()
+                    if let image {
+                        ShareLink(item: Image(uiImage: image), preview: SharePreview("screenshot", image: Image(uiImage: image))) {
+                            Image(systemName: "square.and.arrow.up").font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.white).padding(10)
+                                .background(Color.white.opacity(0.18)).clipShape(Circle())
+                        }
+                    }
+                }
+                .padding(.horizontal, 16).padding(.top, 12)
+                Spacer()
+            }
+        }
+        .task {
+            if image == nil {
+                if let (data, _) = try? await URLSession.shared.data(from: url), let ui = UIImage(data: data) {
+                    image = ui
+                }
             }
         }
     }
