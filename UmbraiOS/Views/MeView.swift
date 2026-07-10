@@ -78,6 +78,18 @@ struct MeView: View {
                         .padding(.vertical, 13)
                     }
 
+                    section(title: "工具") {
+                        NavigationLink {
+                            VaultRootView().environmentObject(appState)
+                        } label: {
+                            HStack {
+                                Text("🔐  密码保险箱").font(.system(size: 13.5))
+                                Spacer()
+                                Image(systemName: "chevron.right").font(.system(size: 12)).foregroundColor(.umbraMuted)
+                            }.padding(.vertical, 13).contentShape(Rectangle())
+                        }.buttonStyle(.plain)
+                    }
+
                     section(title: L("me.general")) {
                         settingRow(title: L("me.language"), value: languageManager.currentDisplayName) {
                             showingLanguagePicker = true

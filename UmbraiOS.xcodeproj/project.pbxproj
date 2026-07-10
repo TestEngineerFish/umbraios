@@ -13,6 +13,7 @@
 		A1000001266A000000000036 /* TasksView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000037 /* TasksView.swift */; };
 		A1000001266A000000000038 /* AbilitiesView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000039 /* AbilitiesView.swift */; };
 		A1000001266A000000000040 /* MeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000041 /* MeView.swift */; };
+		A1000001266A0000000000B0 /* VaultFeature.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000B1 /* VaultFeature.swift */; };
 		A1000001266A000000000042 /* ChatViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000043 /* ChatViewModel.swift */; };
 		A1000001266A000000000044 /* TasksViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000045 /* TasksViewModel.swift */; };
 		A1000001266A000000000046 /* AbilitiesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000047 /* AbilitiesViewModel.swift */; };
@@ -39,6 +40,7 @@
 		A1000001266A000000000037 /* TasksView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksView.swift; sourceTree = "<group>"; };
 		A1000001266A000000000039 /* AbilitiesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AbilitiesView.swift; sourceTree = "<group>"; };
 		A1000001266A000000000041 /* MeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeView.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000B1 /* VaultFeature.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VaultFeature.swift; sourceTree = "<group>"; };
 		A1000001266A000000000043 /* ChatViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ChatViewModel.swift; sourceTree = "<group>"; };
 		A1000001266A000000000045 /* TasksViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TasksViewModel.swift; sourceTree = "<group>"; };
 		A1000001266A000000000047 /* AbilitiesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AbilitiesViewModel.swift; sourceTree = "<group>"; };
@@ -88,6 +90,7 @@
 				A1000001266A0000000000A1 /* InspirationsView.swift */,
 				A1000001266A000000000039 /* AbilitiesView.swift */,
 				A1000001266A000000000041 /* MeView.swift */,
+				A1000001266A0000000000B1 /* VaultFeature.swift */,
 			);
 			path = UmbraiOS/Views;
 			sourceTree = "<group>";
@@ -211,6 +214,7 @@
 				A1000001266A000000000036 /* TasksView.swift in Sources */,
 				A1000001266A000000000038 /* AbilitiesView.swift in Sources */,
 				A1000001266A000000000040 /* MeView.swift in Sources */,
+				A1000001266A0000000000B0 /* VaultFeature.swift in Sources */,
 				A1000001266A000000000042 /* ChatViewModel.swift in Sources */,
 				A1000001266A000000000044 /* TasksViewModel.swift in Sources */,
 				A1000001266A000000000046 /* AbilitiesViewModel.swift in Sources */,
