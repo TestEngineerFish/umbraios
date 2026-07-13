@@ -69,13 +69,16 @@ class ChatWebSocket: ObservableObject {
         connect()
     }
 
-    func sendMessage(_ content: String) {
+    /// conversation：'assistant' 主会话；'device:<id>' = 在某台设备的聊天窗口里说话
+    /// （服务端会把「目标设备=这台」注入上下文，端侧任务直接派给它）。
+    func sendMessage(_ content: String, conversation: String = "assistant") {
         guard let task = webSocketTask, task.state == .running else { return }
         let msg: [String: Any] = [
             "type": "message",
             "content": content,
             "client_id": clientId,
-            "auto_approve_operate": NetworkConfig.shared.autoApproveOperate
+            "auto_approve_operate": NetworkConfig.shared.autoApproveOperate,
+            "conversation": conversation
         ]
         sendJSON(msg)
     }

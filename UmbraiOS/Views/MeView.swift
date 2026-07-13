@@ -9,7 +9,6 @@ struct MeView: View {
     @State private var showingEditToken = false
     @State private var showingLanguagePicker = false
     @State private var cuEnabled: Bool = UserDefaults.standard.bool(forKey: "cuEnabled")
-    @State private var allowDeviceSend: Bool = NetworkConfig.shared.allowDeviceSend
     @State private var autoApproveOperate: Bool = NetworkConfig.shared.autoApproveOperate
 
     var body: some View {
@@ -38,26 +37,7 @@ struct MeView: View {
                             }
                     }
 
-                    section(title: L("me.allowDeviceSend")) {
-                        HStack(alignment: .top) {
-                            VStack(alignment: .leading, spacing: 3) {
-                                Text(L("me.allowDeviceSend"))
-                                    .font(.system(size: 13.5))
-                                Text(L("me.allowDeviceSend.desc"))
-                                    .font(.system(size: 11.5))
-                                    .foregroundColor(.umbraMuted)
-                            }
-                            Spacer()
-                            Toggle("", isOn: $allowDeviceSend)
-                                .labelsHidden()
-                                .toggleStyle(.switch)
-                                .tint(Color.umbraOrange)
-                                .onChange(of: allowDeviceSend) { newValue in
-                                    NetworkConfig.shared.allowDeviceSend = newValue
-                                }
-                        }
-                        .padding(.vertical, 13)
-                        rowDivider
+                    section(title: L("me.autoApproveOperate")) {
                         HStack(alignment: .top) {
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(L("me.autoApproveOperate"))

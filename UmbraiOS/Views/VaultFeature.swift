@@ -126,6 +126,7 @@ struct VItem: Codable, Identifiable {
     var id: String; var typeId: String; var title: String; var icon: String?
     var favorite: Bool?; var tags: [String]?; var blocks: [VBlock]; var attachments: [VAtt]
     var createdAt: Double; var updatedAt: Double; var revision: Double
+    var deleted: Bool?   // 删除墓碑：参与同步、界面过滤
 }
 struct VVaultInfo: Codable, Identifiable { var id: String; var name: String; var owner: String; var icon: String; var order: Double; var keyWrapped: String }
 struct VData: Codable { var types: [VType]; var items: [VItem]; var attachments: [String: String] }
@@ -175,24 +176,34 @@ final class VaultStore: ObservableObject {
     private var base: String { NetworkConfig.shared.serverUrl }
     private var token: String { NetworkConfig.shared.token }
 
-    // 拉取云端记录（未解锁也可拉，用于取 salt/verifier）。
+    // 拉取云端记录（未解锁也可拉，用于取 salt/verifier）。失败时给出可区分的原因。
     func pullRecord() async {
-        guard let url = URL(string: "\(base)/vault/sync?have_rev=-1") else { return }
-        var req = URLRequest(url: url); if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
-        guard let (data, _) = try? await URLSession.shared.data(for: req),
-              let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-        recordExists = (obj["exists"] as? Bool) ?? false
-        syncRev = (obj["rev"] as? Int) ?? 0
-        if let blobStr = obj["blob"] as? String, let rd = try? JSONDecoder().decode(VRecord.self, from: Data(blobStr.utf8)) {
-            record = rd
-        }
+        guard !base.isEmpty, let url = URL(string: "\(base)/vault/sync?have_rev=-1") else { error = "未配置服务器地址（在「我的」页填写）"; return }
+        if token.isEmpty { error = "未配置访问令牌（在「我的」页填与电脑相同的令牌）"; return }
+        var req = URLRequest(url: url); req.setValue(token, forHTTPHeaderField: "X-Umbra-Token")
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if code == 401 || code == 403 { error = "访问令牌不正确（请与电脑端一致）"; return }
+            if code == 404 { error = "服务器未部署同步接口（请更新并重启服务端）"; return }
+            if code != 200 { error = "服务器返回 \(code)"; return }
+            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { error = "服务器响应异常"; return }
+            recordExists = (obj["exists"] as? Bool) ?? false
+            syncRev = (obj["rev"] as? Int) ?? 0
+            if let blobStr = obj["blob"] as? String, let rd = try? JSONDecoder().decode(VRecord.self, from: Data(blobStr.utf8)) {
+                record = rd; error = ""
+            } else if recordExists { error = "云端数据解析失败（版本不一致？）" }
+        } catch let e { error = "连不上服务器：\(e.localizedDescription)" }
     }
 
     func unlock(password: String, secretKey: String) async {
         loading = true; error = ""
         defer { loading = false }
         if record == nil { await pullRecord() }
-        guard let rec = record else { error = "云端还没有数据，请先在电脑端「立即同步」一次"; return }
+        guard let rec = record else {
+            if error.isEmpty { error = "云端还没有数据，请先在电脑端「立即同步」一次" } // 否则保留 pullRecord 给出的具体原因（令牌/网络/404）
+            return
+        }
         let salt = Data(base64Encoded: rec.salt) ?? Data()
         let sk = secretKey.isEmpty ? (VaultKeychain.load() ?? "") : secretKey
         if sk.isEmpty { error = "首次在本机解锁需输入 Secret Key（电脑端 Emergency Kit）"; return }
@@ -217,7 +228,7 @@ final class VaultStore: ObservableObject {
     private func loadCurrent() {
         let d = snapshot?.data[curVaultId]
         types = (d?.types ?? []).sorted { $0.order < $1.order }
-        items = (d?.items ?? []).sorted { $0.updatedAt > $1.updatedAt }
+        items = (d?.items ?? []).filter { !($0.deleted ?? false) }.sorted { $0.updatedAt > $1.updatedAt }
     }
     func switchVault(_ id: String) { curVaultId = id; loadCurrent() }
 
@@ -242,7 +253,11 @@ final class VaultStore: ObservableObject {
     }
     func deleteItem(_ id: String) async {
         guard var snap = snapshot, var d = snap.data[curVaultId] else { return }
-        d.items.removeAll { $0.id == id }; snap.data[curVaultId] = d; snapshot = snap; loadCurrent()
+        if let i = d.items.firstIndex(where: { $0.id == id }) {   // 打墓碑而非移除，让删除跨端传播
+            var it = d.items[i]; it.deleted = true; it.blocks = []; it.attachments = []; it.tags = []
+            it.updatedAt = Date().timeIntervalSince1970 * 1000; it.revision += 1; d.items[i] = it
+        }
+        snap.data[curVaultId] = d; snapshot = snap; loadCurrent()
         await push()
     }
     func toggleFav(_ id: String) async {

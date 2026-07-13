@@ -63,6 +63,29 @@ struct Capability: Codable {
     let providers: [ProviderInfo]
 }
 
+// 已知设备（含离线）：聊天页「联系人列表」的数据源（GET /devices/all）。
+// 离线设备带的是最近一次上线时的能力目录快照，所以详情页离线也能看它「会什么」。
+struct KnownDevice: Codable, Identifiable {
+    let device_id: String
+    let device_name: String
+    let platform: String
+    let online: Bool
+    let last_seen: String?
+    let providers: [ProviderInfo]
+
+    var id: String { device_id }
+    var conversation: String { "device:\(device_id)" }
+    // 平台 → SF Symbol
+    var icon: String {
+        switch platform.lowercased() {
+        case "ios", "android": return "iphone"
+        case "macos": return "laptopcomputer"
+        case "windows", "linux": return "desktopcomputer"
+        default: return "display"
+        }
+    }
+}
+
 struct ProviderInfo: Codable {
     let provider: String
     let display_name: String

@@ -136,6 +136,20 @@ class HTTPService {
         return await requestAny(url)
     }
 
+    /// 所有已知设备（含离线），聊天页的联系人列表。
+    func fetchAllDevices() async -> [KnownDevice] {
+        guard let url = URL(string: "\(baseUrl)/devices/all") else { return [] }
+        return await request(url)
+    }
+
+    /// 把某台（离线的）设备从联系人列表移除。
+    @discardableResult
+    func forgetDevice(_ deviceId: String) async -> Bool {
+        let encoded = deviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? deviceId
+        guard let url = URL(string: "\(baseUrl)/devices/\(encoded)") else { return false }
+        return await sendJSON(url, method: "DELETE", body: nil)
+    }
+
     // MARK: - File Upload
     func uploadFile(name: String, data: Data) async throws -> UploadResponse {
         guard let url = URL(string: "\(baseUrl)/files/upload") else {

@@ -76,40 +76,158 @@ private func isImageUrl(_ url: String) -> Bool {
 }
 
 // MARK: - Chat View
+// MARK: - 联系人列表（微信式）：秘书 + 所有端（在线绿点 / 离线灰点），点进去是聊天详情。
 struct ChatView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var viewModel: ChatViewModel
+
+    var body: some View {
+        NavigationStack {
+            List {
+                ForEach(viewModel.contacts, id: \.self) { conv in
+                    NavigationLink(value: conv) {
+                        ContactRow(
+                            title: viewModel.convLabel(conv),
+                            subtitle: viewModel.previews[conv]?.text
+                                ?? (conv == ChatViewModel.mainConv ? L("chat.contact.secretaryDesc") : L("chat.contact.empty")),
+                            time: relativeTime(viewModel.previews[conv]?.at),
+                            device: viewModel.device(for: conv),
+                            unread: viewModel.unread.contains(conv)
+                        )
+                    }
+                }
+            }
+            .listStyle(.plain)
+            .navigationTitle(L("tab.chat"))
+            .navigationDestination(for: String.self) { conv in
+                ChatDetailView(viewModel: viewModel, conv: conv)
+            }
+            .refreshable { viewModel.loadDevices() }
+            .onAppear { viewModel.loadDevices() }
+        }
+    }
+}
+
+// 联系人行：头像（离线置灰）+ 在线小圆点 + 名称 + 最后一条消息 + 未读点。
+struct ContactRow: View {
+    let title: String
+    let subtitle: String
+    let time: String
+    let device: KnownDevice?
+    let unread: Bool
+
+    var body: some View {
+        HStack(spacing: 11) {
+            ZStack(alignment: .bottomTrailing) {
+                if let d = device {
+                    Image(systemName: d.icon)
+                        .font(.system(size: 20))
+                        .foregroundColor(d.online ? umbraColor(\.text) : .umbraMuted)
+                        .frame(width: 42, height: 42)
+                        .background(umbraColor(\.card))
+                        .clipShape(RoundedRectangle(cornerRadius: 11))
+                        .overlay(RoundedRectangle(cornerRadius: 11).stroke(umbraColor(\.border), lineWidth: 1))
+                        .opacity(d.online ? 1 : 0.55)
+                    Circle()
+                        .fill(d.online ? Color.green : Color.gray)
+                        .frame(width: 9, height: 9)
+                        .overlay(Circle().stroke(umbraColor(\.bg), lineWidth: 1.5))
+                        .offset(x: 2, y: 2)
+                } else {
+                    Text("U")
+                        .font(.system(size: 20, weight: .bold))
+                        .foregroundColor(.white)
+                        .frame(width: 42, height: 42)
+                        .background(Color.orange)
+                        .clipShape(RoundedRectangle(cornerRadius: 11))
+                }
+            }
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(title).font(.system(size: 15, weight: .medium)).lineLimit(1)
+                    Spacer()
+                    Text(time).font(.system(size: 11)).foregroundColor(.umbraMuted)
+                }
+                HStack(spacing: 6) {
+                    Text(subtitle)
+                        .font(.system(size: 12.5))
+                        .foregroundColor(.umbraMuted)
+                        .lineLimit(1)
+                    Spacer()
+                    if unread { Circle().fill(Color.orange).frame(width: 8, height: 8) }
+                }
+            }
+        }
+        .padding(.vertical, 4)
+    }
+}
+
+// 简短相对时间（联系人列表右上角）：今天→HH:mm，昨天→昨天，更早→M/d。
+// L() 是主线程隔离的，这里只在视图里调用，标 @MainActor。
+@MainActor
+func relativeTime(_ iso: String?) -> String {
+    guard let iso, let date = parseServerDate(iso) else { return "" }
+    let cal = Calendar.current
+    if cal.isDateInToday(date) {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm"
+        return f.string(from: date)
+    }
+    if cal.isDateInYesterday(date) { return L("time.yesterday") }
+    let f = DateFormatter()
+    f.dateFormat = "M/d"
+    return f.string(from: date)
+}
+
+// MARK: - 聊天详情（原聊天页；进入即隐藏 TabBar，右上角 ⓘ 进「详情」，清空聊天记录在详情里）
+struct ChatDetailView: View {
+    @EnvironmentObject var appState: AppState
+    @ObservedObject var viewModel: ChatViewModel
+    let conv: String
     @State private var scrollTarget: String?
     @State private var isScrolledToBottom: Bool = true
     @StateObject private var tts = TTSService.shared
     @StateObject private var speech = SpeechRecognizer()
     @FocusState private var inputFocused: Bool
-    @State private var showNewChatConfirm = false
+    @State private var showDetail = false
+
+    private var device: KnownDevice? { viewModel.device(for: conv) }
 
     var body: some View {
         VStack(spacing: 0) {
-            // Header
-            chatHeader
-
-            // Conversation switcher (与秘书 + 各设备只读)
-            if viewModel.conversationOrder.count > 1 {
-                conversationBar
-            }
+            if let d = device, !d.online { offlineBanner }
 
             // Messages
             messageList
 
-            if viewModel.isReadonly(viewModel.activeConv) {
-                readonlyBanner
-            } else {
-                // Quick chips
-                quickChips
+            // Quick chips
+            quickChips
 
-                // Input bar
-                inputBar
-            }
+            // Input bar
+            inputBar
         }
         .background(umbraColor(\.bg))
+        .navigationTitle(viewModel.convLabel(conv))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar(.hidden, for: .tabBar)  // 进入会话隐藏底部 Tab 栏（微信式）
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button { showDetail = true } label: { Image(systemName: "info.circle") }
+            }
+        }
+        .onAppear { viewModel.switchConversation(conv) }
+        .sheet(isPresented: $showDetail) {
+            ContactDetailView(
+                title: viewModel.convLabel(conv),
+                device: device,
+                onClear: { viewModel.clearActiveHistory() },
+                onForget: {
+                    if let d = device { viewModel.forgetDevice(d.device_id) }
+                    showDetail = false
+                }
+            )
+        }
         .sheet(isPresented: $viewModel.showAttachSheet) {
             AttachSheet { action in
                 viewModel.showAttachSheet = false
@@ -123,6 +241,19 @@ struct ChatView: View {
         }
     }
 
+    // 设备离线提示条
+    private var offlineBanner: some View {
+        HStack(spacing: 7) {
+            Image(systemName: "exclamationmark.circle").font(.system(size: 12))
+            Text(L("chat.device.offlineHint")).font(.system(size: 12))
+            Spacer()
+        }
+        .foregroundColor(.umbraMuted)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(umbraColor(\.bar))
+    }
+
     private func handleAttach(_ action: AttachSheet.Action) {
         // 目前仅关闭弹窗；具体的相册/拍照/文件选择接入后端上传后再实现。
         switch action {
@@ -134,115 +265,6 @@ struct ChatView: View {
         default:
             break
         }
-    }
-
-    // MARK: - Header
-    private var chatHeader: some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text("U")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                        .frame(width: 20, height: 20)
-                        .background(Color.orange)
-                        .clipShape(RoundedRectangle(cornerRadius: 6))
-                    Text("Umbra")
-                        .font(.system(size: 15, weight: .semibold))
-                }
-                HStack(spacing: 5) {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 6, height: 6)
-                    Text(L("chat.connected"))
-                        .font(.system(size: 11))
-                        .foregroundColor(.umbraMuted)
-                }
-            }
-
-            Spacer()
-
-            Button {
-                showNewChatConfirm = true
-            } label: {
-                Image(systemName: "trash")
-                    .frame(width: 34, height: 34)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 6)
-        .padding(.bottom, 12)
-        .background(umbraColor(\.card))
-        .overlay(
-            Rectangle()
-                .frame(height: 1)
-                .foregroundColor(umbraColor(\.border)),
-            alignment: .bottom
-        )
-        .confirmationDialog(L("chat.clear.confirm"), isPresented: $showNewChatConfirm, titleVisibility: .visible) {
-            Button(L("chat.clear.title"), role: .destructive) { viewModel.clearActiveHistory() }
-            Button(L("common.cancel"), role: .cancel) { }
-        }
-    }
-
-    // MARK: - Conversation switcher
-    private var conversationBar: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                ForEach(viewModel.conversationOrder, id: \.self) { conv in
-                    let on = conv == viewModel.activeConv
-                    let readonly = viewModel.isReadonly(conv)
-                    Button {
-                        viewModel.switchConversation(conv)
-                    } label: {
-                        HStack(spacing: 5) {
-                            if readonly {
-                                Image(systemName: "lock.fill").font(.system(size: 9))
-                            }
-                            Text(viewModel.convLabel(conv))
-                                .font(.system(size: 12.5, weight: on ? .semibold : .regular))
-                            if viewModel.unread.contains(conv) && !on {
-                                Circle().fill(Color.orange).frame(width: 6, height: 6)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 6)
-                        .background(on ? Color.orange.opacity(0.14) : umbraColor(\.card))
-                        .foregroundColor(on ? .orangeText : umbraColor(\.text))
-                        .clipShape(Capsule())
-                        .overlay(
-                            Capsule().stroke(on ? Color.orange : umbraColor(\.border), lineWidth: 1)
-                        )
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 9)
-        }
-        .background(umbraColor(\.card))
-        .overlay(
-            Rectangle().frame(height: 1).foregroundColor(umbraColor(\.border)),
-            alignment: .bottom
-        )
-    }
-
-    // MARK: - Read-only banner（设备会话默认只读）
-    private var readonlyBanner: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "lock.fill").font(.system(size: 12))
-            Text(L("chat.conv.readonly"))
-                .font(.system(size: 12))
-            Spacer()
-        }
-        .foregroundColor(.umbraMuted)
-        .padding(.horizontal, 16)
-        .padding(.vertical, 13)
-        .background(umbraColor(\.bar))
-        .overlay(
-            Rectangle().frame(height: 1).foregroundColor(umbraColor(\.border)).offset(y: -1),
-            alignment: .top
-        )
     }
 
     // MARK: - Messages
@@ -270,6 +292,17 @@ struct ChatView: View {
                     withAnimation(.easeOut(duration: 0.2)) {
                         proxy.scrollTo("bottom", anchor: .bottom)
                     }
+                }
+            }
+            // 进入会话：直接落在最新一条（不动画）。首屏历史是异步拉的，
+            // 布局完成后再滚一次，避免停在顶部。
+            .onAppear {
+                proxy.scrollTo("bottom", anchor: .bottom)
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    proxy.scrollTo("bottom", anchor: .bottom)
+                }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
+                    if viewModel.stickToBottom { proxy.scrollTo("bottom", anchor: .bottom) }
                 }
             }
         }
@@ -900,7 +933,7 @@ struct BlinkModifier: ViewModifier {
 }
 
 // MARK: - Assistant Text Content (with image support)
-extension ChatView {
+extension ChatDetailView {
     @ViewBuilder
     private func assistantTextContent(_ text: String) -> some View {
         let imageUrls = extractUrls(from: text).filter { isImageUrl($0) }
@@ -1307,5 +1340,135 @@ struct ArrowShape: Shape {
         p.move(to: to); p.addLine(to: left)
         p.move(to: to); p.addLine(to: right)
         return p
+    }
+}
+
+
+// MARK: - 联系人详情（聊天详情右上角 ⓘ）
+// 秘书：简介 + 清空聊天记录；设备：在线状态 / 平台 / 设备 ID / 能力目录（程序 → 技能）+ 清空 + 移除。
+struct ContactDetailView: View {
+    let title: String
+    let device: KnownDevice?
+    var onClear: () -> Void
+    var onForget: () -> Void
+    @Environment(\.dismiss) private var dismiss
+    @State private var showClearConfirm = false
+    @State private var showForgetConfirm = false
+
+    var body: some View {
+        NavigationStack {
+            List {
+                Section {
+                    VStack(spacing: 8) {
+                        if let d = device {
+                            Image(systemName: d.icon)
+                                .font(.system(size: 34))
+                                .foregroundColor(d.online ? umbraColor(\.text) : .umbraMuted)
+                                .frame(width: 68, height: 68)
+                                .background(umbraColor(\.card))
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                                .opacity(d.online ? 1 : 0.6)
+                        } else {
+                            Text("U")
+                                .font(.system(size: 30, weight: .bold))
+                                .foregroundColor(.white)
+                                .frame(width: 68, height: 68)
+                                .background(Color.orange)
+                                .clipShape(RoundedRectangle(cornerRadius: 16))
+                        }
+                        Text(title).font(.system(size: 17, weight: .semibold))
+                        if let d = device {
+                            HStack(spacing: 5) {
+                                Circle().fill(d.online ? Color.green : Color.gray).frame(width: 7, height: 7)
+                                Text(d.online
+                                     ? L("chat.device.online")
+                                     : (d.last_seen.flatMap { L("chat.device.lastSeen", relativeTime($0)) } ?? L("chat.device.offline")))
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.umbraMuted)
+                            }
+                        } else {
+                            Text(L("chat.contact.secretaryDesc"))
+                                .font(.system(size: 12))
+                                .foregroundColor(.umbraMuted)
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 8)
+                    .listRowBackground(Color.clear)
+                }
+
+                if let d = device {
+                    Section {
+                        LabeledContent(L("chat.device.platform"), value: d.platform)
+                        LabeledContent(L("chat.device.id")) {
+                            Text(d.device_id)
+                                .font(.system(size: 11, design: .monospaced))
+                                .foregroundColor(.umbraMuted)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
+
+                    Section(L("chat.device.capabilities")) {
+                        if d.providers.isEmpty {
+                            Text(L("chat.device.noCapabilities"))
+                                .font(.system(size: 13))
+                                .foregroundColor(.umbraMuted)
+                        } else {
+                            ForEach(d.providers, id: \.provider) { p in
+                                VStack(alignment: .leading, spacing: 6) {
+                                    HStack(spacing: 6) {
+                                        Circle().fill(p.available ? Color.green : Color.gray).frame(width: 6, height: 6)
+                                        Text(p.display_name).font(.system(size: 14, weight: .semibold))
+                                        if let v = p.version {
+                                            Text("v\(v)").font(.system(size: 11)).foregroundColor(.umbraMuted)
+                                        }
+                                    }
+                                    if !p.available && !p.unavailable_reason.isEmpty {
+                                        Text(p.unavailable_reason).font(.system(size: 11)).foregroundColor(.umbraMuted)
+                                    }
+                                    ForEach(p.skills, id: \.name) { s in
+                                        HStack(alignment: .top, spacing: 5) {
+                                            Text(s.name).font(.system(size: 11.5, design: .monospaced))
+                                            if !s.description.isEmpty {
+                                                Text("· \(s.description)")
+                                                    .font(.system(size: 11.5))
+                                                    .foregroundColor(.umbraMuted)
+                                            }
+                                        }
+                                    }
+                                }
+                                .padding(.vertical, 3)
+                            }
+                        }
+                    }
+                }
+
+                Section {
+                    Button(role: .destructive) { showClearConfirm = true } label: {
+                        Text(L("chat.clear.title"))
+                    }
+                    if let d = device, !d.online {
+                        Button(role: .destructive) { showForgetConfirm = true } label: {
+                            Text(L("chat.device.forget"))
+                        }
+                    }
+                }
+            }
+            .navigationTitle(L("chat.contact.detail"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(L("common.done")) { dismiss() }
+                }
+            }
+            .confirmationDialog(L("chat.clear.confirm"), isPresented: $showClearConfirm, titleVisibility: .visible) {
+                Button(L("chat.clear.title"), role: .destructive) { onClear(); dismiss() }
+                Button(L("common.cancel"), role: .cancel) { }
+            }
+            .confirmationDialog(L("chat.device.forgetConfirm"), isPresented: $showForgetConfirm, titleVisibility: .visible) {
+                Button(L("chat.device.forget"), role: .destructive) { onForget() }
+                Button(L("common.cancel"), role: .cancel) { }
+            }
+        }
     }
 }

@@ -2,10 +2,11 @@ import Foundation
 
 // MARK: - Chat ViewModel
 //
-// 多会话（与 PC / Web 端一致）：
-//   - "assistant"   = 你↔秘书主会话（可发送）
-//   - "device:<id>" = 服务端↔某设备的编排流（默认只读，设置里可开启发送）
-//   每个会话各自维护 blocks/分页/未读；服务端推送按 msg.conversation 路由。
+// 联系人式多会话（与 PC 端一致）：
+//   - "assistant"   = 你↔秘书主会话
+//   - "device:<id>" = 与某台设备的会话：可直接发消息，服务端会把「目标设备=这台」注入上下文，
+//                     端侧任务直接派给它；这台设备的编排流也落在同一个会话里。
+//   每个会话各自维护 blocks/分页/未读；服务端给所有推送打了 conversation 标签，据此路由。
 @MainActor
 class ChatViewModel: ObservableObject {
     static let mainConv = "assistant"
@@ -16,6 +17,14 @@ class ChatViewModel: ObservableObject {
     @Published var activeConv: String = ChatViewModel.mainConv
     @Published var conversationOrder: [String] = [ChatViewModel.mainConv]
     @Published var unread: Set<String> = []
+    // 联系人列表：所有已知设备（含离线）+ 各会话的最后一条消息预览
+    @Published var devices: [KnownDevice] = []
+    @Published var previews: [String: ConvPreview] = [:]
+
+    struct ConvPreview: Equatable {
+        var text: String = ""
+        var at: String? = nil
+    }
 
     @Published var draft: String = ""
     @Published var isThinking: Bool = false
@@ -26,6 +35,9 @@ class ChatViewModel: ObservableObject {
     @Published var confirmPending: ConfirmRequest?
 
     let ws = ChatWebSocket()
+
+    // 正在等回复的会话（流式 token / reply 归属它；服务端也会给事件打 conversation 标签，这里是兜底）。
+    private var pendingConv: String = ChatViewModel.mainConv
 
     // 回复超时兜底：发出后一段时间没有任何回复/流式内容，就把「思考中」气泡收尾为错误，
     // 避免连接中途断开时界面永远 loading。
@@ -39,7 +51,8 @@ class ChatViewModel: ObservableObject {
         }
     }
     private func failPendingTurn() {
-        let s = mainStore
+        let conv = pendingConv
+        let s = store(conv)
         guard let idx = s.assistantIdx, idx < s.blocks.count else { return }
         if case .assistant(var a) = s.blocks[idx] {
             a.thinking = false
@@ -48,7 +61,7 @@ class ChatViewModel: ObservableObject {
         }
         s.assistantIdx = nil
         s.blocks.append(.error(id: UUID(), text: L("chat.status.timeout")))
-        reflect(ChatViewModel.mainConv)
+        reflect(conv)
     }
 
     // 每个会话的独立状态
@@ -67,18 +80,47 @@ class ChatViewModel: ObservableObject {
     var shouldScrollToBottom: Bool { stickToBottom }
     func setStickToBottom(_ value: Bool) { stickToBottom = value }
 
-    func isReadonly(_ conv: String) -> Bool {
-        conv != ChatViewModel.mainConv && !NetworkConfig.shared.allowDeviceSend
-    }
-
     func convLabel(_ conv: String) -> String {
         if conv == ChatViewModel.mainConv { return L("chat.conv.secretary") }
-        if conv.hasPrefix("device:") { return String(conv.dropFirst("device:".count)).uppercased() }
+        if let d = device(for: conv) { return d.device_name }
+        if conv.hasPrefix("device:") { return String(conv.dropFirst("device:".count)) }
         return conv
+    }
+
+    func device(for conv: String) -> KnownDevice? {
+        guard conv.hasPrefix("device:") else { return nil }
+        let id = String(conv.dropFirst("device:".count))
+        return devices.first { $0.device_id == id }
+    }
+
+    /// 联系人顺序：秘书恒在首位 → 在线设备 → 离线设备（服务端已排好序）。
+    var contacts: [String] {
+        [ChatViewModel.mainConv] + devices.map(\.conversation)
     }
 
     init() {
         setupWebSocket()
+    }
+
+    // MARK: - Devices（联系人列表）
+    func loadDevices() {
+        Task {
+            let list = await HTTPService.shared.fetchAllDevices()
+            await MainActor.run { self.devices = list }
+        }
+    }
+
+    func forgetDevice(_ deviceId: String) {
+        Task {
+            if await HTTPService.shared.forgetDevice(deviceId) {
+                await MainActor.run { self.devices.removeAll { $0.device_id == deviceId } }
+            }
+        }
+    }
+
+    private func setPreview(_ conv: String, _ text: String, _ at: String?) {
+        guard !text.isEmpty else { return }
+        previews[conv] = ConvPreview(text: text, at: at)
     }
 
     // MARK: - Store helpers
@@ -106,7 +148,7 @@ class ChatViewModel: ObservableObject {
         ws.onStatusChange = { [weak self] status in
             // 连接掉线且此时有「思考中」的回合在等 → 立即收尾为错误，不用干等超时。
             guard let self else { return }
-            if status == .offline, self.mainStore.assistantIdx != nil {
+            if status == .offline, self.store(self.pendingConv).assistantIdx != nil {
                 self.replyTimeout?.cancel()
                 self.failPendingTurn()
             }
@@ -114,6 +156,7 @@ class ChatViewModel: ObservableObject {
         ws.connect()
         loadHistory()
         loadConversationsList()
+        loadDevices()
     }
 
     func loadHistory() {
@@ -160,8 +203,9 @@ class ChatViewModel: ObservableObject {
         Task {
             let rows = await HTTPService.shared.fetchConversations()
             await MainActor.run {
-                for r in rows where r.conversation != ChatViewModel.mainConv {
+                for r in rows {
                     _ = self.store(r.conversation)
+                    self.setPreview(r.conversation, r.last_content, r.last_at)
                 }
             }
         }
@@ -197,7 +241,6 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - Conversation switching
     func switchConversation(_ conv: String) {
-        guard conv != activeConv else { return }
         activeConv = conv
         unread.remove(conv)
         stickToBottom = true
@@ -207,20 +250,22 @@ class ChatViewModel: ObservableObject {
     }
 
     // MARK: - Send
+    // 发到**当前会话**：主会话=直接跟秘书说；设备会话=对着这台设备说（秘书按「目标设备=这台」执行）。
     func send() {
         let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
         draft = ""
         stickToBottom = true
-        // 发送始终由秘书处理 → 落主会话；若当前在设备会话，切回主会话。
-        if activeConv != ChatViewModel.mainConv { switchConversation(ChatViewModel.mainConv) }
-        let s = mainStore
+        let conv = activeConv
+        let s = store(conv)
         let now = ISO8601DateFormatter().string(from: Date())
         s.blocks.append(.user(id: UUID(), text: text, ts: now))
         s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: true, streaming: true, text: "", trace: [], traceOpen: true, ts: now)))
         s.assistantIdx = s.blocks.count - 1
-        reflect(ChatViewModel.mainConv)
-        ws.sendMessage(text)
+        setPreview(conv, text, now)
+        reflect(conv)
+        ws.sendMessage(text, conversation: conv)
+        pendingConv = conv
         armReplyTimeout()
     }
 
@@ -234,6 +279,7 @@ class ChatViewModel: ObservableObject {
         s.oldestId = nil
         s.hasMoreHistory = false
         s.loaded = true
+        previews[conv] = nil
         reflect(conv)
         Task { await HTTPService.shared.clearHistory(conversation: conv) }
     }
@@ -324,13 +370,15 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - Message Handler
     private func handleMessage(_ msg: ChatMessage) {
+        // 流式一类事件归属「服务端标注的会话」，缺省回落到正在等回复的会话。
+        let streamConv = msg.conversation ?? pendingConv
         switch msg.type {
         case "delta":
-            if var a = currentAssistant { a.text += msg.deltaText ?? ""; a.thinking = false; updateAssistant(a) }
+            if var a = currentAssistant(streamConv) { a.text += msg.deltaText ?? ""; a.thinking = false; updateAssistant(a, streamConv) }
             armReplyTimeout()  // 有流式内容 → 重置超时（避免长回复被误判超时）
 
         case "tool_call":
-            if var a = currentAssistant {
+            if var a = currentAssistant(streamConv) {
                 if !a.text.trimmingCharacters(in: .whitespaces).isEmpty {
                     a.trace.append("💭 " + a.text.trimmingCharacters(in: .whitespaces))
                     a.text = ""
@@ -338,21 +386,25 @@ class ChatViewModel: ObservableObject {
                 var argsStr = ""
                 if let args = msg.toolArgs { argsStr = String(String(describing: args).prefix(120)) }
                 a.trace.append("🔧 \(msg.toolName ?? "unknown")(\(argsStr))")
-                updateAssistant(a)
+                updateAssistant(a, streamConv)
             }
 
         case "tool_result":
-            if var a = currentAssistant {
+            if var a = currentAssistant(streamConv) {
                 let preview = msg.toolResultPreview ?? ""
                 let truncated = preview.count > 160 ? preview.prefix(160) + "…" : preview
                 a.trace.append("↳ \(msg.toolName ?? "unknown") → \(truncated)")
-                updateAssistant(a)
+                updateAssistant(a, streamConv)
             }
 
         case "reply":
             replyTimeout?.cancel()
-            if var a = currentAssistant { a.text = msg.text ?? a.text; a.thinking = false; a.streaming = false; updateAssistant(a) }
-            mainStore.assistantIdx = nil
+            if var a = currentAssistant(streamConv) { a.text = msg.text ?? a.text; a.thinking = false; a.streaming = false; updateAssistant(a, streamConv) }
+            store(streamConv).assistantIdx = nil
+            setPreview(streamConv, msg.text ?? "", ISO8601DateFormatter().string(from: Date()))
+
+        case "device_presence":
+            loadDevices()  // 设备上下线 → 刷新联系人列表（在线状态 / 能力目录）
 
         case "inspiration_saved", "inspiration_updated", "inspiration_deleted":
             // 灵感变更（可能来自任意端）→ 通知灵感页刷新。
@@ -370,16 +422,18 @@ class ChatViewModel: ObservableObject {
             } else {
                 s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: false, streaming: false, text: msg.chatText ?? "", trace: [], traceOpen: false, ts: ts)))
             }
+            setPreview(conv, msg.chatText ?? "", ts)
             reflect(conv)
 
         case "confirm_request":
             if let taskId = msg.taskId {
-                let s = mainStore
+                let conv = msg.conversation ?? ChatViewModel.mainConv
+                let s = store(conv)
                 let exists = s.blocks.contains { if case .confirm(let c) = $0 { return c.taskId == taskId } else { return false } }
                 if !exists {
                     s.blocks.append(.confirm(ChatBlock.ConfirmBlock(taskId: taskId, summary: msg.confirmSummary ?? L("chat.status.confirmRequired"), resolved: nil)))
                     confirmPending = ConfirmRequest(taskId: taskId, summary: msg.confirmSummary ?? "")
-                    reflect(ChatViewModel.mainConv)
+                    reflect(conv)
                 }
                 _ = autoApproveIfEnabled(taskId)
             }
@@ -402,41 +456,44 @@ class ChatViewModel: ObservableObject {
             resolveConfirm(taskId: msg.taskId ?? "", approved: msg.confirmApproved ?? false)
 
         case "chat_message":
+            // 其它端发出的消息（跨端同步），落到它所属的会话。
+            let conv = msg.conversation ?? ChatViewModel.mainConv
             let ts = msg.created_at ?? ISO8601DateFormatter().string(from: Date())
-            let s = mainStore
+            let s = store(conv)
             if msg.chatRole == "user" {
                 s.blocks.append(.user(id: UUID(), text: msg.chatText ?? "", ts: ts))
             } else if msg.chatRole == "assistant" {
                 s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: false, streaming: false, text: msg.chatText ?? "", trace: [], traceOpen: false, ts: ts)))
             }
-            reflect(ChatViewModel.mainConv)
+            setPreview(conv, msg.chatText ?? "", ts)
+            reflect(conv)
 
         case "error":
             replyTimeout?.cancel()
-            let s = mainStore
+            let s = store(streamConv)
             if s.assistantIdx != nil {
-                if var a = currentAssistant { a.thinking = false; a.streaming = false; updateAssistant(a) }
+                if var a = currentAssistant(streamConv) { a.thinking = false; a.streaming = false; updateAssistant(a, streamConv) }
                 s.assistantIdx = nil
             }
             s.blocks.append(.error(id: UUID(), text: msg.errorMessage ?? L("chat.status.error")))
-            reflect(ChatViewModel.mainConv)
+            reflect(streamConv)
 
         default: break
         }
     }
 
-    // 流式回合始终属于主会话
-    private var currentAssistant: ChatBlock.AssistantBlock? {
-        let s = mainStore
+    // 某会话正在流式输出的助手气泡
+    private func currentAssistant(_ conv: String) -> ChatBlock.AssistantBlock? {
+        let s = store(conv)
         guard let idx = s.assistantIdx, idx < s.blocks.count, case .assistant(let a) = s.blocks[idx] else { return nil }
         return a
     }
 
-    private func updateAssistant(_ a: ChatBlock.AssistantBlock) {
-        let s = mainStore
+    private func updateAssistant(_ a: ChatBlock.AssistantBlock, _ conv: String) {
+        let s = store(conv)
         guard let idx = s.assistantIdx, idx < s.blocks.count else { return }
         s.blocks[idx] = .assistant(a)
-        reflect(ChatViewModel.mainConv)
+        reflect(conv)
     }
 
     private func handleJobUpdate(_ msg: ChatMessage) {
@@ -474,6 +531,7 @@ class ChatViewModel: ObservableObject {
             s.jobMap[id] = s.blocks.count
             s.blocks.append(block)
         }
+        setPreview(conv, msg.jobMessage ?? msg.jobGoal ?? "", ISO8601DateFormatter().string(from: Date()))
         reflect(conv)
     }
 

@@ -1,2268 +1,2377 @@
 {
-  "sourceLanguage" : "zh-Hans",
-  "strings" : {
-    "" : {
-
-    },
-    "%@ %@" : {
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$@ %2$@"
+  "sourceLanguage": "zh-Hans",
+  "strings": {
+    "": {},
+    "%@ %@": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "new",
+            "value": "%1$@ %2$@"
           }
         }
       }
-    },
-    "%lld" : {
-
-    },
-    "%lld 条记录 · 已 AES-256-GCM 加密" : {
-
-    },
-    "%lld%%" : {
-
-    },
-    "▎" : {
-
-    },
-    "☆" : {
-
-    },
-    "✓" : {
-
-    },
-    "✕" : {
-
-    },
-    "⭐" : {
-
-    },
-    "🎲" : {
-
-    },
-    "👁" : {
-
-    },
-    "📄" : {
-
-    },
-    "📋" : {
-
-    },
-    "🔍" : {
-
-    },
-    "🔐" : {
-
-    },
-    "🔐  密码保险箱" : {
-
-    },
-    "🔐 已启用两步验证 (2FA)" : {
-
-    },
-    "🔒" : {
-
-    },
-    "🖼️" : {
-
-    },
-    "🗑 删除记录" : {
-
-    },
-    "🗒️" : {
-
-    },
-    "🙈" : {
-
-    },
-    "AES-256-GCM 本地加密 · 云端只存密文" : {
-
     },
-    "chat.attach.add" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Add"
+    "%lld": {},
+    "%lld 条记录 · 已 AES-256-GCM 加密": {},
+    "%lld%%": {},
+    "AES-256-GCM 本地加密 · 云端只存密文": {},
+    "Secret Key（U1-…）": {},
+    "U": {},
+    "chat.attach.add": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Add"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "添加"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加"
           }
         }
       }
     },
-    "chat.attach.album" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Photo Library"
+    "chat.attach.album": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Photo Library"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "相册"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "相册"
           }
         }
       }
     },
-    "chat.attach.camera" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Camera"
+    "chat.attach.camera": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Camera"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拍照"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拍照"
           }
         }
       }
     },
-    "chat.attach.file" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "File"
+    "chat.attach.file": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "File"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "文件"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件"
           }
         }
       }
     },
-    "chat.attach.voice" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Voice input"
+    "chat.attach.voice": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Voice input"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "语音输入"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音输入"
           }
         }
       }
     },
-    "chat.chip.computer" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Operate computer"
+    "chat.chip.computer": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Operate computer"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "操作电脑"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "操作电脑"
           }
         }
       }
     },
-    "chat.chip.draft.computer" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Help me operate the computer"
+    "chat.chip.draft.computer": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help me operate the computer"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帮我操作一下电脑"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帮我操作一下电脑"
           }
         }
       }
     },
-    "chat.chip.draft.image" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please identify this image and describe its content"
+    "chat.chip.draft.image": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Please identify this image and describe its content"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请识别这张图片并描述内容"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请识别这张图片并描述内容"
           }
         }
       }
     },
-    "chat.chip.draft.summary" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Help me summarize the key points of this document"
+    "chat.chip.draft.summary": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Help me summarize the key points of this document"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帮我总结这份文档的要点"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帮我总结这份文档的要点"
           }
         }
       }
     },
-    "chat.chip.image" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Identify image"
+    "chat.chip.image": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Identify image"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "识别图片"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "识别图片"
           }
         }
       }
     },
-    "chat.chip.summary" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Summarize doc"
+    "chat.chip.summary": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summarize doc"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "总结文档"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "总结文档"
           }
         }
       }
     },
-    "chat.clear.confirm" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clear this conversation's history? This cannot be undone."
+    "chat.clear.confirm": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear this conversation's history? This cannot be undone."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "确认清空当前会话的聊天记录？此操作不可撤销。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确认清空当前会话的聊天记录？此操作不可撤销。"
           }
         }
       }
     },
-    "chat.clear.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Clear chat"
+    "chat.clear.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Clear chat"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "清空聊天"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清空聊天"
           }
         }
       }
     },
-    "chat.confirm.approve" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Approve"
+    "chat.confirm.approve": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approve"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "批准执行"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批准执行"
           }
         }
       }
     },
-    "chat.confirm.approveAlways" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Always allow"
+    "chat.confirm.approveAlways": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Always allow"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "总是允许"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "总是允许"
           }
         }
       }
     },
-    "chat.confirm.deny" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deny"
+    "chat.confirm.deny": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deny"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拒绝"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拒绝"
           }
         }
       }
     },
-    "chat.confirm.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Confirm before execution"
+    "chat.confirm.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirm before execution"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "执行前确认"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "执行前确认"
           }
         }
       }
     },
-    "chat.connected" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connected · This device can execute"
+    "chat.connected": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connected · This device can execute"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已连接 · 此设备可执行"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接 · 此设备可执行"
           }
         }
       }
     },
-    "chat.conv.readonly" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Read-only: the server's conversation with this device. Enable sending in Me."
+    "chat.contact.detail": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Details"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "只读：服务端与该设备的对话。可在“我的”里开启发送。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "详情"
           }
         }
       }
     },
-    "chat.conv.secretary" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Secretary"
+    "chat.contact.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No messages yet"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "秘书"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有对话"
           }
         }
       }
     },
-    "chat.copy" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Copy"
+    "chat.contact.secretaryDesc": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Your AI secretary"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "复制"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你的 AI 秘书"
           }
         }
       }
     },
-    "chat.done" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🎉 Task completed: %@"
+    "chat.conv.secretary": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secretary"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "🎉 任务完成：%@"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "秘书"
           }
         }
       }
     },
-    "chat.empty.subtitle" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Send messages, attach files, or let me help on this device"
+    "chat.copy": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Copy"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "发消息、加附件，或让我在这台电脑上帮你做点事"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制"
           }
         }
       }
     },
-    "chat.empty.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start chatting with Umbra"
+    "chat.device.capabilities": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Capabilities"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开始和 Umbra 聊天"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "能力"
           }
         }
       }
     },
-    "chat.image.loadFailed" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Failed to load image"
+    "chat.device.forget": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove from contacts"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "图片加载失败"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从联系人列表移除"
           }
         }
       }
     },
-    "chat.input.done" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
+    "chat.device.forgetConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Remove this device from contacts? It will reappear next time it comes online; chat history is kept."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "完成"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "把这台设备从联系人列表移除？它下次上线会重新出现，聊天记录不会删除。"
           }
         }
       }
     },
-    "chat.input.placeholder" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Message…"
+    "chat.device.id": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Device ID"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "发消息…"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "设备 ID"
           }
         }
       }
     },
-    "chat.newSession.confirm" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Start a new chat? Current conversation will be cleared."
+    "chat.device.lastSeen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Last seen %@"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开启新对话？当前对话会被清空。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最后在线 %@"
           }
         }
       }
     },
-    "chat.newSession.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New Chat"
+    "chat.device.noCapabilities": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device hasn't reported any capabilities"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开启新对话"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台设备还没上报任何能力"
           }
         }
       }
     },
-    "chat.status.approved" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Approved, executing…"
+    "chat.device.offline": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Offline"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已批准，执行中…"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "离线"
           }
         }
       }
     },
-    "chat.status.confirmRequired" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Confirmation required before execution"
+    "chat.device.offlineHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "This device is offline; on-device tasks can't run"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要执行前确认"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这台设备当前离线，端侧任务无法执行"
           }
         }
       }
     },
-    "chat.status.denied" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Denied"
+    "chat.device.online": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Online"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已拒绝"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在线"
           }
         }
       }
     },
-    "chat.status.error" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Something went wrong"
+    "chat.device.platform": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platform"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "出错了"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "平台"
           }
         }
       }
     },
-    "chat.status.task" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Task"
+    "chat.done": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🎉 Task completed: %@"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "任务"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "🎉 任务完成：%@"
           }
         }
       }
     },
-    "chat.status.timeout" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connection interrupted or timed out. Please resend."
+    "chat.empty.subtitle": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send messages, attach files, or let me help on this device"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "连接中断或响应超时，请重新发送。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发消息、加附件，或让我在这台电脑上帮你做点事"
           }
         }
       }
     },
-    "chat.suggestion.screenshot" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Screenshot & explain"
+    "chat.empty.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start chatting with Umbra"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "截屏并说明"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开始和 Umbra 聊天"
           }
         }
       }
     },
-    "chat.suggestion.summary" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Summarize a document"
+    "chat.image.loadFailed": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to load image"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "总结一份文档"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "图片加载失败"
           }
         }
       }
     },
-    "chat.suggestion.tool" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Write a small tool"
+    "chat.input.done": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "写个小工具"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
           }
         }
       }
     },
-    "chat.toolTrace" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tool trace · %lld steps"
+    "chat.input.placeholder": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Message…"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "工具轨迹 · %lld 步"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发消息…"
           }
         }
       }
     },
-    "chat.tts.reading" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reading"
+    "chat.newSession.confirm": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Start a new chat? Current conversation will be cleared."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "朗读中"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启新对话？当前对话会被清空。"
           }
         }
       }
     },
-    "chat.tts.readReply" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Read reply"
+    "chat.newSession.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New Chat"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "朗读回复"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启新对话"
           }
         }
       }
     },
-    "common.cancel" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancel"
+    "chat.status.approved": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Approved, executing…"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "取消"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已批准，执行中…"
           }
         }
       }
     },
-    "common.close" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Close"
+    "chat.status.confirmRequired": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Confirmation required before execution"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关闭"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "需要执行前确认"
           }
         }
       }
     },
-    "common.save" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save"
+    "chat.status.denied": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Denied"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已拒绝"
           }
         }
       }
     },
-    "date.fullDateTime" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "yyyy MMM d HH:mm"
+    "chat.status.error": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Something went wrong"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "yyyy年M月d日 HH:mm"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "出错了"
           }
         }
       }
     },
-    "date.monthDayTime" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MMM d HH:mm"
+    "chat.status.task": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Task"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "M月d日 HH:mm"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任务"
           }
         }
       }
     },
-    "date.yesterday" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Yesterday %@"
+    "chat.status.timeout": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection interrupted or timed out. Please resend."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "昨天 %@"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接中断或响应超时，请重新发送。"
           }
         }
       }
     },
-    "https://..." : {
-
-    },
-    "insp.add" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "New idea"
+    "chat.suggestion.screenshot": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshot & explain"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "记灵感"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截屏并说明"
           }
         }
       }
     },
-    "insp.archive" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Archive"
+    "chat.suggestion.summary": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Summarize a document"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "归档"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "总结一份文档"
           }
         }
       }
     },
-    "insp.delete" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Delete"
+    "chat.suggestion.tool": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Write a small tool"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "删除"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "写个小工具"
           }
         }
       }
     },
-    "insp.edit" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit"
+    "chat.toolTrace": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tool trace · %lld steps"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工具轨迹 · %lld 步"
           }
         }
       }
     },
-    "insp.empty" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No ideas yet. Send \"save an idea: …\" from any client, or tap + to add one."
+    "chat.tts.readReply": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Read reply"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "还没有灵感。任意端发一条「记个灵感：…」，或点右上角＋手动添加。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "朗读回复"
           }
         }
       }
     },
-    "insp.filterAll" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "All"
+    "chat.tts.reading": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reading"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "全部"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "朗读中"
           }
         }
       }
     },
-    "insp.markDone" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mark done"
+    "common.cancel": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancel"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "标记已实现"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
           }
         }
       }
     },
-    "insp.markOpen" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Reopen"
+    "common.close": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Close"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "恢复待办"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关闭"
           }
         }
       }
     },
-    "insp.notePh" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Note (optional)"
+    "common.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "补充/澄清（可选）"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
           }
         }
       }
     },
-    "insp.rawLabel" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Original idea"
+    "common.save": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "原始灵感"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
           }
         }
       }
     },
-    "insp.save" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Save"
+    "date.fullDateTime": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yyyy MMM d HH:mm"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "保存"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "yyyy年M月d日 HH:mm"
           }
         }
       }
     },
-    "insp.statusArchived" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Archived"
+    "date.monthDayTime": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MMM d HH:mm"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "归档"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "M月d日 HH:mm"
           }
         }
       }
     },
-    "insp.statusDone" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
+    "date.yesterday": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yesterday %@"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已实现"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "昨天 %@"
           }
         }
       }
     },
-    "insp.statusOpen" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Open"
+    "https://...": {},
+    "insp.add": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "New idea"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "待办"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "记灵感"
           }
         }
       }
     },
-    "insp.tagsPh" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tags, comma-separated"
+    "insp.archive": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archive"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "标签，逗号分隔（如 产品, 效率）"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档"
           }
         }
       }
     },
-    "insp.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ideas"
+    "insp.delete": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Delete"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "灵感"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除"
           }
         }
       }
     },
-    "insp.titlePh" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Title (optional)"
+    "insp.edit": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "标题（可留空，秘书会补）"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑"
           }
         }
       }
     },
-    "me.about" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "About"
+    "insp.empty": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No ideas yet. Send \"save an idea: …\" from any client, or tap + to add one."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关于"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "还没有灵感。任意端发一条「记个灵感：…」，或点右上角＋手动添加。"
           }
         }
       }
     },
-    "me.accessibility" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Accessibility"
+    "insp.filterAll": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "All"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "辅助功能"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全部"
           }
         }
       }
     },
-    "me.accessToken" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Access Token"
+    "insp.markDone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mark done"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "访问 Token"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标记已实现"
           }
         }
       }
     },
-    "me.allowDeviceSend" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Allow sending to devices"
+    "insp.markOpen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Reopen"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "允许向设备发送消息"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复待办"
           }
         }
       }
     },
-    "me.allowDeviceSend.desc" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "When off, device conversations are view-only; only Secretary can send."
+    "insp.notePh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Note (optional)"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "关闭时设备会话仅供查看；仅“与秘书”可发送。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "补充/澄清（可选）"
           }
         }
       }
     },
-    "me.autoApproveOperate" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auto-approve computer control"
+    "insp.rawLabel": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Original idea"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动批准电脑操作"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "原始灵感"
           }
         }
       }
     },
-    "me.autoApproveOperate.desc" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "When on, computer-control approval cards are auto-approved. Use with care."
+    "insp.save": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Save"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "开启后电脑操作的授权卡会自动批准，请谨慎开启。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
           }
         }
       }
     },
-    "me.autoRead" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auto-read replies"
+    "insp.statusArchived": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Archived"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "自动朗读回复"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "归档"
           }
         }
       }
     },
-    "me.computerUse" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "computer-use master switch"
+    "insp.statusDone": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "computer-use 总开关"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已实现"
           }
         }
       }
     },
-    "me.connection" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Connection"
+    "insp.statusOpen": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Open"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "连接"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待办"
           }
         }
       }
     },
-    "me.darkMode" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dark Mode"
+    "insp.tagsPh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tags, comma-separated"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "深色模式"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签，逗号分隔（如 产品, 效率）"
           }
         }
       }
     },
-    "me.deviceRegistered" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "iOS · Registered as execution device"
+    "insp.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ideas"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "iOS · 已登记为执行设备"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "灵感"
           }
         }
       }
     },
-    "me.editServer" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit Server"
+    "insp.titlePh": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Title (optional)"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑服务端"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标题（可留空，秘书会补）"
           }
         }
       }
     },
-    "me.editToken" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Edit Token"
+    "me.about": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "About"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "编辑 Token"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "关于"
           }
         }
       }
     },
-    "me.enterToken" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Enter Token"
+    "me.accessToken": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Access Token"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "输入 Token"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "访问 Token"
           }
         }
       }
     },
-    "me.execution" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Execution & Permissions"
+    "me.accessibility": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Accessibility"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "执行与权限"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辅助功能"
           }
         }
       }
     },
-    "me.general" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "General"
+    "me.autoApproveOperate": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-approve computer control"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通用"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动批准电脑操作"
           }
         }
       }
     },
-    "me.language" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Language"
+    "me.autoApproveOperate.desc": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "When on, computer-control approval cards are auto-approved. Use with care."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "语言"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "开启后电脑操作的授权卡会自动批准，请谨慎开启。"
           }
         }
       }
     },
-    "me.online" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Online"
+    "me.autoRead": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auto-read replies"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在线"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动朗读回复"
           }
         }
       }
     },
-    "me.serverUrl" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Server URL"
+    "me.computerUse": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "computer-use master switch"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "服务端地址"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "computer-use 总开关"
           }
         }
       }
     },
-    "me.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Me"
+    "me.connection": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Connection"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "我的"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接"
           }
         }
       }
     },
-    "operate.locate.arrowHint" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Drag to draw an arrow, hold the shaft to nudge the tip. Pinch or +/- to zoom; turn off the arrow button to pan the image."
+    "me.darkMode": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dark Mode"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "拖出箭头、按住箭杆微调尖端；捏合或 +/- 放大；关掉右上角箭头按钮即可拖动查看图片其它区域。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "深色模式"
           }
         }
       }
     },
-    "operate.locate.cancelled" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Paused — you chose to handle it yourself"
+    "me.deviceRegistered": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS · Registered as execution device"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "你选择自己处理，已暂停"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "iOS · 已登记为执行设备"
           }
         }
       }
     },
-    "operate.locate.confirm" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Click the arrow tip"
+    "me.editServer": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Server"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "就点箭头尖端"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑服务端"
           }
         }
       }
     },
-    "operate.locate.done" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Continuing at the spot you pointed to"
+    "me.editToken": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Edit Token"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已按你指的位置继续"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑 Token"
           }
         }
       }
     },
-    "operate.locate.feedbackPlaceholder" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tell me what's wrong…"
+    "me.enterToken": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Enter Token"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "用文字告诉我哪错了…"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "输入 Token"
           }
         }
       }
     },
-    "operate.locate.feedbackSent" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sent to the assistant — it'll adjust accordingly."
+    "me.execution": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Execution & Permissions"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已把提示发给 AI，它会据此调整。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "执行与权限"
           }
         }
       }
     },
-    "operate.locate.hint" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I can't locate it — drag an arrow on the screenshot pointing at the target (the tip is where I'll click)."
+    "me.general": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "General"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "我定位不准，请在截图上拖一个箭头指向目标（箭头尖端就是要点的位置）。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通用"
           }
         }
       }
     },
-    "operate.locate.loadFailed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Failed to load screenshot"
+    "me.language": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Language"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "截图加载失败"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言"
           }
         }
       }
     },
-    "operate.locate.manual" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "I'll handle it"
+    "me.online": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Online"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "我自己来处理"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在线"
           }
         }
       }
     },
-    "operate.locate.paused" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Paused. Handle it manually, then tap Continue and I'll pick up from the current state."
+    "me.serverUrl": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server URL"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已暂停。你手动处理好后点『继续』，我会重新看屏接着干。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务端地址"
           }
         }
       }
     },
-    "operate.locate.resume" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done — continue"
+    "me.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "我处理好了，继续"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的"
           }
         }
       }
     },
-    "operate.locate.resumed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Resumed."
+    "operate.locate.arrowHint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Drag to draw an arrow, hold the shaft to nudge the tip. Pinch or +/- to zoom; turn off the arrow button to pan the image."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已继续。"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖出箭头、按住箭杆微调尖端；捏合或 +/- 放大；关掉右上角箭头按钮即可拖动查看图片其它区域。"
           }
         }
       }
     },
-    "operate.locate.sendFeedback" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Send"
+    "operate.locate.cancelled": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused — you chose to handle it yourself"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "发送"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你选择自己处理，已暂停"
           }
         }
       }
     },
-    "operate.locate.title" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Point it out for me"
+    "operate.locate.confirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Click the arrow tip"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "帮我指个位置"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就点箭头尖端"
           }
         }
       }
-    },
-    "screenshot" : {
-
-    },
-    "Secret Key（U1-…）" : {
-
     },
-    "settings.followSystem" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Follow System"
+    "operate.locate.done": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Continuing at the spot you pointed to"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "跟随系统"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已按你指的位置继续"
           }
         }
       }
     },
-    "skills.available" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Available"
+    "operate.locate.feedbackPlaceholder": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tell me what's wrong…"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "可用"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "用文字告诉我哪错了…"
           }
         }
       }
     },
-    "skills.empty" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "No capabilities"
+    "operate.locate.feedbackSent": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sent to the assistant — it'll adjust accordingly."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "暂无能力"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已把提示发给 AI，它会据此调整。"
           }
         }
       }
     },
-    "skills.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abilities"
+    "operate.locate.hint": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I can't locate it — drag an arrow on the screenshot pointing at the target (the tip is where I'll click)."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "能力"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我定位不准，请在截图上拖一个箭头指向目标（箭头尖端就是要点的位置）。"
           }
         }
       }
     },
-    "skills.unavailable" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Unavailable"
+    "operate.locate.loadFailed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed to load screenshot"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "不可用"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图加载失败"
           }
         }
       }
     },
-    "tab.chat" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Chat"
+    "operate.locate.manual": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "I'll handle it"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "聊天"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我自己来处理"
           }
         }
       }
     },
-    "tab.inspiration" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ideas"
+    "operate.locate.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused. Handle it manually, then tap Continue and I'll pick up from the current state."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "灵感"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已暂停。你手动处理好后点『继续』，我会重新看屏接着干。"
           }
         }
       }
     },
-    "tab.me" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Me"
+    "operate.locate.resume": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done — continue"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "我的"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我处理好了，继续"
           }
         }
       }
     },
-    "tab.skills" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abilities"
+    "operate.locate.resumed": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Resumed."
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "能力"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已继续。"
           }
         }
       }
     },
-    "tab.tasks" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tasks"
+    "operate.locate.sendFeedback": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Send"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "任务"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送"
           }
         }
       }
     },
-    "tasks.cancelled" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cancelled"
+    "operate.locate.title": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Point it out for me"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已取消"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "帮我指个位置"
           }
         }
       }
     },
-    "tasks.done" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Done"
+    "screenshot": {},
+    "settings.followSystem": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Follow System"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已完成"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "跟随系统"
           }
         }
       }
     },
-    "tasks.events" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Event Timeline"
+    "skills.available": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Available"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "事件时间线"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可用"
           }
         }
       }
     },
-    "tasks.failed" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Failed"
+    "skills.empty": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "No capabilities"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "失败"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无能力"
           }
         }
       }
     },
-    "tasks.fromChannel" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "From %@"
+    "skills.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abilities"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "来自 %@"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "能力"
           }
         }
       }
     },
-    "tasks.paused" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Paused"
+    "skills.unavailable": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unavailable"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "已暂停"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不可用"
           }
         }
       }
     },
-    "tasks.pending" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pending"
+    "tab.chat": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Chat"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "待执行"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "聊天"
           }
         }
       }
     },
-    "tasks.progress" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Overall Progress"
+    "tab.inspiration": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ideas"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "总进度"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "灵感"
           }
         }
       }
     },
-    "tasks.running" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Running"
+    "tab.me": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Me"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "执行中"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我的"
           }
         }
       }
     },
-    "tasks.screenshots" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Screenshots"
+    "tab.skills": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abilities"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "截图"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "能力"
           }
         }
       }
     },
-    "tasks.steps" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Steps"
+    "tab.tasks": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasks"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "步骤"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任务"
           }
         }
       }
     },
-    "tasks.stepsProgress" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Step %@"
+    "tasks.cancelled": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cancelled"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "进度 %@ 步"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已取消"
           }
         }
       }
     },
-    "tasks.stop" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "End task"
+    "tasks.done": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Done"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "结束任务"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已完成"
           }
         }
       }
     },
-    "tasks.stopConfirm" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Force-end this task?"
+    "tasks.events": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Event Timeline"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "确定强制结束这个任务吗？"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "事件时间线"
           }
         }
       }
     },
-    "tasks.title" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tasks"
+    "tasks.failed": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Failed"
           }
         },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "任务"
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "失败"
           }
         }
       }
-    },
-    "U" : {
-
-    },
-    "Umbra" : {
-
-    },
-    "v0.4.2" : {
-
-    },
-    "主密码" : {
-
-    },
-    "保存" : {
-
-    },
-    "保险箱" : {
-
-    },
-    "保险箱已锁定" : {
-
-    },
-    "取消" : {
-
-    },
-    "名称" : {
-
     },
-    "密码" : {
-
+    "tasks.fromChannel": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "From %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来自 %@"
+          }
+        }
+      }
     },
-    "已 AES-256-GCM 加密 · 密码/密文不进搜索" : {
-
+    "tasks.paused": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Paused"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已暂停"
+          }
+        }
+      }
     },
-    "搜索名称/账号/网址" : {
-
+    "tasks.pending": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Pending"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "待执行"
+          }
+        }
+      }
     },
-    "新记录" : {
-
+    "tasks.progress": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overall Progress"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "总进度"
+          }
+        }
+      }
     },
-    "没有匹配的记录" : {
-
+    "tasks.running": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Running"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "执行中"
+          }
+        }
+      }
     },
-    "用户名" : {
-
+    "tasks.screenshots": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Screenshots"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "截图"
+          }
+        }
+      }
     },
-    "编辑" : {
-
+    "tasks.steps": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Steps"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "步骤"
+          }
+        }
+      }
     },
-    "网址" : {
-
+    "tasks.stepsProgress": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Step %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "进度 %@ 步"
+          }
+        }
+      }
     },
-    "解锁" : {
-
+    "tasks.stop": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "End task"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "结束任务"
+          }
+        }
+      }
     },
-    "解锁中…" : {
-
+    "tasks.stopConfirm": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Force-end this task?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "确定强制结束这个任务吗？"
+          }
+        }
+      }
     },
-    "记录" : {
-
+    "tasks.title": {
+      "extractionState": "stale",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tasks"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任务"
+          }
+        }
+      }
     },
-    "账号" : {
-
+    "time.yesterday": {
+      "extractionState": "manual",
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Yesterday"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "昨天"
+          }
+        }
+      }
     },
-    "输入主密码解锁本地加密数据\n主密码不保存、不上传" : {
-
-    }
+    "v%@": {},
+    "v0.4.2": {},
+    "· %@": {},
+    "▎": {},
+    "☆": {},
+    "✓": {},
+    "✕": {},
+    "⭐": {},
+    "主密码": {},
+    "保存": {},
+    "保险箱": {},
+    "保险箱已锁定": {},
+    "取消": {},
+    "名称": {},
+    "密码": {},
+    "已 AES-256-GCM 加密 · 密码/密文不进搜索": {},
+    "搜索名称/账号/网址": {},
+    "新记录": {},
+    "没有匹配的记录": {},
+    "用户名": {},
+    "编辑": {},
+    "网址": {},
+    "解锁": {},
+    "解锁中…": {},
+    "记录": {},
+    "账号": {},
+    "输入主密码解锁本地加密数据\n主密码不保存、不上传": {},
+    "🎲": {},
+    "👁": {},
+    "📄": {},
+    "📋": {},
+    "🔍": {},
+    "🔐": {},
+    "🔐  密码保险箱": {},
+    "🔐 已启用两步验证 (2FA)": {},
+    "🔒": {},
+    "🖼️": {},
+    "🗑 删除记录": {},
+    "🗒️": {},
+    "🙈": {}
   },
-  "version" : "1.0"
+  "version": "1.0"
 }
