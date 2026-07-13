@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+  :root{
+    --bg:#F6F5F2; --card:#FFFFFF; --border:#E6E3DC; --text:#1F2320; --muted:#6B716B;
+    --orange:#E8590C; --orange-soft:#FFF1E6; --orange-text:#9A3412;
+    --success:#0F766E; --danger:#B42318; --warning:#B45309;
+    --shadow:0 14px 40px rgba(31,35,32,.14); --stage:#e5e2db;
+    --fill:rgba(120,116,110,.10); --sheetbg:#FFFFFF;
+  }
+  [data-theme="dark"]{
+    --bg:#15110E; --card:#232019; --border:#332E26; --text:#EDEAE3; --muted:#9A938A;
+    --orange:#E8590C; --orange-soft:rgba(232,89,12,.18); --orange-text:#F0A878;
+    --success:#34B5A6; --danger:#E0675C; --warning:#D98A29;
+    --shadow:0 14px 40px rgba(0,0,0,.5); --stage:#0b0806;
+    --fill:rgba(235,234,227,.10); --sheetbg:#2A251E;
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,"SF Pro Text",system-ui,"Segoe UI",Roboto,sans-serif;-webkit-font-smoothing:antialiased;}
+  @keyframes toastIn{from{opacity:0;transform:translate(-50%,10px)}to{opacity:1;transform:translate(-50%,0)}}
+  @keyframes lockPulse{0%,100%{transform:scale(1);box-shadow:0 0 0 0 rgba(232,89,12,.28)}50%{transform:scale(1.03);box-shadow:0 0 0 16px rgba(232,89,12,0)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(9px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes blockIn{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+  @keyframes pushIn{from{opacity:0;transform:translateX(28px)}to{opacity:1;transform:translateX(0)}}
+  @keyframes sheetUp{from{transform:translateY(100%)}to{transform:translateY(0)}}
+  @keyframes backdropIn{from{opacity:0}to{opacity:1}}
+  a{color:var(--orange-text);text-decoration:none}a:hover{color:var(--orange)}
+  ::selection{background:rgba(232,89,12,.22)}
+  .noscroll::-webkit-scrollbar{display:none;}
+</style>
+</helmet>
+
+<div data-theme="{{ theme }}" style="min-height:100vh;display:flex;align-items:center;justify-content:center;padding:28px;background:radial-gradient(120% 120% at 50% 0%, color-mix(in srgb, var(--stage) 80%, #fff) 0%, var(--stage) 72%);">
+<x-import component-from-global-scope="IOSDevice" from="./ios-frame.jsx" dark="{{ darkBool }}" hint-size="402px,874px">
+
+  <!-- ============ LOCK ============ -->
+  <sc-if value="{{ isLock }}">
+    <div style="position:absolute;inset:0;background:radial-gradient(95% 55% at 50% 20%, color-mix(in srgb, var(--orange-soft) 70%, var(--bg)) 0%, var(--bg) 60%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:0 34px;text-align:center;animation:fadeUp .4s ease;">
+      <div style="width:88px;height:88px;border-radius:26px;background:var(--orange-soft);display:flex;align-items:center;justify-content:center;font-size:42px;animation:lockPulse 2.6s ease-in-out infinite;">🔐</div>
+      <h1 style="margin:26px 0 0;font-size:24px;font-weight:700;letter-spacing:-.02em;color:var(--text);">保险箱已锁定</h1>
+      <p style="margin:9px 0 0;font-size:13.5px;color:var(--muted);line-height:1.5;">输入主密码解锁本地加密数据<br/>主密码不保存、不上传</p>
+      <input type="password" placeholder="主密码" style="margin-top:28px;width:100%;border:none;background:var(--card);border-radius:14px;padding:15px 16px;font-size:17px;color:var(--text);outline:none;text-align:center;letter-spacing:.16em;font-family:ui-monospace,Menlo,monospace;box-shadow:0 1px 3px rgba(0,0,0,.05);"/>
+      <button onClick="{{ onUnlock }}" style="margin-top:12px;width:100%;background:var(--orange);color:#fff;border:none;border-radius:14px;padding:15px;font-size:16px;font-weight:600;cursor:pointer;transition:transform .1s ease;" style-active="transform:scale(.98)">解锁</button>
+      <button onClick="{{ onUnlock }}" style="margin-top:16px;background:transparent;border:none;color:var(--orange-text);font-size:14px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:7px;">😊 使用 Face ID 解锁</button>
+      <div style="position:absolute;bottom:44px;left:0;right:0;display:flex;align-items:center;justify-content:center;gap:7px;font-size:11.5px;color:var(--muted);"><span style="color:var(--success);">🔒</span> AES-256-GCM 本地加密 · 永不上传</div>
+    </div>
+  </sc-if>
+
+  <!-- ============ LIST ============ -->
+  <sc-if value="{{ isList }}">
+    <div class="noscroll" style="position:absolute;inset:0;overflow-y:auto;background:var(--bg);color:var(--text);animation:fadeUp .3s ease;">
+      <!-- large title bar -->
+      <div style="padding:56px 20px 6px;display:flex;align-items:flex-end;justify-content:space-between;">
+        <div>
+          <div style="font-size:12.5px;color:var(--muted);font-weight:600;display:flex;align-items:center;gap:5px;">👤 个人保险箱</div>
+          <h1 style="margin:2px 0 0;font-size:32px;font-weight:700;letter-spacing:-.02em;">保险箱</h1>
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button onClick="{{ toggleTheme }}" style="width:38px;height:38px;border-radius:50%;border:none;background:var(--fill);color:var(--text);font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;">{{ themeIcon }}</button>
+          <button onClick="{{ onAdd }}" style="width:38px;height:38px;border-radius:50%;border:none;background:var(--orange);color:#fff;font-size:22px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:transform .1s ease;" style-active="transform:scale(.92)">＋</button>
+        </div>
+      </div>
+
+      <!-- search -->
+      <div style="padding:8px 20px 4px;">
+        <div style="display:flex;align-items:center;gap:8px;background:var(--fill);border-radius:12px;padding:9px 12px;">
+          <span style="font-size:14px;color:var(--muted);">🔍</span>
+          <input value="{{ search }}" onChange="{{ onSearch }}" placeholder="搜索名称" style="flex:1;border:none;background:transparent;font-size:16px;color:var(--text);outline:none;"/>
+        </div>
+      </div>
+
+      <!-- type chips -->
+      <div class="noscroll" style="display:flex;gap:8px;overflow-x:auto;padding:10px 20px 6px;scrollbar-width:none;">
+        <sc-for list="{{ typeChips }}" as="c" hint-placeholder-count="6">
+          <div onClick="{{ c.onClick }}" onMouseDown="{{ c.onPress }}" onMouseUp="{{ c.onRelease }}" onMouseLeave="{{ c.onRelease }}" onTouchStart="{{ c.onPress }}" onTouchEnd="{{ c.onRelease }}" style="{{ c.style }}">
+            <span>{{ c.icon }}</span><span style="white-space:nowrap;">{{ c.name }}</span>
+            <sc-if value="{{ c.showCount }}"><span style="opacity:.7;font-variant-numeric:tabular-nums;">{{ c.count }}</span></sc-if>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- hint -->
+      <div style="padding:2px 22px 6px;font-size:11px;color:var(--muted);">长按记录可移动 / 删除 · 长按类型可改名</div>
+
+      <!-- records grouped card -->
+      <div style="margin:2px 16px 0;background:var(--card);border-radius:18px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04);">
+        <sc-for list="{{ itemRows }}" as="it" hint-placeholder-count="6">
+          <div onClick="{{ it.onClick }}" onMouseDown="{{ it.onPress }}" onMouseUp="{{ it.onRelease }}" onMouseLeave="{{ it.onRelease }}" onTouchStart="{{ it.onPress }}" onTouchEnd="{{ it.onRelease }}" style="display:flex;align-items:center;gap:12px;padding:11px 14px;cursor:pointer;position:relative;transition:background .12s ease;" style-active="background:var(--fill)">
+            <div style="width:36px;height:36px;border-radius:10px;background:var(--orange-soft);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;">{{ it.icon }}</div>
+            <div style="flex:1;min-width:0;">
+              <div style="font-size:16px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ it.title }}</div>
+              <div style="font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px;">{{ it.subtitle }}</div>
+            </div>
+            <span style="font-size:13px;color:var(--orange);">{{ it.favIcon }}</span>
+            <span style="color:var(--muted);opacity:.5;font-size:16px;">›</span>
+            <sc-if value="{{ it.notLast }}"><div style="position:absolute;left:62px;right:0;bottom:0;height:.5px;background:var(--border);"></div></sc-if>
+          </div>
+        </sc-for>
+        <sc-if value="{{ listEmpty }}">
+          <div style="text-align:center;color:var(--muted);font-size:14px;padding:44px 20px;line-height:1.7;"><div style="font-size:30px;opacity:.4;">🗒️</div>没有匹配的记录</div>
+        </sc-if>
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:11.5px;color:var(--muted);padding:20px 20px 40px;"><span style="color:var(--success);">🔒</span> {{ itemCount }} 条记录 · 已 AES-256-GCM 加密</div>
+    </div>
+  </sc-if>
+
+  <!-- ============ DETAIL ============ -->
+  <sc-if value="{{ isDetail }}">
+    <div class="noscroll" style="position:absolute;inset:0;overflow-y:auto;background:var(--bg);color:var(--text);animation:pushIn .28s ease;">
+      <!-- nav bar -->
+      <div style="position:sticky;top:0;z-index:5;display:flex;align-items:center;justify-content:space-between;padding:52px 14px 10px;background:color-mix(in srgb,var(--bg) 82%,transparent);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:.5px solid var(--border);">
+        <button onClick="{{ onBack }}" style="display:flex;align-items:center;gap:3px;border:none;background:transparent;color:var(--orange);font-size:16px;cursor:pointer;padding:4px;"><span style="font-size:20px;line-height:1;">‹</span>保险箱</button>
+        <span style="font-size:15px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:170px;">{{ detail.title }}</span>
+        <button onClick="{{ toggleEdit }}" style="border:none;background:transparent;color:var(--orange);font-size:16px;font-weight:{{ detail.editWeight }};cursor:pointer;padding:4px;">{{ editLabel }}</button>
+      </div>
+
+      <!-- header -->
+      <div style="display:flex;flex-direction:column;align-items:center;text-align:center;padding:22px 24px 10px;animation:fadeUp .3s ease;">
+        <div style="width:66px;height:66px;border-radius:18px;background:var(--orange-soft);display:flex;align-items:center;justify-content:center;font-size:32px;">{{ detail.icon }}</div>
+        <h1 style="margin:12px 0 0;font-size:22px;font-weight:700;letter-spacing:-.01em;">{{ detail.title }}</h1>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:9px;">
+          <span style="display:inline-flex;align-items:center;gap:5px;font-size:12px;color:var(--muted);background:var(--fill);padding:4px 11px;border-radius:9px;white-space:nowrap;">{{ detail.typeIcon }} {{ detail.typeName }}</span>
+          <button onClick="{{ detail.onFav }}" style="border:none;background:var(--fill);border-radius:9px;padding:4px 10px;font-size:14px;cursor:pointer;color:var(--orange);transition:transform .12s ease;" style-active="transform:scale(.9)">{{ detail.favIcon }}</button>
+        </div>
+      </div>
+
+      <!-- blocks -->
+      <div style="padding:8px 16px 0;">
+        <sc-for list="{{ detail.blocks }}" as="block" hint-placeholder-count="2">
+          <div style="{{ block.animStyle }}">
+          <div style="border-radius:16px;background:var(--card);margin-bottom:13px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04);">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 15px;border-bottom:.5px solid var(--border);">
+              <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+                <span style="font-size:11px;font-weight:600;color:var(--orange);background:var(--orange-soft);padding:2px 9px;border-radius:7px;white-space:nowrap;">{{ block.tagLabel }}</span>
+                <span style="font-size:13.5px;color:var(--muted);white-space:nowrap;">{{ block.label }}</span>
+              </div>
+              <sc-if value="{{ block.editing }}">
+                <div style="display:flex;gap:4px;">
+                  <span style="font-size:15px;cursor:pointer;color:var(--muted);padding:2px 4px;">↑</span>
+                  <span style="font-size:15px;cursor:pointer;color:var(--muted);padding:2px 4px;">↓</span>
+                  <span style="font-size:14px;cursor:pointer;color:var(--danger);padding:2px 4px;">🗑</span>
+                </div>
+              </sc-if>
+            </div>
+            <div style="padding:15px;display:flex;flex-direction:column;gap:14px;">
+
+              <!-- ACCOUNT -->
+              <sc-if value="{{ block.isAccount }}">
+                <div>
+                  <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;letter-spacing:.03em;">用户名</div>
+                  <sc-if value="{{ block.viewing }}">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:15px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ block.username }}</span>
+                      <span onClick="{{ block.copyUser }}" style="cursor:pointer;font-size:16px;color:var(--muted);padding:4px;">📋</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ block.editing }}"><input value="{{ block.username }}" onChange="{{ block.setUser }}" style="width:100%;border:none;background:var(--fill);border-radius:11px;padding:11px 13px;font-size:15px;color:var(--text);outline:none;font-family:ui-monospace,Menlo,monospace;"/></sc-if>
+                </div>
+                <div>
+                  <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;letter-spacing:.03em;">密码</div>
+                  <sc-if value="{{ block.viewing }}">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:15px;letter-spacing:.08em;">{{ block.pwShown }}</span>
+                      <span onClick="{{ block.toggleReveal }}" style="cursor:pointer;font-size:16px;color:var(--muted);padding:4px;">{{ block.eyeIcon }}</span>
+                      <span onClick="{{ block.copyPw }}" style="cursor:pointer;font-size:16px;color:var(--muted);padding:4px;">📋</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ block.editing }}">
+                    <div style="display:flex;align-items:center;gap:9px;">
+                      <input value="{{ block.passwordPlain }}" onChange="{{ block.setPw }}" style="flex:1;border:none;background:var(--fill);border-radius:11px;padding:11px 13px;font-size:15px;color:var(--text);outline:none;font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em;"/>
+                      <span style="cursor:pointer;font-size:17px;padding:9px;border-radius:11px;background:var(--fill);color:var(--orange);line-height:1;">🎲</span>
+                    </div>
+                  </sc-if>
+                </div>
+                <div>
+                  <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px;letter-spacing:.03em;">网址</div>
+                  <sc-if value="{{ block.viewing }}">
+                    <div style="display:flex;align-items:center;gap:10px;">
+                      <span style="flex:1;font-size:14.5px;color:var(--orange-text);">{{ block.url }}</span>
+                      <span onClick="{{ block.openUrl }}" style="cursor:pointer;font-size:15px;color:var(--muted);padding:4px;">↗</span>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ block.editing }}"><input value="{{ block.url }}" onChange="{{ block.setUrl }}" style="width:100%;border:none;background:var(--fill);border-radius:11px;padding:11px 13px;font-size:15px;color:var(--text);outline:none;"/></sc-if>
+                </div>
+                <sc-if value="{{ block.otp }}"><div style="display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--success);background:color-mix(in srgb,var(--success) 12%,transparent);padding:5px 10px;border-radius:8px;align-self:flex-start;">🔐 已启用两步验证 (2FA)</div></sc-if>
+              </sc-if>
+
+              <!-- SECRET -->
+              <sc-if value="{{ block.isSecret }}">
+                <sc-if value="{{ block.viewing }}">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:15px;letter-spacing:.08em;">{{ block.pwShown }}</span>
+                    <span onClick="{{ block.toggleReveal }}" style="cursor:pointer;font-size:16px;color:var(--muted);padding:4px;">{{ block.eyeIcon }}</span>
+                    <span onClick="{{ block.copyPw }}" style="cursor:pointer;font-size:16px;color:var(--muted);padding:4px;">📋</span>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ block.editing }}">
+                  <div style="display:flex;align-items:center;gap:9px;">
+                    <input value="{{ block.passwordPlain }}" onChange="{{ block.setSecret }}" style="flex:1;border:none;background:var(--fill);border-radius:11px;padding:11px 13px;font-size:15px;color:var(--text);outline:none;font-family:ui-monospace,Menlo,monospace;letter-spacing:.08em;"/>
+                    <span style="cursor:pointer;font-size:17px;padding:9px;border-radius:11px;background:var(--fill);color:var(--orange);line-height:1;">🎲</span>
+                  </div>
+                </sc-if>
+              </sc-if>
+
+              <!-- TEXT -->
+              <sc-if value="{{ block.isText }}">
+                <sc-if value="{{ block.viewing }}"><p style="margin:0;font-size:14.5px;line-height:1.7;color:var(--text);white-space:pre-line;">{{ block.text }}</p></sc-if>
+                <sc-if value="{{ block.editing }}"><textarea onChange="{{ block.setText }}" style="width:100%;min-height:100px;resize:vertical;border:none;background:var(--fill);border-radius:11px;padding:12px 13px;font-size:14.5px;line-height:1.6;color:var(--text);outline:none;font-family:inherit;">{{ block.text }}</textarea></sc-if>
+              </sc-if>
+
+              <!-- FIELD -->
+              <sc-if value="{{ block.isField }}">
+                <sc-if value="{{ block.viewing }}">
+                  <div style="display:flex;align-items:center;gap:10px;">
+                    <span style="flex:1;font-family:ui-monospace,Menlo,monospace;font-size:15px;">{{ block.value }}</span>
+                    <span onClick="{{ block.copyVal }}" style="cursor:pointer;font-size:16px;color:var(--muted);padding:4px;">📋</span>
+                  </div>
+                </sc-if>
+                <sc-if value="{{ block.editing }}"><input value="{{ block.value }}" onChange="{{ block.setValue }}" style="width:100%;border:none;background:var(--fill);border-radius:11px;padding:11px 13px;font-size:15px;color:var(--text);outline:none;font-family:ui-monospace,Menlo,monospace;"/></sc-if>
+              </sc-if>
+
+              <!-- IMAGES -->
+              <sc-if value="{{ block.isImages }}">
+                <div style="display:flex;flex-wrap:wrap;gap:10px;">
+                  <sc-for list="{{ block.imgs }}" as="im" hint-placeholder-count="2">
+                    <div style="width:132px;height:88px;border-radius:12px;background:{{ im.bg }};position:relative;box-shadow:inset 0 0 0 1px rgba(0,0,0,.06);display:flex;align-items:flex-end;padding:7px;">
+                      <span style="font-size:10.5px;color:rgba(255,255,255,.92);background:rgba(0,0,0,.3);padding:1px 7px;border-radius:6px;">{{ im.label }}</span>
+                      <sc-if value="{{ block.editing }}"><span style="position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;background:rgba(0,0,0,.55);color:#fff;display:flex;align-items:center;justify-content:center;font-size:12px;">✕</span></sc-if>
+                    </div>
+                  </sc-for>
+                  <sc-if value="{{ block.editing }}"><div style="width:132px;height:88px;border-radius:12px;border:1.5px dashed var(--border);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;color:var(--muted);font-size:12px;"><span style="font-size:20px;">＋</span>添加图片</div></sc-if>
+                </div>
+              </sc-if>
+
+              <!-- FILES -->
+              <sc-if value="{{ block.isFiles }}">
+                <div style="display:flex;flex-direction:column;gap:9px;">
+                  <sc-for list="{{ block.files }}" as="f" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:center;gap:11px;background:var(--fill);border-radius:11px;padding:11px 13px;">
+                      <span style="font-size:18px;">📄</span>
+                      <span style="flex:1;font-size:14px;font-family:ui-monospace,Menlo,monospace;">{{ f.name }}</span>
+                      <span style="cursor:pointer;font-size:15px;color:var(--muted);padding:2px;">⬇</span>
+                      <sc-if value="{{ block.editing }}"><span style="cursor:pointer;font-size:13px;color:var(--danger);padding:2px;">✕</span></sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+            </div>
+          </div>
+          </div>
+        </sc-for>
+
+        <sc-if value="{{ editing }}">
+          <button style="width:100%;display:flex;align-items:center;justify-content:center;gap:7px;border:1.5px dashed var(--border);background:transparent;color:var(--muted);border-radius:14px;padding:14px;font-size:15px;cursor:pointer;margin-bottom:6px;"><span style="font-size:17px;">＋</span> 添加控件</button>
+        </sc-if>
+
+        <div style="display:flex;align-items:center;justify-content:center;gap:6px;font-size:11.5px;color:var(--muted);padding:14px 8px 6px;text-align:center;line-height:1.6;"><span style="color:var(--success);">🔒</span> 整条记录已 AES-256-GCM 加密 · 密码 / 密文不进入搜索</div>
+        <sc-if value="{{ editing }}">
+          <button onClick="{{ detail.onDelete }}" style="width:100%;border:none;background:var(--card);color:var(--danger);font-size:15px;font-weight:600;cursor:pointer;border-radius:14px;padding:14px;margin:4px 0 30px;box-shadow:0 1px 3px rgba(0,0,0,.04);">删除记录</button>
+        </sc-if>
+        <div style="height:34px;"></div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ============ ACTION SHEET (record) ============ -->
+  <sc-if value="{{ sheetActions }}">
+    <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:80;animation:backdropIn .2s ease;"></div>
+    <div style="position:absolute;left:10px;right:10px;bottom:12px;z-index:81;animation:sheetUp .26s cubic-bezier(.32,.72,0,1);">
+      <div style="background:var(--sheetbg);border-radius:16px;overflow:hidden;margin-bottom:8px;">
+        <div style="text-align:center;font-size:12.5px;color:var(--muted);padding:14px 16px 12px;border-bottom:.5px solid var(--border);">{{ sheet.title }}</div>
+        <div onClick="{{ sheet.onEdit }}" style="text-align:center;font-size:19px;color:var(--orange);padding:16px;cursor:pointer;border-bottom:.5px solid var(--border);">编辑记录</div>
+        <div onClick="{{ sheet.onFav }}" style="text-align:center;font-size:19px;color:var(--orange);padding:16px;cursor:pointer;border-bottom:.5px solid var(--border);">{{ sheet.favLabel }}</div>
+        <div onClick="{{ sheet.onMove }}" style="text-align:center;font-size:19px;color:var(--orange);padding:16px;cursor:pointer;border-bottom:.5px solid var(--border);">移动到…</div>
+        <div onClick="{{ sheet.onDelete }}" style="text-align:center;font-size:19px;color:var(--danger);padding:16px;cursor:pointer;">删除记录</div>
+      </div>
+      <div onClick="{{ closeSheet }}" style="background:var(--sheetbg);border-radius:16px;text-align:center;font-size:19px;font-weight:600;color:var(--orange);padding:16px;cursor:pointer;">取消</div>
+    </div>
+  </sc-if>
+
+  <!-- ============ MOVE SHEET ============ -->
+  <sc-if value="{{ sheetMove }}">
+    <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:80;animation:backdropIn .2s ease;"></div>
+    <div style="position:absolute;left:10px;right:10px;bottom:12px;z-index:81;animation:sheetUp .26s cubic-bezier(.32,.72,0,1);">
+      <div style="background:var(--sheetbg);border-radius:16px;overflow:hidden;margin-bottom:8px;">
+        <div style="text-align:center;font-size:12.5px;color:var(--muted);padding:14px 16px 12px;border-bottom:.5px solid var(--border);">移动到类型</div>
+        <sc-for list="{{ moveTypes }}" as="mt" hint-placeholder-count="4">
+          <div onClick="{{ mt.onMove }}" style="display:flex;align-items:center;justify-content:center;gap:9px;font-size:18px;color:var(--orange);padding:15px;cursor:pointer;border-bottom:.5px solid var(--border);"><span>{{ mt.icon }}</span>{{ mt.name }}<sc-if value="{{ mt.current }}"><span style="color:var(--orange);">✓</span></sc-if></div>
+        </sc-for>
+      </div>
+      <div onClick="{{ closeSheet }}" style="background:var(--sheetbg);border-radius:16px;text-align:center;font-size:19px;font-weight:600;color:var(--orange);padding:16px;cursor:pointer;">取消</div>
+    </div>
+  </sc-if>
+
+  <!-- ============ TYPE ACTION SHEET ============ -->
+  <sc-if value="{{ sheetType }}">
+    <div onClick="{{ closeSheet }}" style="position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:80;animation:backdropIn .2s ease;"></div>
+    <div style="position:absolute;left:10px;right:10px;bottom:12px;z-index:81;animation:sheetUp .26s cubic-bezier(.32,.72,0,1);">
+      <div style="background:var(--sheetbg);border-radius:16px;overflow:hidden;margin-bottom:8px;">
+        <div style="text-align:center;font-size:12.5px;color:var(--muted);padding:14px 16px 12px;border-bottom:.5px solid var(--border);">{{ typeSheet.name }}</div>
+        <div onClick="{{ typeSheet.onRename }}" style="text-align:center;font-size:19px;color:var(--orange);padding:16px;cursor:pointer;border-bottom:.5px solid var(--border);">改名</div>
+        <div onClick="{{ typeSheet.onDelete }}" style="text-align:center;font-size:19px;color:var(--danger);padding:16px;cursor:pointer;">删除类型</div>
+      </div>
+      <div onClick="{{ closeSheet }}" style="background:var(--sheetbg);border-radius:16px;text-align:center;font-size:19px;font-weight:600;color:var(--orange);padding:16px;cursor:pointer;">取消</div>
+    </div>
+  </sc-if>
+
+  <!-- ============ RENAME DIALOG ============ -->
+  <sc-if value="{{ renameOpen }}">
+    <div style="position:absolute;inset:0;background:rgba(0,0,0,.32);z-index:82;animation:backdropIn .2s ease;display:flex;align-items:center;justify-content:center;padding:0 42px;">
+      <div style="width:100%;background:var(--sheetbg);border-radius:16px;overflow:hidden;text-align:center;">
+        <div style="padding:18px 18px 6px;font-size:16px;font-weight:600;color:var(--text);">重命名类型</div>
+        <div style="padding:0 18px 14px;">
+          <input value="{{ renameValue }}" onChange="{{ onRenameInput }}" style="width:100%;border:1px solid var(--border);background:var(--bg);border-radius:9px;padding:9px 11px;font-size:15px;color:var(--text);outline:none;text-align:center;margin-top:8px;" style-focus="border-color:var(--orange)"/>
+        </div>
+        <div style="display:flex;border-top:.5px solid var(--border);">
+          <div onClick="{{ closeSheet }}" style="flex:1;padding:13px;font-size:16px;color:var(--orange);cursor:pointer;border-right:.5px solid var(--border);">取消</div>
+          <div onClick="{{ commitRename }}" style="flex:1;padding:13px;font-size:16px;font-weight:600;color:var(--orange);cursor:pointer;">保存</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- Toast -->
+  <sc-if value="{{ showToast }}">
+    <div style="position:absolute;bottom:52px;left:50%;transform:translateX(-50%);background:#17130f;color:#fff;border-radius:999px;padding:10px 20px;font-size:14px;box-shadow:0 10px 30px rgba(0,0,0,.35);z-index:90;animation:toastIn .18s ease;display:flex;align-items:center;gap:7px;"><span style="color:#34B5A6;">✓</span>{{ toast }}</div>
+  </sc-if>
+
+</x-import>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:458,&quot;height&quot;:930}}">
+class Component extends DCLogic {
+  state = Object.assign({
+    theme:'light', screen:'lock',
+    selTypeId:'all', selItemId:'gh',
+    search:'', reveal:{}, editing:false, toast:null,
+    sheet:null, sheetItemId:null, sheetTypeId:null,
+    renameOpen:false, renameValue:'', renameId:null,
+  }, this.seed());
+
+  seed(){
+    const types=[
+      {id:'all',name:'全部',icon:'🗂️',fixed:true},
+      {id:'fav',name:'收藏',icon:'⭐',fixed:true},
+      {id:'web',name:'网站账号',icon:'🔑'},
+      {id:'bank',name:'银行卡',icon:'💳'},
+      {id:'idc',name:'证件',icon:'🪪'},
+      {id:'note',name:'笔记 & 密钥',icon:'📝'},
+    ];
+    const items=[
+      {id:'gh',title:'GitHub',typeId:'web',fav:true,blocks:[
+        {id:'gh1',type:'account',label:'登录信息',username:'zhang.wei@gmail.com',password:'Gh!7xK2p#mNq',url:'github.com',otp:true},
+      ]},
+      {id:'mail',title:'公司邮箱 · Outlook',typeId:'web',fav:false,blocks:[
+        {id:'m1',type:'account',label:'登录信息',username:'wei.zhang@acme.com',password:'Wq3$Rt9!Lz0',url:'mail.acme.com',otp:false},
+      ]},
+      {id:'cmb',title:'招商银行 · 储蓄卡',typeId:'bank',fav:true,blocks:[
+        {id:'c1',type:'field',label:'卡号',value:'6225 8801 2345 6789'},
+        {id:'c2',type:'secret',label:'CVV',value:'735'},
+        {id:'c3',type:'field',label:'有效期',value:'08 / 27'},
+        {id:'c4',type:'field',label:'预留手机',value:'138 **** 5678'},
+      ]},
+      {id:'idc',title:'身份证',typeId:'idc',fav:false,blocks:[
+        {id:'i1',type:'field',label:'姓名',value:'张 伟'},
+        {id:'i2',type:'field',label:'证件号码',value:'110101 1990 0307 4512'},
+        {id:'i3',type:'images',label:'证件照片',imgs:[
+          {id:'im1',bg:'linear-gradient(135deg,#c7b8a3,#9a8b73)',label:'正面'},
+          {id:'im2',bg:'linear-gradient(135deg,#a9b6c4,#7d8a9c)',label:'背面'},
+        ]},
+      ]},
+      {id:'srv',title:'生产服务器 · SSH',typeId:'note',fav:false,blocks:[
+        {id:'s1',type:'secret',label:'Root 密码',value:'X7!kd2#Qp9zL'},
+        {id:'s2',type:'text',label:'连接备注',text:'堡垒机跳转：ssh jump@10.0.0.9 → 内网 172.16.4.20。\n维护窗口每周日 02:00–04:00，操作前先在运维群报备。'},
+        {id:'s3',type:'files',label:'密钥文件',files:[{id:'f1',name:'id_rsa'},{id:'f2',name:'server-backup.zip'}]},
+      ]},
+      {id:'wifi',title:'家庭 WiFi',typeId:'note',fav:false,blocks:[
+        {id:'w1',type:'field',label:'网络名称 (SSID)',value:'Zhang_Home_5G'},
+        {id:'w2',type:'secret',label:'WiFi 密码',value:'home-8842-wifi'},
+      ]},
+    ];
+    return {types, items};
+  }
+
+  typeName(id){ const t=this.state.types.find(x=>x.id===id); return t?t.name:''; }
+  typeIcon(id){ const t=this.state.types.find(x=>x.id===id); return t?t.icon:'📄'; }
+
+  toast(msg){ if(this._t) clearTimeout(this._t); this.setState({toast:msg}); this._t=setTimeout(()=>this.setState({toast:null}),1400); }
+  copy(text,msg){ try{ if(text && navigator.clipboard) navigator.clipboard.writeText(text); }catch(e){} this.toast(msg||'已复制'); }
+
+  openDetail(id){ this.setState({screen:'detail', selItemId:id, reveal:{}, editing:false}); }
+  toggleReveal(id){ this.setState(st=>({reveal:Object.assign({},st.reveal,{[id]:!st.reveal[id]})})); }
+  toggleFav(id){ this.setState(st=>({items:st.items.map(it=>it.id===id?Object.assign({},it,{fav:!it.fav}):it)})); }
+  editBlock(id, patch){ this.setState(st=>({items:st.items.map(it=>it.id!==st.selItemId?it:Object.assign({},it,{blocks: it.blocks.map(b=>b.id===id?Object.assign({},b,patch):b)}))})); }
+
+  // long-press
+  pressStart(fn){ this._suppress=false; clearTimeout(this._lp); this._lp=setTimeout(()=>{ this._suppress=true; fn(); }, 430); }
+  pressEnd(){ clearTimeout(this._lp); }
+
+  openActions(id){ this.setState({sheet:'actions', sheetItemId:id}); }
+  openMove(){ this.setState({sheet:'move'}); }
+  openTypeActions(id){ this.setState({sheet:'typeaction', sheetTypeId:id}); }
+  closeSheet(){ this.setState({sheet:null, renameOpen:false}); }
+
+  moveItem(id, typeId){ this.setState(st=>({items:st.items.map(i=>i.id===id?Object.assign({},i,{typeId:typeId}):i), sheet:null})); this.toast('已移动到「'+this.typeName(typeId)+'」'); }
+  deleteItem(id){ this.setState(st=>{ const items=st.items.filter(i=>i.id!==id); const selItemId= st.selItemId===id?(items[0]?items[0].id:null):st.selItemId; const screen= st.selItemId===id&&st.screen==='detail'?'list':st.screen; return {items, selItemId, screen, sheet:null}; }); this.toast('记录已删除'); }
+
+  startRename(id){ const t=this.state.types.find(x=>x.id===id); this.setState({sheet:null, renameOpen:true, renameId:id, renameValue:t?t.name:''}); }
+  commitRename(){ const id=this.state.renameId, name=(this.state.renameValue||'').trim(); if(id&&name){ this.setState(st=>({types:st.types.map(x=>x.id===id?Object.assign({},x,{name:name}):x)})); } this.setState({renameOpen:false}); this.toast('已重命名'); }
+  deleteType(id){ this.setState(st=>{ const types=st.types.filter(x=>x.id!==id); const selTypeId= st.selTypeId===id?'all':st.selTypeId; return {types, selTypeId, sheet:null}; }); this.toast('类型已删除'); }
+
+  blockView(b){
+    const s=this.state, editing=s.editing;
+    const tagMap={account:'账号',secret:'密文',text:'文本',field:'字段',images:'图片',files:'文件'};
+    const revealed=!!s.reveal[b.id];
+    const mask='•'.repeat(10);
+    const base={ id:b.id, tagLabel:tagMap[b.type], label:b.label, editing, viewing:!editing,
+      isAccount:b.type==='account', isSecret:b.type==='secret', isText:b.type==='text',
+      isField:b.type==='field', isImages:b.type==='images', isFiles:b.type==='files' };
+    if(b.type==='account'){ Object.assign(base,{ username:b.username, url:b.url, otp:!!b.otp,
+      passwordPlain:b.password, pwShown: revealed?b.password:mask, eyeIcon:revealed?'🙈':'👁', revealed,
+      toggleReveal:()=>this.toggleReveal(b.id), copyUser:()=>this.copy(b.username,'用户名已复制'),
+      copyPw:()=>this.copy(b.password,'密码已复制'), openUrl:()=>this.copy(b.url,'网址已复制'),
+      setUser:(e)=>this.editBlock(b.id,{username:e.target.value}), setPw:(e)=>this.editBlock(b.id,{password:e.target.value}), setUrl:(e)=>this.editBlock(b.id,{url:e.target.value}) }); }
+    if(b.type==='secret'){ Object.assign(base,{ passwordPlain:b.value, pwShown: revealed?b.value:mask, eyeIcon:revealed?'🙈':'👁', revealed,
+      toggleReveal:()=>this.toggleReveal(b.id), copyPw:()=>this.copy(b.value,'已复制'), setSecret:(e)=>this.editBlock(b.id,{value:e.target.value}) }); }
+    if(b.type==='text'){ base.text=b.text; base.setText=(e)=>this.editBlock(b.id,{text:e.target.value}); }
+    if(b.type==='field'){ base.value=b.value; base.copyVal=()=>this.copy(b.value,'已复制'); base.setValue=(e)=>this.editBlock(b.id,{value:e.target.value}); }
+    if(b.type==='images') base.imgs=b.imgs;
+    if(b.type==='files') base.files=b.files;
+    return base;
+  }
+
+  chipStyle(sel){
+    return {display:'flex',alignItems:'center',gap:'6px',padding:'8px 13px',borderRadius:'999px',fontSize:'13.5px',fontWeight:600,cursor:'pointer',flexShrink:0,transition:'all .15s ease',
+      background: sel?'var(--orange)':'var(--card)',
+      color: sel?'#fff':'var(--text)',
+      boxShadow: sel?'none':'0 1px 2px rgba(0,0,0,.05)'};
+  }
+
+  renderVals(){
+    const s=this.state, items=s.items;
+    const counts={}; items.forEach(it=>{ counts[it.typeId]=(counts[it.typeId]||0)+1; });
+    const favCount=items.filter(i=>i.fav).length;
+
+    const typeChips=s.types.map(t=>{
+      const sel=s.selTypeId===t.id;
+      const count= t.id==='all'?items.length : t.id==='fav'?favCount : (counts[t.id]||0);
+      return { id:t.id, name:t.name, icon:t.icon, count, showCount: !t.fixed,
+        style:this.chipStyle(sel),
+        onClick:()=>this.setState({selTypeId:t.id}),
+        onPress:()=>{ if(!t.fixed) this.pressStart(()=>this.openTypeActions(t.id)); },
+        onRelease:()=>this.pressEnd() };
+    });
+
+    let list=items.filter(it=>{ if(s.selTypeId==='fav') return it.fav; if(s.selTypeId!=='all') return it.typeId===s.selTypeId; return true; });
+    const q=s.search.trim().toLowerCase(); if(q) list=list.filter(it=>it.title.toLowerCase().includes(q));
+
+    const itemRows=list.map((it,i)=>{
+      const acc=it.blocks.find(b=>b.type==='account');
+      return { id:it.id, title:it.title, subtitle: acc?acc.username:this.typeName(it.typeId), icon:this.typeIcon(it.typeId),
+        favIcon: it.fav?'⭐':'', notLast: i<list.length-1,
+        onClick:()=>{ if(this._suppress){ this._suppress=false; return; } this.openDetail(it.id); },
+        onPress:()=>this.pressStart(()=>this.openActions(it.id)),
+        onRelease:()=>this.pressEnd() };
+    });
+
+    const selItem=items.find(i=>i.id===s.selItemId) || null;
+    let detail=null;
+    if(selItem){ detail={ id:selItem.id, title:selItem.title, favIcon: selItem.fav?'⭐':'☆', icon:this.typeIcon(selItem.typeId),
+      typeName:this.typeName(selItem.typeId), typeIcon:this.typeIcon(selItem.typeId), editWeight: s.editing?700:400,
+      onFav:()=>this.toggleFav(selItem.id), onDelete:()=>this.deleteItem(selItem.id),
+      blocks: selItem.blocks.map((b,i)=>{ const v=this.blockView(b); v.animStyle={animation:'blockIn .34s ease both', animationDelay:(i*55)+'ms'}; return v; }) }; }
+
+    // sheets
+    const shItem=items.find(i=>i.id===s.sheetItemId);
+    const sheet= shItem? { title:shItem.title, favLabel: shItem.fav?'取消收藏':'加入收藏',
+      onEdit:()=>{ this.openDetail(s.sheetItemId); this.setState({editing:true, sheet:null}); },
+      onFav:()=>{ this.toggleFav(s.sheetItemId); this.closeSheet(); },
+      onMove:()=>this.openMove(),
+      onDelete:()=>this.deleteItem(s.sheetItemId) } : {};
+    const moveTypes= s.types.filter(t=>!t.fixed).map(t=>({ id:t.id, icon:t.icon, name:t.name,
+      current: !!(shItem&&shItem.typeId===t.id), onMove:()=>this.moveItem(s.sheetItemId, t.id) }));
+    const shType=s.types.find(t=>t.id===s.sheetTypeId);
+    const typeSheet= shType? { name:shType.name, onRename:()=>this.startRename(shType.id), onDelete:()=>this.deleteType(shType.id) } : {};
+
+    return {
+      theme:s.theme, darkBool: s.theme==='dark', themeIcon: s.theme==='dark'?'☀️':'🌙',
+      isLock: s.screen==='lock', isList: s.screen==='list', isDetail: s.screen==='detail',
+      search:s.search, editing:s.editing, editLabel: s.editing?'完成':'编辑',
+      typeChips, itemRows, listEmpty: itemRows.length===0, itemCount: items.length,
+      detail, sheet, moveTypes, typeSheet,
+      sheetActions: s.sheet==='actions', sheetMove: s.sheet==='move', sheetType: s.sheet==='typeaction',
+      renameOpen: s.renameOpen, renameValue: s.renameValue,
+      toast:s.toast, showToast: !!s.toast,
+      onUnlock:()=>this.setState({screen:'list'}),
+      onBack:()=>this.setState({screen:'list', editing:false}),
+      toggleTheme:()=>this.setState(st=>({theme:st.theme==='dark'?'light':'dark'})),
+      toggleEdit:()=>this.setState(st=>({editing:!st.editing})),
+      onSearch:(e)=>this.setState({search:e.target.value}),
+      onAdd:()=>this.toast('已进入“添加记录”'),
+      closeSheet:()=>this.closeSheet(),
+      onRenameInput:(e)=>this.setState({renameValue:e.target.value}),
+      commitRename:()=>this.commitRename(),
+    };
+  }
+}
+</script>
+</body>
+</html>

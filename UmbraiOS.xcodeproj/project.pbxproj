@@ -28,6 +28,7 @@
 		A1000001266A000000000068 /* StringCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000069 /* StringCatalog.swift */; };
 		A1000001266A0000000000A0 /* InspirationsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000A1 /* InspirationsView.swift */; };
 		A1000001266A0000000000A2 /* InspirationsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000A3 /* InspirationsViewModel.swift */; };
+		A1000001266A0000000000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000077 /* Assets.xcassets */; };
 		A1000001266A000000000064 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000065 /* Localizable.xcstrings */; };
 		A1000001266A000000000066 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000067 /* InfoPlist.xcstrings */; };
 /* End PBXBuildFile section */
@@ -196,6 +197,7 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A1000001266A0000000000C0 /* Assets.xcassets in Resources */,
 				A1000001266A000000000064 /* Localizable.xcstrings in Resources */,
 				A1000001266A000000000066 /* InfoPlist.xcstrings in Resources */,
 			);
