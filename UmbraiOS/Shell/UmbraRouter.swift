@@ -84,6 +84,18 @@ enum UmbraRoute: Hashable {
         }
     }
 
+    /// 是不是保险箱子树。切后台时只有这些页面要盖住（见 UmbraShell 的遮盖层）。
+    var isVaultSubtree: Bool {
+        switch self {
+        case .vaultHome, .vaultCreate, .vaultKey, .vaultRecover, .vaultRecord, .vaultEdit,
+             .vaultGen, .vaultCheck, .vaultGroups, .vaultProfiles, .vaultTrash,
+             .vaultImport, .vaultSettings, .vaultPwd, .vaultAutofill:
+            return true
+        default:
+            return false
+        }
+    }
+
     /// 演示态：栈底是它时，返回要跳回主页而不是把栈退空。
     /// 原型里为这个专门写了兜底（「避免卡死」），自查清单第一条就是「每个演示态都要有出口」。
     var isDemo: Bool {

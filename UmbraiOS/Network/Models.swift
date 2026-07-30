@@ -119,3 +119,54 @@ struct Inspiration: Codable, Identifiable {
     let created_at: String?
     let updated_at: String?
 }
+
+// 工作区：AI 写文件的落地目录。手机上**只读**（新增/删除/打开位置都在电脑上做）。
+// 字段对应服务端 workspaces 表 + list_all 附带的两个统计列。
+struct Workspace: Codable, Identifiable {
+    let id: String
+    let name: String
+    let device_id: String
+    let dir: String?
+    let description: String?
+    /// auto = 任务自动建 | manual = 手动新增
+    let origin: String
+    let created_at: String?
+    let last_active_at: String?
+    var task_count: Int? = nil
+    var last_goal: String? = nil
+}
+
+/// GET/PUT/DELETE /profile 的响应体。
+struct ProfileBody: Codable {
+    let markdown: String
+}
+
+/// 一条常用语。updatedAt 是**毫秒**时间戳，合并时靠它比大小（和服务端 PhraseItem 一一对应）。
+struct Phrase: Codable, Identifiable, Equatable {
+    var id: String
+    var name: String
+    var content: String
+    var keyword: String?
+    var order: Int
+    var updatedAt: Int
+
+    /// 发给服务端的形状。keyword 为 nil 时不带这个键，避免服务端把 null 当成「清空关键字」。
+    var wire: [String: Any] {
+        var d: [String: Any] = ["id": id, "name": name, "content": content,
+                                "order": order, "updatedAt": updatedAt]
+        if let k = keyword, !k.isEmpty { d["keyword"] = k }
+        return d
+    }
+}
+
+/// 删除墓碑。没有它，A 端删掉的条目会被 B 端一推又复活。
+struct PhraseTomb: Codable, Identifiable, Equatable {
+    var id: String
+    var deletedAt: Int
+}
+
+/// /phrases 与 /phrases/sync 的响应体：合并后的全量 + 墓碑。
+struct PhraseBundle: Codable {
+    var items: [Phrase]
+    var deleted: [PhraseTomb]
+}

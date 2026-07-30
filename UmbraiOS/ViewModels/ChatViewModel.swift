@@ -27,11 +27,14 @@ class ChatViewModel: ObservableObject {
     }
 
     @Published var draft: String = ""
+    /// 对话模式：自动 / 聊天 / 执行。服务端 app.py 读 message 里的 mode 字段（auto / chat / execution）。
+    /// 存本地是因为它是「我这台设备当前怎么用秘书」，跨设备各选各的，不该跟着账号走。
+    @Published var mode: ChatMode = ChatMode(rawValue: UserDefaults.standard.string(forKey: "umbra.chat.mode") ?? "") ?? .auto {
+        didSet { UserDefaults.standard.set(mode.rawValue, forKey: "umbra.chat.mode") }
+    }
     @Published var isThinking: Bool = false
-    @Published var showAttachSheet: Bool = false
-    @Published var showVoiceOverlay: Bool = false
-    @Published var showLightbox: Bool = false
-    @Published var lightboxImageURL: String = ""
+    // showAttachSheet / showVoiceOverlay / showLightbox / lightboxImageURL 四个已删：
+    // 它们只被旧的 ChatView 用过，那个文件已经不在了。新的对话页用自己的 @State 管这些瞬时状态。
     @Published var confirmPending: ConfirmRequest?
 
     let ws = ChatWebSocket()
@@ -219,6 +222,13 @@ class ChatViewModel: ObservableObject {
         }
     }
 
+    /// 当前会话还能往前翻吗。不是 @Published，但它只在 blocks 变化时会变，
+    /// 而 blocks 是 @Published —— 读它的视图该刷新的时候都会刷新。
+    var canLoadOlder: Bool {
+        let s = store(activeConv)
+        return s.hasMoreHistory && !s.blocks.isEmpty
+    }
+
     func loadOlderHistory() async {
         let s = store(activeConv)
         guard !isLoadingHistory, s.hasMoreHistory, let beforeId = s.oldestId else { return }
@@ -264,7 +274,7 @@ class ChatViewModel: ObservableObject {
         s.assistantIdx = s.blocks.count - 1
         setPreview(conv, text, now)
         reflect(conv)
-        ws.sendMessage(text, conversation: conv)
+        ws.sendMessage(text, conversation: conv, mode: mode.rawValue)
         pendingConv = conv
         armReplyTimeout()
     }
@@ -309,6 +319,84 @@ class ChatViewModel: ObservableObject {
         ws.sendConfirm(taskId: taskId, approved: approved)
         resolveConfirm(taskId: taskId, approved: approved)
         confirmPending = nil
+    }
+
+    // MARK: - 问答卡
+    //
+    // 作答状态存在块里（见 QuestionBlock），这里只做「找到那张卡 → 改它 → 反映到 UI」。
+    // 每个方法都按 cardId 找，而不是按下标 —— 补拉历史会往前插消息，下标会整体位移。
+
+    private func mutateQuestion(_ cardId: String, _ body: (inout ChatBlock.QuestionBlock) -> Void) {
+        for (conv, s) in stores {
+            var changed = false
+            for i in s.blocks.indices {
+                if case .question(var q) = s.blocks[i], q.cardId == cardId {
+                    body(&q)
+                    s.blocks[i] = .question(q)
+                    changed = true
+                }
+            }
+            if changed { reflect(conv) }
+        }
+    }
+
+    /// 选一个选项。多选=切换；单选=替换（再点一次可以取消，和 PC 端一致）。
+    func pickAnswer(cardId: String, questionId: String, option: String, multi: Bool) {
+        mutateQuestion(cardId) { q in
+            guard !q.done else { return }
+            var cur = q.picked[questionId] ?? []
+            if multi {
+                if let k = cur.firstIndex(of: option) { cur.remove(at: k) } else { cur.append(option) }
+            } else {
+                cur = cur.contains(option) ? [] : [option]
+            }
+            q.picked[questionId] = cur
+        }
+    }
+
+    func setCustomAnswer(cardId: String, questionId: String, text: String) {
+        mutateQuestion(cardId) { q in
+            guard !q.done else { return }
+            q.custom[questionId] = text
+        }
+    }
+
+    /// 翻题。夹在 0…题数-1，越界就停在边界上（不要环绕，用户会以为提交了）。
+    func moveQuestion(cardId: String, by delta: Int) {
+        mutateQuestion(cardId) { q in
+            guard !q.done else { return }
+            q.at = min(max(0, q.at + delta), max(0, q.questions.count - 1))
+        }
+    }
+
+    /// 提交整张卡。必答题没答完就直接不提交 —— 界面上提交键此时是置灰的，
+    /// 这里是第二道闸（多端同时操作、或者题目在提交瞬间被改）。
+    func submitAnswers(cardId: String) {
+        var payload: [String: [String]] = [:]
+        var pairs: [(q: String, v: String)] = []
+        var ok = false
+        mutateQuestion(cardId) { q in
+            guard !q.done, q.allFilled else { return }
+            payload.removeAll()
+            pairs.removeAll()
+            for item in q.questions {
+                var vals = q.picked[item.id] ?? []
+                let c = (q.custom[item.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+                if !c.isEmpty { vals.append(c) }   // 自己填的与选项并存
+                payload[item.id] = vals
+                pairs.append((q: item.text, v: vals.isEmpty ? "（跳过）" : vals.joined(separator: "、")))
+            }
+            q.done = true
+            q.answered = pairs
+            ok = true
+        }
+        guard ok else { return }
+        ws.sendAnswers(cardId: cardId, answers: payload)
+    }
+
+    /// 别的端答完了：本端标成已完成。没有答案明细可展示，就不编 —— 只显示「已答完」。
+    private func resolveQuestion(cardId: String) {
+        mutateQuestion(cardId) { q in q.done = true }
     }
 
     // 总是允许：打开自动批准（“我的”里同步）+ 批准本次。
@@ -452,6 +540,45 @@ class ChatViewModel: ObservableObject {
                 }
             }
 
+        case "question_card":
+            // 问答卡不落 messages 表，只走广播；服务端会在新连接握手时补发未答的卡，
+            // 所以这里必须按 card_id 去重，否则重连一次就多出一张一模一样的卡。
+            if let cardId = msg.cardId, !cardId.isEmpty {
+                let conv = msg.conversation ?? ChatViewModel.mainConv
+                let s = store(conv)
+                let exists = s.blocks.contains {
+                    if case .question(let q) = $0 { return q.cardId == cardId } else { return false }
+                }
+                let items = (msg.cardQuestions ?? []).compactMap { ChatBlock.QuestionItem(json: $0) }
+                if !exists && !items.isEmpty {
+                    let title = msg.cardTitle ?? ""
+                    s.blocks.append(.question(ChatBlock.QuestionBlock(
+                        cardId: cardId, title: title, questions: items)))
+                    setPreview(conv, title.isEmpty ? "有几个问题要确认" : title,
+                               ISO8601DateFormatter().string(from: Date()))
+                    reflect(conv)
+                }
+            }
+
+        case "question_resolved":
+            // 别的端已经答过了 → 本端把卡标成已完成，别重复作答。
+            if let cardId = msg.cardId { resolveQuestion(cardId: cardId) }
+
+        case "history_cleared":
+            // 别的端清空了某个会话 → 本端同步清空，并留一行说明，
+            // 否则用户会以为是自己这边把消息弄丢了。
+            let conv = msg.conversation ?? ChatViewModel.mainConv
+            let s = store(conv)
+            s.blocks.removeAll()
+            s.assistantIdx = nil
+            s.jobMap.removeAll()
+            s.oldestId = nil
+            s.hasMoreHistory = false
+            s.loaded = true
+            previews[conv] = nil
+            s.blocks.append(.note(id: UUID(), text: "电脑端清空了这段聊天历史"))
+            reflect(conv)
+
         case "confirm_resolved":
             resolveConfirm(taskId: msg.taskId ?? "", approved: msg.confirmApproved ?? false)
 
@@ -557,6 +684,21 @@ class ChatViewModel: ObservableObject {
     }
 }
 
+// MARK: - 对话模式
+//
+// 取值是服务端约定的 auto / chat / execution；中文名只用于界面。
+enum ChatMode: String, CaseIterable, Hashable {
+    case auto, chat, execution
+
+    var label: String {
+        switch self {
+        case .auto: return "自动"
+        case .chat: return "聊天"
+        case .execution: return "执行"
+        }
+    }
+}
+
 // MARK: - Chat Blocks
 enum ChatBlock: Identifiable {
     case user(id: UUID, text: String, ts: String?)
@@ -566,6 +708,9 @@ enum ChatBlock: Identifiable {
     case done(id: UUID, goal: String, results: [[String: String]])
     case confirm(ConfirmBlock)
     case locate(LocateBlock)
+    case question(QuestionBlock)
+    /// 居中的一行系统说明（如「电脑端清空了这段聊天历史」）。不是气泡，不属于任何一方。
+    case note(id: UUID, text: String)
     case error(id: UUID, text: String)
 
     // 稳定 id：每个块创建时就固定，供 SwiftUI 做行身份识别。
@@ -578,6 +723,8 @@ enum ChatBlock: Identifiable {
         case .done(let id, _, _): return id.uuidString
         case .confirm(let c): return c.id.uuidString
         case .locate(let l): return l.id.uuidString
+        case .question(let q): return q.id.uuidString
+        case .note(let id, _): return id.uuidString
         case .error(let id, _): return id.uuidString
         }
     }
@@ -621,6 +768,64 @@ extension ChatBlock {
         var target: String
         var hint: String
         var resolved: LocateStatus?
+    }
+
+    /// 问答卡里的一道题。字段与服务端 questions.normalize() 的输出一一对应。
+    struct QuestionItem: Hashable, Identifiable {
+        var id: String
+        var text: String
+        var multi: Bool
+        var options: [String]
+        var optional: Bool
+        /// 服务端**强制**为 true（每题都留一个「自己填」的口子），这里仍然按收到的值走，
+        /// 不在客户端写死 —— 写死了协议改动就发现不了。
+        var allowCustom: Bool
+
+        init?(json: [String: Any]) {
+            guard let id = json["id"] as? String, let text = json["text"] as? String,
+                  !id.isEmpty, !text.isEmpty else { return nil }
+            self.id = id
+            self.text = text
+            self.multi = json["multi"] as? Bool ?? false
+            self.options = (json["options"] as? [String]) ?? []
+            self.optional = json["optional"] as? Bool ?? false
+            self.allowCustom = json["allow_custom"] as? Bool ?? true
+        }
+    }
+
+    /// 问答卡（QuestionCard）：分页式多题，一次性提交。
+    /// 作答过程（当前第几题 / 选了什么 / 自己填了什么）就存在这个块里 ——
+    /// 放 ViewModel 的全局字段会让两张同时在场的卡互相踩。
+    struct QuestionBlock: Hashable {
+        let id = UUID()
+        var cardId: String
+        var title: String
+        var questions: [QuestionItem]
+        /// 当前题序号。
+        var at: Int = 0
+        /// 题目 id → 选中的选项文本。
+        var picked: [String: [String]] = [:]
+        /// 题目 id → 自己填的内容。
+        var custom: [String: String] = [:]
+        /// 已提交（本端提交，或别的端先答了收到 question_resolved）。
+        var done: Bool = false
+        /// 提交后展示的「题 → 答」配对，供用户回看自己答了什么。
+        var answered: [(q: String, v: String)] = []
+
+        static func == (l: QuestionBlock, r: QuestionBlock) -> Bool {
+            l.id == r.id && l.at == r.at && l.picked == r.picked
+                && l.custom == r.custom && l.done == r.done
+                && l.answered.map(\.v) == r.answered.map(\.v)
+        }
+        func hash(into hasher: inout Hasher) { hasher.combine(id) }
+
+        /// 某题是否已经答了（可选题永远算答了）。
+        func filled(_ q: QuestionItem) -> Bool {
+            if q.optional { return true }
+            if !(picked[q.id] ?? []).isEmpty { return true }
+            return !(custom[q.id] ?? "").trimmingCharacters(in: .whitespaces).isEmpty
+        }
+        var allFilled: Bool { questions.allSatisfy { filled($0) } }
     }
 
     enum ConfirmStatus: Hashable { case approved, denied }

@@ -1,4 +1,4 @@
-import Foundation
+     import Foundation
 
 // MARK: - HTTP Service
 @MainActor
@@ -211,6 +211,69 @@ class HTTPService {
         }
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         return json?["text"] as? String ?? ""
+    }
+
+    // MARK: - Workspaces（工作区，手机上只读）
+    func fetchWorkspaces() async -> [Workspace] {
+        guard let url = URL(string: "\(baseUrl)/workspaces") else { return [] }
+        return await request(url) ?? []
+    }
+
+    // MARK: - Profile（用户画像）
+    func fetchProfile() async -> String {
+        guard let url = URL(string: "\(baseUrl)/profile") else { return "" }
+        let r: ProfileBody? = await request(url)
+        return r?.markdown ?? ""
+    }
+
+    /// 整篇覆盖保存。返回服务端回存后的内容（失败返回 nil，调用方据此提示）。
+    func saveProfile(_ markdown: String) async -> String? {
+        guard let url = URL(string: "\(baseUrl)/profile") else { return nil }
+        return await sendJSONReturning(url, method: "PUT", body: ["markdown": markdown], as: ProfileBody.self)?.markdown
+    }
+
+    /// 重置为空白模板。
+    func resetProfile() async -> String? {
+        guard let url = URL(string: "\(baseUrl)/profile") else { return nil }
+        return await sendJSONReturning(url, method: "DELETE", body: nil, as: ProfileBody.self)?.markdown
+    }
+
+    // MARK: - Phrases（常用语，双向同步）
+    func fetchPhrases() async -> PhraseBundle? {
+        guard let url = URL(string: "\(baseUrl)/phrases") else { return nil }
+        return await request(url)
+    }
+
+    /// 推本地全量（含墓碑）上去，服务端逐条 last-write-wins 合并后回全量。
+    /// 一次往返完成、没有冲突弹窗 —— 常用语条数少，这样最省心（和 PC 端同一套约定）。
+    func syncPhrases(items: [Phrase], deleted: [PhraseTomb]) async -> PhraseBundle? {
+        guard let url = URL(string: "\(baseUrl)/phrases/sync") else { return nil }
+        let body: [String: Any] = [
+            "items": items.map { $0.wire },
+            "deleted": deleted.map { ["id": $0.id, "deletedAt": $0.deletedAt] }
+        ]
+        return await sendJSONReturning(url, method: "POST", body: body, as: PhraseBundle.self)
+    }
+
+    /// 带返回值的 JSON 请求。原来的 sendJSON 只回一个 Bool，
+    /// 而画像保存和常用语同步都需要**服务端合并后的结果**（不是本地那份）。
+    private func sendJSONReturning<T: Decodable>(_ url: URL, method: String,
+                                                 body: [String: Any]?, as: T.Type) async -> T? {
+        var req = URLRequest(url: url)
+        req.httpMethod = method
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        if let body { req.httpBody = try? JSONSerialization.data(withJSONObject: body) }
+        do {
+            let (data, response) = try await URLSession.shared.data(for: req)
+            if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+                print("[HTTPService] \(url.path) 返回 HTTP \(http.statusCode)")
+                return nil
+            }
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            print("[HTTPService] \(url.path) 失败：\(error.localizedDescription)")
+            return nil
+        }
     }
 
     // MARK: - Generic

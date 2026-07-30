@@ -14,6 +14,9 @@ struct UmbraNavBar<Trailing: View>: View {
     var backLabel: String? = nil
     var title: String = ""
     var onBack: (() -> Void)? = nil
+    /// 返回箭头。编辑类页面左上角是**纯文字「取消」**（不是返回上一页，是放弃这次编辑），
+    /// 设计稿里那里没有箭头 —— 加了箭头会让人以为改的东西已经存下了。
+    var backChevron: Bool = true
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
@@ -22,7 +25,9 @@ struct UmbraNavBar<Trailing: View>: View {
             if let label = backLabel, let onBack {
                 Button(action: onBack) {
                     HStack(spacing: 1) {
-                        UmbraIcon(d: UmbraIconPath.chevronLeft, size: 20, strokeWidth: 2.4)
+                        if backChevron {
+                            UmbraIcon(d: UmbraIconPath.chevronLeft, size: 20, strokeWidth: 2.4)
+                        }
                         Text(label).font(UmbraFont.sans(16, .w400))
                     }
                     .foregroundColor(UmbraColor.orange)
@@ -58,8 +63,27 @@ struct UmbraNavBar<Trailing: View>: View {
 }
 
 extension UmbraNavBar where Trailing == EmptyView {
-    init(backLabel: String? = nil, title: String = "", onBack: (() -> Void)? = nil) {
-        self.init(backLabel: backLabel, title: title, onBack: onBack, trailing: { EmptyView() })
+    init(backLabel: String? = nil, title: String = "", onBack: (() -> Void)? = nil, backChevron: Bool = true) {
+        self.init(backLabel: backLabel, title: title, onBack: onBack,
+                  backChevron: backChevron, trailing: { EmptyView() })
+    }
+}
+
+/// 导航栏右侧的「⋯」。设计稿这里画的是三个**实心圆点**（`<circle fill>`），
+/// 不是描边图标 —— 全 App 唯一一处填充图形。
+struct UmbraNavDots: View {
+    var action: () -> Void
+    var body: some View {
+        Button(action: action) {
+            HStack(spacing: 4) {
+                ForEach(0..<3, id: \.self) { _ in
+                    Circle().fill(UmbraColor.orange).frame(width: 3.8, height: 3.8)
+                }
+            }
+            .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

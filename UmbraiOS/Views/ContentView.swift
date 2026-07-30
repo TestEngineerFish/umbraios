@@ -2,68 +2,31 @@ import SwiftUI
 
 /// 应用根视图。
 ///
-/// 现在有两套外壳并存：
-///  · **UmbraShell**（新）—— 按设计交接包重建的自绘外壳：5 个 Tab、栈式导航、
-///    统一的底部选择器 / 确认弹窗 / toast。页面内容按 README 的顺序在第 3–5 步逐个补齐。
-///  · **旧的系统 TabView** —— 现有的 ChatView / TasksView / InspirationsView /
-///    AbilitiesView / MeView，功能是通的。
+/// 五个 Tab 的页面都已经按设计交接包重建完（聊天 / 提醒 / 任务 / 灵感 / 我），
+/// 所以**旧的系统 TabView 外壳（legacyShell）连同 useNewShell 开关已经删掉** ——
+/// 两套外壳长期并存必然分叉，这是当初留开关时就写明的退出条件。
 ///
-/// 之所以留着开关而不是直接删掉旧的：新外壳的页面还没建完，
-/// 期间如果需要用真实功能（比如联调服务端），把 useNewShell 改成 false 就能切回去。
-/// **页面建完后请删掉这个开关和旧的 legacyShell**，两套外壳长期并存必然分叉。
+/// 旧的页面文件（ChatView / TasksView / InspirationsView / AbilitiesView / MeView）
+/// 暂时还在工程里：ChatView 里的 LocateCard（电脑操作的箭头指位）还在被新对话页复用，
+/// 等那块出了 iOS 设计稿、按新语言重做之后，这几个文件可以一起删。
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var languageManager: LanguageManager
     @StateObject private var viewModel = ChatViewModel()
 
-    /// true = 新外壳（设计交接包），false = 旧的系统 TabView。
-    private let useNewShell = true
+    /// 实际生效的浅深色。设置页写的是 UmbraAppearance，这里读出来同步给 AppState.isDarkMode —— // 旧页面（保险箱）用的是 UmbraColors(isDark:)，需要这个布尔值。
+    /// 只在这一处同步，避免两个地方各存一份「现在是不是深色」。
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
-        if useNewShell {
-            UmbraShell()
-                .environmentObject(viewModel)
-        } else {
-            legacyShell
-        }
+        UmbraShell()
+            .environmentObject(viewModel)
+            .onAppear { syncDark() }
+            .onChange(of: colorScheme) { _ in syncDark() }
     }
 
-    // MARK: - 旧外壳（过渡期保留）
-    private var legacyShell: some View {
-        // 依赖 localeRevision，确保切换语言后 Tab 文案刷新
-        let _ = languageManager.localeRevision
-        return TabView {
-            ChatView(viewModel: viewModel)
-                .tabItem {
-                    Image(systemName: "bubble.left.and.bubble.right")
-                    Text(L("tab.chat"))
-                }
-
-            TasksView()
-                .tabItem {
-                    Image(systemName: "list.bullet.clipboard")
-                    Text(L("tab.tasks"))
-                }
-
-            InspirationsView()
-                .tabItem {
-                    Image(systemName: "lightbulb")
-                    Text(L("tab.inspiration"))
-                }
-
-            AbilitiesView()
-                .tabItem {
-                    Image(systemName: "square.grid.2x2")
-                    Text(L("tab.skills"))
-                }
-
-            MeView()
-                .tabItem {
-                    Image(systemName: "person.crop.circle")
-                    Text(L("tab.me"))
-                }
-        }
-        .tint(Color.umbraOrange)
-        .environmentObject(viewModel)
+    private func syncDark() {
+        let dark = colorScheme == .dark
+        if appState.isDarkMode != dark { appState.isDarkMode = dark }
     }
 }

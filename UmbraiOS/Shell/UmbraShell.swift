@@ -6,10 +6,30 @@ import SwiftUI
 
 struct UmbraShell: View {
     @StateObject private var router = UmbraRouter()
+    /// 任务 / 灵感的数据源挂在外壳上，而不是各页自己新建：
+    /// 列表和详情共用同一份数据，各建各的会出现「详情里改了状态，退回列表还是旧的」。
+    @StateObject private var tasks = TasksViewModel()
+    @StateObject private var inspirations = InspirationsViewModel()
+    /// 保险箱的数据源与会话（软锁 / 自动锁定 / Face ID）也挂在外壳上：
+    /// 首页、详情、编辑、体检是四个独立路由，各建各的 store 会各解各的锁。
+    @StateObject private var vault = VaultStore()
+    @StateObject private var vaultSession = UmbraVaultSession()
+    @EnvironmentObject private var chat: ChatViewModel
 
-    /// 底栏角标。一期还是设计稿里的种子值；接了真实数据之后这里要换成
-    /// 「未读会话数 / 待办提醒数」的真实来源，别把 mock 留在发版里。
-    private var badges: [UmbraTab: Int] { [.chat: 2, .reminder: 1] }
+    @ObservedObject private var reminders = ReminderStore.shared
+    @ObservedObject private var deepLink = UmbraDeepLink.shared
+    @Environment(\.scenePhase) private var scenePhase
+
+    /// 底栏角标，两个都是真实数据：
+    ///   聊天 = 有新消息的**会话数**（ChatViewModel.unread 是会话集合，服务端没给条数，不编）；
+    ///   提醒 = 已过期 + 今天到点的待办数（「更远」的不该顶个红点催人）。
+    private var badges: [UmbraTab: Int] {
+        var out: [UmbraTab: Int] = [:]
+        if !chat.unread.isEmpty { out[.chat] = chat.unread.count }
+        let due = reminders.items.filter { !$0.done && ($0.group == "已过期" || $0.group == "今天") }.count
+        if due > 0 { out[.reminder] = due }
+        return out
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,6 +38,10 @@ struct UmbraShell: View {
                 // push / pop 也能各自播一次动画。
                 UmbraRouteView(route: router.current)
                     .environmentObject(router)
+                    .environmentObject(tasks)
+                    .environmentObject(inspirations)
+                    .environmentObject(vault)
+                    .environmentObject(vaultSession)
                     .id("\(router.stack.count)-\(String(describing: router.current))")
                     .transition(.asymmetric(
                         insertion: .move(edge: router.goingBack ? .leading : .trailing).combined(with: .opacity),
@@ -37,7 +61,21 @@ struct UmbraShell: View {
         }
         .background(UmbraColor.bg)
         .umbraOverlays(router)
+        // 后台遮盖是**真功能**不是演示：切后台时系统会给当前屏幕截一张图放进多任务卡片，
+        // 保险箱页面被截进去等于密码泄漏。只在保险箱子树里盖 —— 别的页面盖了纯属打扰。
+        .overlay {
+            if scenePhase != .active && router.current.isVaultSubtree && vaultSession.maskEnabled {
+                UmbraMaskScreen()
+            }
+        }
         .environmentObject(router)
+        // 通知里点开的那条提醒：切到提醒 Tab 再推详情，这样返回是回提醒列表而不是空栈。
+        .onChange(of: deepLink.route) { route in
+            guard let route else { return }
+            deepLink.route = nil
+            router.root(route.tab)
+            if route != route.tab.root { router.go(route) }
+        }
     }
 }
 
@@ -55,88 +93,88 @@ struct UmbraRouteView: View {
         // ── Tab 根页（第 3–5 步逐个替换成真实实现）
         case .chatContacts:
             UmbraChatContactsView()
-        case .chatThread:
-            placeholder("对话", "下指令、问答卡、任务进度卡、按住说话", step: 3)
+        case .chatThread(let conv):
+            UmbraChatThreadView(conv: conv)
 
         case .remList:
-            placeholder("提醒", "按日期分组、左滑完成/删除、下拉向服务端补拉", step: 4)
-        case .remDetail:
-            placeholder("提醒详情", "标题、时间、重复、备注、关联任务", step: 4)
-        case .remEdit:
-            placeholder("新建提醒", "标题、时间、重复、备注", step: 4)
+            UmbraReminderListView()
+        case .remDetail(let id):
+            UmbraReminderDetailView(id: id)
+        case .remEdit(let id):
+            UmbraReminderEditView(id: id)
 
         case .taskList:
-            placeholder("任务", "历史 / 计划两段 + 状态筛选", step: 4)
-        case .taskDetail:
-            placeholder("任务详情", "进度、步骤时间线、过程截图、产出文件", step: 4)
+            UmbraTaskListView()
+        case .taskDetail(let id):
+            UmbraTaskDetailView(id: id)
 
         case .inspList:
-            placeholder("灵感", "标签筛选 + 卡片流", step: 4)
-        case .inspDetail:
-            placeholder("灵感详情", "原文 / 秘书整理 / 标签 / 发到聊天", step: 4)
-        case .inspEdit:
-            placeholder("记一条灵感", "正文 + 标签（重复标签要拦住）", step: 4)
+            UmbraInspirationListView()
+        case .inspDetail(let id):
+            UmbraInspirationDetailView(id: id)
+        case .inspEdit(let id):
+            UmbraInspirationEditView(id: id)
 
         case .meHome:
-            placeholder("我", "分组入口：保险箱、常用语、设备与能力…", step: 4)
+            UmbraMeHomeView()
         case .mePhrases:
-            placeholder("常用语", "列表 + 两步新建", step: 4)
+            UmbraPhrasesView()
         case .meDevices:
-            placeholder("设备与能力", "设备行（在线/离线 + 最后在线）", step: 4)
-        case .deviceDetail:
-            placeholder("设备详情", "只读：系统、版本、能力、授权", step: 4)
+            UmbraDevicesView()
+        case .deviceDetail(let id):
+            UmbraDeviceDetailView(id: id)
         case .meCaps:
-            placeholder("能力", "只读 provider / skill 清单", step: 4)
+            UmbraCapabilitiesView()
         case .meWorkspace:
-            placeholder("工作区", "只读目录 + 复制路径", step: 4)
+            UmbraWorkspaceView()
         case .meProfile:
-            placeholder("用户画像", "Markdown 编辑 / 重置为空白模板", step: 4)
+            UmbraProfileView()
         case .setConn:
-            placeholder("连接", "服务端地址、访问 Token、保存并重连", step: 4)
+            UmbraConnSettingsView()
         case .setNotify:
-            placeholder("通知", "系统权限、分类开关、免打扰时段", step: 4)
+            UmbraNotifySettingsView()
         case .setGeneral:
-            placeholder("通用", "外观、语言", step: 4)
+            UmbraGeneralSettingsView()
         case .setAbout:
-            placeholder("关于", "版本、协议、日志", step: 4)
+            UmbraAboutView()
 
         // ── 保险箱子树（第 5 步）
         case .vaultHome:
-            placeholder("密码保险箱", "上锁态 / 解锁态、身份库、搜索、安全体检", step: 5)
+            UmbraVaultHomeView()
         case .vaultCreate:
-            placeholder("创建保险箱", "设主密码 + 强度校验", step: 5)
+            UmbraVaultCreateView()
         case .vaultKey:
-            placeholder("Secret Key 备份", "展示 / 复制 / 存文件", step: 5)
+            UmbraVaultKeyView()
         case .vaultRecover:
-            placeholder("用 Secret Key 恢复", "格式错误走错误三段式", step: 5)
-        case .vaultRecord:
-            placeholder("记录详情", "字段行、两步验证码、附件", step: 5)
-        case .vaultEdit:
-            placeholder("编辑记录", "控件卡片堆叠 + 添加控件", step: 5)
+            UmbraVaultRecoverView()
+        case .vaultRecord(let id):
+            UmbraVaultRecordView(id: id)
+        case .vaultEdit(let id):
+            UmbraVaultEditView(id: id)
         case .vaultGen:
-            placeholder("密码生成器", "长度滑块、字符集、强度条", step: 5)
+            UmbraVaultGenView()
         case .vaultCheck:
-            placeholder("安全体检", "分数环 + 重复/弱/未开两步验证", step: 5)
+            UmbraVaultCheckView()
         case .vaultGroups:
-            placeholder("分组管理", "新建 / 改名 / 删除", step: 5)
+            UmbraVaultGroupsView()
         case .vaultProfiles:
-            placeholder("身份库管理", "新建 / 改名 / 删除", step: 5)
+            UmbraVaultProfilesView()
         case .vaultTrash:
-            placeholder("回收站", "恢复 / 彻底删除", step: 5)
+            UmbraVaultTrashView()
         case .vaultImport:
-            placeholder("导入结果", "汇总 + 去电脑上处理", step: 5)
+            UmbraVaultImportView()
         case .vaultSettings:
-            placeholder("保险箱设置", "自动锁定、切后台遮盖、Face ID", step: 5)
+            UmbraVaultSettingsView()
         case .vaultPwd:
-            placeholder("修改主密码", "旧密码 → 新密码 → 重新生成 Secret Key", step: 5)
+            UmbraVaultPasswordView()
 
         // ── 系统形态演示（第 6 步）
         case .lockScreen:
-            placeholder("锁屏通知", "深色玻璃卡 + 去确认 / 稍后", step: 6)
+            UmbraLockScreenDemo()
         case .vaultAutofill:
-            placeholder("系统密码填充面板", "底部半屏、锁定态先 Face ID", step: 6)
+            UmbraAutoFillDemoView()
         case .vaultMask:
-            placeholder("后台遮盖", "页面底 + 52px 橙色字标 U", step: 6)
+            UmbraMaskScreen()
         }
     }
 

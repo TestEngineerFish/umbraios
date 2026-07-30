@@ -71,14 +71,17 @@ class ChatWebSocket: ObservableObject {
 
     /// conversation：'assistant' 主会话；'device:<id>' = 在某台设备的聊天窗口里说话
     /// （服务端会把「目标设备=这台」注入上下文，端侧任务直接派给它）。
-    func sendMessage(_ content: String, conversation: String = "assistant") {
+    /// mode：三态 auto / chat / execution，对应输入框左侧的「自动 / 聊天 / 执行」切换。
+    /// 服务端 app.py 读的就是这个字段，缺省 auto。
+    func sendMessage(_ content: String, conversation: String = "assistant", mode: String = "auto") {
         guard let task = webSocketTask, task.state == .running else { return }
         let msg: [String: Any] = [
             "type": "message",
             "content": content,
             "client_id": clientId,
             "auto_approve_operate": NetworkConfig.shared.autoApproveOperate,
-            "conversation": conversation
+            "conversation": conversation,
+            "mode": mode
         ]
         sendJSON(msg)
     }
@@ -125,6 +128,14 @@ class ChatWebSocket: ObservableObject {
 
     func sendNewSession() {
         sendMessage("/new")
+    }
+
+    /// 问答卡一次性提交（多题一起交，和 PC 端同一个协议）。
+    /// answers 的形状是「题目 id → 选中项数组」；自己填的内容作为**额外一项**追加进数组，
+    /// 而不是替换掉选项 —— 用户总有你没想到的答案，两者并存服务端才拼得出完整上下文。
+    func sendAnswers(cardId: String, answers: [String: [String]]) {
+        guard let task = webSocketTask, task.state == .running else { return }
+        sendJSON(["type": "question_answer", "card_id": cardId, "answers": answers])
     }
 
     // MARK: - Private
@@ -246,6 +257,13 @@ struct ChatMessage {
     var chatRole: String? { json["role"] as? String }
     var chatText: String? { json["text"] as? String }
     var created_at: String? { json["created_at"] as? String }
+
+    // question_card（问答卡：秘书在派活之前把歧义问清楚）
+    var cardId: String? { json["card_id"] as? String }
+    var cardTitle: String? { json["title"] as? String }
+    /// 服务端已经把题目规整过（补齐 id / options / optional / allow_custom），这里只做类型转换，
+    /// **不再补默认值** —— 客户端自己猜默认值会和服务端的规整规则慢慢分叉。
+    var cardQuestions: [[String: Any]]? { json["questions"] as? [[String: Any]] }
 
     // 会话归属（job_update 带 'device:<id>'；无则视为主会话 'assistant'）
     var conversation: String? { json["conversation"] as? String }

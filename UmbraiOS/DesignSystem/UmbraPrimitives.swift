@@ -408,6 +408,9 @@ struct UmbraStatusBarChip: View {
 struct UmbraProgressBar: View {
     var progress: Double
     var color: Color = UmbraColor.orange
+    /// 默认 4（token 值）。任务详情的「总进度」在设计稿里是 8 ——
+    /// 同一个组件两个高度，所以做成参数而不是复制一份组件。
+    var height: CGFloat = UmbraMetric.progressH
 
     var body: some View {
         GeometryReader { geo in
@@ -417,7 +420,7 @@ struct UmbraProgressBar: View {
                 Capsule().fill(color).frame(width: geo.size.width * p)
             }
         }
-        .frame(height: UmbraMetric.progressH)
+        .frame(height: height)
     }
 }
 
@@ -513,5 +516,153 @@ struct UmbraEmptyState: View {
         .padding(.horizontal, 34)
         .padding(.vertical, 60)
         .frame(maxWidth: .infinity)
+    }
+}
+
+// MARK: - 搜索框
+//
+// 任务列表、灵感列表、保险箱都用它。高 38、--chip 底、圆角 10、左右 12、图标 16、文字 15。
+// 右侧可以挂一段小字（灵感列表挂的是当前排序方式）。
+struct UmbraSearchField: View {
+    let placeholder: String
+    @Binding var text: String
+    /// 右侧的一小段说明文字，nil = 不显示。
+    var trailingNote: String? = nil
+
+    var body: some View {
+        HStack(spacing: 8) {
+            UmbraIcon(d: UmbraIconPath.search, size: 16, strokeWidth: 2)
+                .foregroundColor(UmbraColor.faint)
+            TextField(placeholder, text: $text)
+                .font(UmbraFont.sans(15, .w400))
+                .foregroundColor(UmbraColor.text)
+                .textFieldStyle(.plain)
+                .autocorrectionDisabled(true)
+            if !text.isEmpty {
+                // 清空按钮：搜索框里没有清空键的话，用户只能一个字一个字删。
+                Button { text = "" } label: {
+                    UmbraIcon(d: UmbraIconPath.xCircle, size: 16, strokeWidth: 1.9)
+                        .foregroundColor(UmbraColor.faint)
+                        .frame(width: 28, height: 28)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            } else if let note = trailingNote {
+                Text(note)
+                    .font(UmbraFont.sans(12, .w400))
+                    .foregroundColor(UmbraColor.faint)
+            }
+        }
+        .padding(.horizontal, UmbraMetric.sp4)
+        .frame(height: 38)
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous).fill(UmbraColor.chip))
+    }
+}
+
+// MARK: - 筛选胶囊行
+//
+// 横向可滚动的一排胶囊（任务的状态筛选、灵感的分类筛选）。
+// 用 ScrollView 而不是换行的 FlowLayout：设计稿是「一行放不下就横滑」，
+// 换行会让筛选条在标签多的时候把列表挤下去半屏。
+struct UmbraFilterChips<T: Hashable>: View {
+    struct Item: Identifiable {
+        let value: T
+        let label: String
+        var count: Int? = nil
+        var id: T { value }
+    }
+
+    let items: [Item]
+    @Binding var selection: T
+
+    var body: some View {
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 7) {
+                ForEach(items) { item in
+                    UmbraTagPill(text: item.label,
+                                 selected: item.value == selection,
+                                 count: item.count) {
+                        selection = item.value
+                    }
+                }
+            }
+            .padding(.horizontal, UmbraMetric.pagePadX)
+        }
+    }
+}
+
+// MARK: - 左滑操作行（SwipeActionRow）
+//
+// 行底露出操作块，行本体 translateX，松手 .16s cubic-bezier(.2,.8,.3,1) 回弹（UmbraMotion.swipe）。
+// 不用系统的 .swipeActions：它只在 List 里生效，而这里的列表是 ScrollView + VStack
+//（设计稿的分组间距、卡片圆角、分组标题样式都做不到系统 List 里）。
+//
+// 只支持右侧操作 —— 设计稿里左滑露出的都在右边，没有左侧操作的场景。
+struct UmbraSwipeAction: Identifiable {
+    let id = UUID()
+    let label: String
+    let width: CGFloat
+    let background: Color
+    let action: () -> Void
+}
+
+struct UmbraSwipeRow<Content: View>: View {
+    let actions: [UmbraSwipeAction]
+    @ViewBuilder var content: () -> Content
+
+    @State private var offset: CGFloat = 0
+    @State private var opened = false
+
+    private var total: CGFloat { actions.reduce(0) { $0 + $1.width } }
+
+    var body: some View {
+        ZStack(alignment: .trailing) {
+            HStack(spacing: 0) {
+                ForEach(actions) { a in
+                    Button {
+                        close()
+                        a.action()
+                    } label: {
+                        Text(a.label)
+                            .font(UmbraFont.sans(12.5, .w560))
+                            .foregroundColor(.white)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(12.5 * 0.35)
+                            .frame(width: a.width)
+                            .frame(maxHeight: .infinity)
+                            .background(a.background)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            content()
+                .background(UmbraColor.bg)   // 不透明，否则滑动时能看见底下的操作块透上来
+                .offset(x: offset)
+                .gesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { g in
+                            // 只跟手往左；往右最多回到 0（没有左侧操作）。
+                            let base = opened ? -total : 0
+                            offset = min(0, max(-total - 24, base + g.translation.width))
+                        }
+                        .onEnded { g in
+                            let shouldOpen = (offset + g.predictedEndTranslation.width * 0.2) < -total / 2
+                            withAnimation(UmbraMotion.swipe) {
+                                opened = shouldOpen
+                                offset = shouldOpen ? -total : 0
+                            }
+                        }
+                )
+        }
+        .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous))
+    }
+
+    private func close() {
+        withAnimation(UmbraMotion.swipe) {
+            opened = false
+            offset = 0
+        }
     }
 }
