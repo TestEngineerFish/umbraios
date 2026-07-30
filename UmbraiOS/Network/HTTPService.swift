@@ -24,13 +24,13 @@ class HTTPService {
         if let beforeId { items.append(URLQueryItem(name: "before_id", value: String(beforeId))) }
         components?.queryItems = items
 
-        return await request(components?.url)
+        return await request(components?.url) ?? []
     }
 
     // MARK: - Conversations
     func fetchConversations() async -> [ConversationRow] {
         guard let url = URL(string: "\(baseUrl)/conversations") else { return [] }
-        return await request(url)
+        return await request(url) ?? []
     }
 
     // 清空指定会话历史（默认主会话；传 device:<id> 清某设备房间）。
@@ -51,7 +51,7 @@ class HTTPService {
         if let status { items.append(URLQueryItem(name: "status", value: status)) }
         components?.queryItems = items
 
-        return await request(components?.url)
+        return await request(components?.url) ?? []
     }
 
     func fetchJobDetail(id: String) async -> JobDetail? {
@@ -127,7 +127,7 @@ class HTTPService {
     // MARK: - Capabilities
     func fetchCapabilities() async -> [Capability] {
         guard let url = URL(string: "\(baseUrl)/capabilities") else { return [] }
-        return await request(url)
+        return await request(url) ?? []
     }
 
     // MARK: - Devices
@@ -139,7 +139,7 @@ class HTTPService {
     /// 所有已知设备（含离线），聊天页的联系人列表。
     func fetchAllDevices() async -> [KnownDevice] {
         guard let url = URL(string: "\(baseUrl)/devices/all") else { return [] }
-        return await request(url)
+        return await request(url) ?? []
     }
 
     /// 把某台（离线的）设备从联系人列表移除。
@@ -214,26 +214,37 @@ class HTTPService {
     }
 
     // MARK: - Generic
-    private func request<T: Decodable>(_ url: URL?) async -> T {
+    //
+    // 返回 T? 而不是 T。原来的签名是 `-> T`（不抛、不可空），于是请求失败时它没有任何
+    // 合法的 T 可以返回，只能靠一张写死的类型白名单硬凑一个空数组，落到白名单之外就
+    // `try! JSONDecoder().decode(T.self, from: Data())` —— 空 Data 解码**必然抛**，
+    // try! 把它变成 fatalError，整个 App 当场崩。
+    //
+    // 实际炸的是 fetchAllDevices（[KnownDevice] 不在白名单里）：首次启动连不上服务端就崩。
+    // 但这跟网络权限只是巧合关系 —— 超时、500、JSON 格式变了、切了 VPN，任何一种失败都会
+    // 走到同一行。而且那张白名单是「按构造就会过期」的东西：以后每加一个模型类型，
+    // 就多一颗只在网络不好时才引爆的雷。
+    //
+    // 现在：失败一律返回 nil，由调用方决定兜底值（数组给 []，详情给 nil）。
+    // 顺带把失败原因打出来 —— 原来是静默吞掉的，线上只能看到「列表是空的」，查不出为什么。
+    private func request<T: Decodable>(_ url: URL?) async -> T? {
         guard let url else {
-            // Return empty for array types
-            if T.self == [HistoryMessage].self { return [] as! T }
-            if T.self == [Job].self { return [] as! T }
-            if T.self == [Capability].self { return [] as! T }
-            if T.self == [ConversationRow].self { return [] as! T }
-            fatalError("Unexpected type")
+            print("[HTTPService] 请求地址拼不出来（检查设置里的服务端地址）")
+            return nil
         }
         do {
             var urlRequest = URLRequest(url: url)
             for (key, value) in headers { urlRequest.setValue(value, forHTTPHeaderField: key) }
-            let (data, _) = try await URLSession.shared.data(for: urlRequest)
+            let (data, response) = try await URLSession.shared.data(for: urlRequest)
+            if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
+                // 4xx/5xx 的响应体多半不是目标结构，硬解只会得到一个更难懂的解码错误。
+                print("[HTTPService] \(url.path) 返回 HTTP \(http.statusCode)")
+                return nil
+            }
             return try JSONDecoder().decode(T.self, from: data)
         } catch {
-            if T.self == [HistoryMessage].self { return [] as! T }
-            if T.self == [Job].self { return [] as! T }
-            if T.self == [Capability].self { return [] as! T }
-            if T.self == [ConversationRow].self { return [] as! T }
-            return try! JSONDecoder().decode(T.self, from: Data())
+            print("[HTTPService] \(url.path) 失败：\(error.localizedDescription)")
+            return nil
         }
     }
 
