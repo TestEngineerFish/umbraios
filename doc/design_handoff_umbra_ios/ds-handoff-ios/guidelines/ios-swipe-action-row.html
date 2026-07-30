@@ -1,0 +1,26 @@
+<!-- @dsCard group="iOS Components" viewport="620x200" name="SwipeActionRow 左滑操作行" subtitle="行底露出 88/80px 操作块" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div style="border:1px solid var(--border);border-radius:var(--radius-xl);overflow:hidden;background:var(--card)">
+  <div style="position:relative;height:60px;overflow:hidden">
+    <div style="position:absolute;inset:0;display:flex;justify-content:flex-end">
+      <span style="width:88px;background:var(--warning);color:#fff;display:flex;align-items:center;justify-content:center;font:560 13px var(--font-sans)">归档</span>
+      <span style="width:80px;background:var(--danger);color:#fff;display:flex;align:center;align-items:center;justify-content:center;font:560 13px var(--font-sans)">删除</span>
+    </div>
+    <div style="position:absolute;inset:0;background:var(--card);transform:translateX(-168px);transition:transform .16s cubic-bezier(.2,.8,.3,1);display:flex;flex-direction:column;justify-content:center;padding:0 var(--page-pad-x)">
+      <span style="font:560 16px var(--font-sans)">周报整理</span>
+      <span style="font-size:13px;color:var(--muted)">正在写第 2 节 · 已用 1分12秒</span>
+    </div>
+  </div>
+</div>
+<p class="note">行本体 <code>transform:translateX()</code>，回弹 <code>.16s cubic-bezier(.2,.8,.3,1)</code>。破坏性动作只在这里、长按菜单、右上菜单出现，不占详情页底部；删除仍需确认弹窗。</p>

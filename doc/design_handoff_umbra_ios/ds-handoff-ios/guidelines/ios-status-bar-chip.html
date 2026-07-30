@@ -1,0 +1,18 @@
+<!-- @dsCard group="iOS Components" viewport="620x150" name="StatusBarChip 连接状态行" subtitle="分组标题右侧一行小字，不占整行" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div style="display:flex;align-items:baseline;justify-content:space-between;padding:0 var(--page-pad-x)">
+  <span style="font:600 16px var(--font-sans)">今天的任务</span>
+  <span style="display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)"><span style="width:7px;height:7px;border-radius:999px;background:var(--success);flex:none"></span>已连接 · 3 台设备在线</span>
+</div>
+<p class="note">替代占一整行的状态卡。状态点 + 一行小字，永不只靠颜色——离线/异常时文字必须写明原因（<code>连不上服务端 · 上次同步 14:20</code>）。</p>

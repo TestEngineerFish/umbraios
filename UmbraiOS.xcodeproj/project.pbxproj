@@ -31,6 +31,14 @@
 		A1000001266A0000000000C0 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000077 /* Assets.xcassets */; };
 		A1000001266A000000000064 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000065 /* Localizable.xcstrings */; };
 		A1000001266A000000000066 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = A1000001266A000000000067 /* InfoPlist.xcstrings */; };
+		A1000001266A0000000000D0 /* UmbraTokens.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000D1 /* UmbraTokens.swift */; };
+		A1000001266A0000000000D2 /* UmbraIconPath.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000D3 /* UmbraIconPath.swift */; };
+		A1000001266A0000000000D4 /* UmbraIcon.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000D5 /* UmbraIcon.swift */; };
+		A1000001266A0000000000D6 /* UmbraPrimitives.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000D7 /* UmbraPrimitives.swift */; };
+		A1000001266A0000000000E0 /* UmbraChrome.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000E1 /* UmbraChrome.swift */; };
+		A1000001266A0000000000E2 /* UmbraOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000E3 /* UmbraOverlays.swift */; };
+		A1000001266A0000000000E4 /* UmbraRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000E5 /* UmbraRouter.swift */; };
+		A1000001266A0000000000E6 /* UmbraShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000E7 /* UmbraShell.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -58,6 +66,14 @@
 		A1000001266A0000000000A3 /* InspirationsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = InspirationsViewModel.swift; sourceTree = "<group>"; };
 		A1000001266A000000000065 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		A1000001266A000000000067 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
+		A1000001266A0000000000D1 /* UmbraTokens.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraTokens.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000D3 /* UmbraIconPath.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraIconPath.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000D5 /* UmbraIcon.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraIcon.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000D7 /* UmbraPrimitives.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraPrimitives.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000E1 /* UmbraChrome.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraChrome.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000E3 /* UmbraOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraOverlays.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000E5 /* UmbraRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraRouter.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000E7 /* UmbraShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraShell.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -65,6 +81,8 @@
 			isa = PBXGroup;
 			children = (
 				A1000001266A000000000031 /* UmbraiOSApp.swift */,
+				A1000001266A0000000000DA /* DesignSystem */,
+				A1000001266A0000000000EA /* Shell */,
 				A1000001266A000000000070 /* Views */,
 				A1000001266A000000000071 /* ViewModels */,
 				A1000001266A000000000072 /* Network */,
@@ -143,6 +161,28 @@
 		};
 		A1000001266A000000000076 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A1000001266A000000000077 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		A1000001266A0000000000DA /* DesignSystem */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001266A0000000000D1 /* UmbraTokens.swift */,
+				A1000001266A0000000000D3 /* UmbraIconPath.swift */,
+				A1000001266A0000000000D5 /* UmbraIcon.swift */,
+				A1000001266A0000000000D7 /* UmbraPrimitives.swift */,
+				A1000001266A0000000000E1 /* UmbraChrome.swift */,
+				A1000001266A0000000000E3 /* UmbraOverlays.swift */,
+			);
+			path = UmbraiOS/DesignSystem;
+			sourceTree = "<group>";
+		};
+		A1000001266A0000000000EA /* Shell */ = {
+			isa = PBXGroup;
+			children = (
+				A1000001266A0000000000E5 /* UmbraRouter.swift */,
+				A1000001266A0000000000E7 /* UmbraShell.swift */,
+			);
+			path = UmbraiOS/Shell;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -224,6 +264,14 @@
 				A1000001266A000000000050 /* HTTPService.swift in Sources */,
 				A1000001266A000000000052 /* ChatWebSocket.swift in Sources */,
 				A1000001266A000000000054 /* Models.swift in Sources */,
+				A1000001266A0000000000D0 /* UmbraTokens.swift in Sources */,
+				A1000001266A0000000000D2 /* UmbraIconPath.swift in Sources */,
+				A1000001266A0000000000D4 /* UmbraIcon.swift in Sources */,
+				A1000001266A0000000000D6 /* UmbraPrimitives.swift in Sources */,
+				A1000001266A0000000000E0 /* UmbraChrome.swift in Sources */,
+				A1000001266A0000000000E2 /* UmbraOverlays.swift in Sources */,
+				A1000001266A0000000000E4 /* UmbraRouter.swift in Sources */,
+				A1000001266A0000000000E6 /* UmbraShell.swift in Sources */,
 				A1000001266A000000000056 /* UmbraColors.swift in Sources */,
 				A1000001266A000000000058 /* ColorHelpers.swift in Sources */,
 				A1000001266A000000000060 /* TTSService.swift in Sources */,

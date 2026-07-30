@@ -1,0 +1,24 @@
+<!-- @dsCard group="iOS Components" viewport="620x330" name="VoiceHoldOverlay 按住说话" subtitle="--nav 底板 + 两个 56px 落区" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div style="border-radius:var(--radius-xl);background:var(--nav);padding:20px 16px 14px;display:flex;flex-direction:column;align-items:center;gap:16px">
+  <span style="display:flex;align-items:center;gap:3px;height:34px;padding:0 14px;border-radius:999px;background:var(--orange);box-shadow:0 18px 48px rgba(0,0,0,.22)">
+    <i style="width:2px;height:10px;border-radius:2px;background:#fff;display:block"></i><i style="width:2px;height:18px;border-radius:2px;background:#fff;display:block"></i><i style="width:2px;height:8px;border-radius:2px;background:#fff;display:block"></i><i style="width:2px;height:22px;border-radius:2px;background:#fff;display:block"></i><i style="width:2px;height:12px;border-radius:2px;background:#fff;display:block"></i>
+  </span>
+  <div style="display:flex;gap:56px">
+    <span style="width:56px;height:56px;border-radius:999px;background:var(--danger);color:#fff;display:flex;align-items:center;justify-content:center;font:560 12px var(--font-sans)">取消</span>
+    <span style="width:56px;height:56px;border-radius:999px;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font:560 12px var(--font-sans)">转文字</span>
+  </div>
+  <span style="font:400 13px var(--font-sans);color:rgba(255,255,255,.72)">松开 发送 · 0:07 / 上限 1:00</span>
+</div>
+<p class="note">上滑进落区即高亮（填实底），松手执行落区动作。60 秒上限自动发送；<code>pointercancel</code>、窗口失焦、切后台都要收尾——太短丢弃并提示「已取消」。波形气泡用模态档阴影，不用橙色光晕。</p>

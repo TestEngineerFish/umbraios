@@ -1,0 +1,18 @@
+<!-- @dsCard group="iOS Components" viewport="620x260" name="MaskScreen 后台遮盖" subtitle="--bg 底 + 52px 字标 + 一行说明" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-xl);height:200px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px">
+  <span style="width:52px;height:52px;border-radius:14px;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font:650 26px var(--font-sans)">U</span>
+  <span style="font-size:13px;color:var(--muted)">切到后台时遮住内容，回到前台需要重新解锁</span>
+</div>
+<p class="note">系统截图与应用切换器里都生效。只有字标和一行说明，不显示任何记录内容。</p>

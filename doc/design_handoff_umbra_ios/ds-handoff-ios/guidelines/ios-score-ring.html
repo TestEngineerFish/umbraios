@@ -1,0 +1,19 @@
+<!-- @dsCard group="iOS Components" viewport="620x180" name="ScoreRing 分数环" subtitle="44 / 72px 圆环，安全体检用" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div style="display:flex;align-items:center;gap:26px">
+  <span style="width:72px;height:72px;border-radius:999px;background:conic-gradient(var(--orange) 0 78%, var(--chip) 78% 100%);display:flex;align-items:center;justify-content:center"><span style="width:58px;height:58px;border-radius:999px;background:var(--card);display:flex;align-items:center;justify-content:center;font:600 20px var(--font-sans);color:var(--orange-text)">78</span></span>
+  <span style="width:44px;height:44px;border-radius:999px;background:conic-gradient(var(--orange) 0 78%, var(--chip) 78% 100%);display:flex;align-items:center;justify-content:center"><span style="width:34px;height:34px;border-radius:999px;background:var(--card);display:flex;align-items:center;justify-content:center;font:600 13px var(--font-sans);color:var(--orange-text)">78</span></span>
+  <span style="width:72px;height:72px;border-radius:999px;background:var(--chip);display:flex;align-items:center;justify-content:center"><span style="width:58px;height:58px;border-radius:999px;background:var(--card);display:flex;align-items:center;justify-content:center;font:600 20px var(--font-sans);color:var(--faint)">—</span></span>
+</div>
+<p class="note">无数据时显示「—」，不显示 0 分。分数旁必须配一句可执行的结论（<code>3 条密码重复，改掉最常用的那条</code>）。</p>

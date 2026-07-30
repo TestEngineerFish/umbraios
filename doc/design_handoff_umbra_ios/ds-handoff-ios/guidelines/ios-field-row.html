@@ -1,0 +1,25 @@
+<!-- @dsCard group="iOS Components" viewport="620x230" name="FieldRow 字段行" subtitle="标签 + 值 + 44×44 图标按钮" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div style="border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--card);overflow:hidden">
+  <div style="padding:10px 14px;display:flex;align-items:center;gap:10px">
+    <div style="flex:1;min-width:0"><div class="lbl" style="font-weight:560">账号</div><div style="font-size:15px;margin-top:2px">wang@example.com</div></div>
+    <span style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--success);font-size:12px;gap:4px">已复制</span>
+  </div>
+  <div style="padding:10px 14px;display:flex;align-items:center;gap:10px;border-top:1px solid var(--border-soft)">
+    <div style="flex:1;min-width:0"><div class="lbl" style="font-weight:560">密码</div><div style="font:400 15px var(--font-mono);margin-top:2px;letter-spacing:.08em">••••••••••</div></div>
+    <span style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--muted)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+    <span style="width:44px;height:44px;display:flex;align-items:center;justify-content:center;color:var(--muted)"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/></svg></span>
+  </div>
+</div>
+<p class="note">敏感值等宽 + 遮罩，显示 8 秒后自动重新遮盖。复制反馈是行内「图标转对勾 + 已复制」1.5 秒，不用 toast；复制后 60 秒清剪贴板并在文案里写明。</p>

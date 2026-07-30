@@ -1,0 +1,76 @@
+/* Umbra 色彩 token —— 浅色为默认，深色通过 [data-theme="dark"] 覆盖。
+   橙色 --orange 跨主题不变；--nav 两个主题都是深色。 */
+:root{
+  /* 表面 / 中性 */
+  --bg:#F6F5F2;
+  --card:#FFFFFF;
+  --titlebar:#EFEDE8;
+  --rail:#FBFAF8;
+  --chip:#F2F0EC;
+  --hover:#F1EFEA;
+  --track:#EDEBE6;
+  --desk:#DEDBD5;
+
+  /* 描边与文字 */
+  --border:#E6E3DC;
+  --border-soft:#EEEBE4;
+  --text:#1F2320;
+  --muted:#6B716B;
+  --faint:#9A9992;
+
+  /* 品牌 */
+  --nav:#15110E;
+  --orange:#E8590C;
+  --orange-deep:#C2410C;
+  --orange-soft:#FFF1E6;
+  --orange-text:#9A3412;
+
+  /* 语义 */
+  --success:#0F766E;
+  --success-soft:#E2F1EF;
+  --warning:#B45309;
+  --warning-soft:#FBEEDD;
+  --danger:#B42318;
+  --danger-soft:#FBE9E7;
+
+  /* 语义别名 */
+  --surface-page:var(--bg);
+  --surface-card:var(--card);
+  --surface-rail:var(--rail);
+  --text-body:var(--text);
+  --text-secondary:var(--muted);
+  --text-meta:var(--faint);
+  --action-primary:var(--orange);
+  --action-primary-hover:var(--orange-deep);
+  --action-destructive:var(--danger);
+}
+
+[data-theme="dark"]{
+  --bg:#1C1A17;
+  --card:#232019;
+  --titlebar:#1C1A17;
+  --rail:#1F1C18;
+  --chip:#2A251F;
+  --hover:#2A251F;
+  --track:#302B24;
+  --desk:#151310;
+
+  --border:#332E26;
+  --border-soft:#2B2721;
+  --text:#EDEAE3;
+  --muted:#9A938A;
+  --faint:#6E675E;
+
+  --nav:#15110E;
+  --orange:#E8590C;
+  --orange-deep:#C2410C;
+  --orange-soft:rgba(232,89,12,.16);
+  --orange-text:#F0A878;
+
+  --success:#34B5A6;
+  --success-soft:rgba(15,118,110,.2);
+  --warning:#D98A29;
+  --warning-soft:rgba(180,83,9,.22);
+  --danger:#E0675C;
+  --danger-soft:rgba(180,35,24,.22);
+}

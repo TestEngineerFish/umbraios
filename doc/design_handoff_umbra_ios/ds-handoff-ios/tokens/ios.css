@@ -1,0 +1,25 @@
+/* iOS 平台覆盖 —— 在根元素加 data-platform="ios" 生效。
+   桌面端取值不受影响；来源：Umbra iOS 一期原型。 */
+[data-platform="ios"]{
+  /* 字号：手持视距近，整体上调 */
+  --fs-body: 15px;          /* 桌面 12.5px */
+  --fs-row-title: 16px;     /* 列表行主文 */
+  --fs-row-sub: 13px;       /* 列表行副文（桌面 10.5–11px） */
+  --fs-label: 12px;         /* 字段标签，letter-spacing 仍为 .06em */
+  --fs-page-title: 27px;
+
+  /* 圆角：控件与卡片都比桌面大一档 */
+  --radius-md: 10px;        /* 控件（桌面 7–8px） */
+  --radius-xl: 14px;        /* 卡片 / 面板（桌面 11–12px） */
+  --radius-pill: 999px;
+
+  /* 尺寸与边距 */
+  --tap-min: 44px;          /* Apple 触达底线 */
+  --row-min-h: 44px;
+  --row-min-h-sub: 60px;    /* 带副文的列表行 */
+  --page-pad-x: 16px;
+  --icon-block-sm: 24px;
+  --icon-block-md: 34px;    /* 记录行徽标 */
+  --icon-block-lg: 44px;    /* 表单 / 详情头 */
+  --icon-block-xl: 48px;
+}

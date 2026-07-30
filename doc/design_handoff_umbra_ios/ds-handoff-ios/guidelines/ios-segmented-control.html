@@ -1,0 +1,19 @@
+<!-- @dsCard group="iOS Components" viewport="620x150" name="SegmentedControl 分段控件" subtitle="--chip 底 + 选中白片，高 30" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div style="display:flex;padding:2px;background:var(--chip);border-radius:9px;height:30px;box-sizing:border-box;width:260px">
+  <span style="flex:1;display:flex;align-items:center;justify-content:center;border-radius:7px;background:var(--card);box-shadow:0 1px 2px rgba(0,0,0,.08);font:560 13px var(--font-sans)">进行中</span>
+  <span style="flex:1;display:flex;align-items:center;justify-content:center;border-radius:7px;font:400 13px var(--font-sans);color:var(--muted)">已完成</span>
+  <span style="flex:1;display:flex;align-items:center;justify-content:center;border-radius:7px;font:400 13px var(--font-sans);color:var(--muted)">失败</span>
+</div>
+<p class="note">iOS 特有，桌面端用 FilterChip。最多 3–4 段，段名 2–4 字；切换只做 <code>.12s ease</code> 颜色过渡，不做滑块位移动画。</p>

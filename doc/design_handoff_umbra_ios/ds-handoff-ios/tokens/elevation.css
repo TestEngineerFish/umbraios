@@ -1,0 +1,8 @@
+/* Umbra 分层 —— 靠 1px 描边 + 底色差；阴影只给真正浮起的层 */
+:root{
+  --border-w:1px;
+  --shadow-none:none;
+  --shadow-floating:0 8px 24px rgba(0,0,0,.13);
+  --shadow-modal:0 18px 48px rgba(0,0,0,.22);
+  --focus-ring:0 0 0 3px var(--orange-soft);
+}

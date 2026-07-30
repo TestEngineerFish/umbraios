@@ -1,0 +1,19 @@
+<!-- @dsCard group="iOS Components" viewport="620x170" name="StrengthMeter 密码强度" subtitle="4px 条 + 文字标签，不只靠颜色" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div id="s" style="display:flex;flex-direction:column;gap:12px"></div>
+<p class="note">四档：弱 <code>--danger</code> / 一般 <code>--warning</code> / 强、很强 <code>--success</code>。文字标签必现，颜色永不单独表意。</p>
+<script>
+  var d=[["弱","25%","var(--danger)"],["一般","50%","var(--warning)"],["强","75%","var(--success)"],["很强","100%","var(--success)"]];
+  document.getElementById('s').innerHTML=d.map(function(r){return '<div style="display:flex;align-items:center;gap:10px"><span style="flex:1;height:4px;border-radius:999px;background:var(--chip);overflow:hidden"><i style="display:block;height:100%;width:'+r[1]+';background:'+r[2]+'"></i></span><span style="width:34px;font-size:12px;color:var(--muted)">'+r[0]+'</span></div>';}).join('');
+</script>

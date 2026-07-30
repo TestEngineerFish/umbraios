@@ -1,0 +1,213 @@
+// Umbra 设计 token —— 唯一取值来源。
+//
+// 对应设计交接包里的：
+//   _ds/…/tokens/colors.css      浅色 :root + 深色 [data-theme="dark"]
+//   _ds/…/tokens/typography.css  字号 / 字重 / 行高
+//   _ds/…/tokens/spacing.css     间距 / 圆角 / 控件尺寸
+//   _ds/…/tokens/elevation.css   描边 / 阴影
+//   ds-handoff-ios/tokens/ios.css  iOS 覆盖层（[data-platform="ios"]）
+//
+// 规则：**页面和组件里不许出现字面量颜色、字号、圆角**，一律从这里取。
+// 交接文档写的是「按 token 精确还原，不要目测」，而目测出来的偏差在评审时是查不出来的 ——
+// 只有「代码里根本没有字面量」这一条能保证它不发生。
+//
+// iOS 覆盖层不做成运行时开关：这个工程只有 iOS 一个目标，
+// 直接把 ios.css 的值写进对应 token 即可，桌面端的原值写在注释里备查。
+import SwiftUI
+import UIKit
+
+// MARK: - 颜色
+//
+// 每个 token 都是「随浅深色自动切换」的动态色：底层用 UIColor 的 trait 解析，
+// 所以它既跟随系统外观，也跟随 .preferredColorScheme 的强制指定（外观设置要用到）。
+//
+// 注意：这里的取值以交接包的 colors.css 为准。工程原来的 UmbraColors 有几处对不上
+//（bg 深色写成了 #15110E、chip/track 浅色偏了一档、缺 borderSoft/faint/nav/hover/titlebar/desk），
+// 已按 token 修正，见 UmbraColors 的注释。
+enum UmbraColor {
+
+    // 表面 / 中性
+    static let bg        = dyn(light: "F6F5F2", dark: "1C1A17")   // 页面底色：暖灰 / 暖棕黑，不是纯白或冷黑
+    static let card      = dyn(light: "FFFFFF", dark: "26231F")   // 卡片、列表分组
+    static let titlebar  = dyn(light: "EFEDE8", dark: "1C1A17")
+    static let rail      = dyn(light: "FBFAF8", dark: "1F1C18")
+    static let chip      = dyn(light: "F2F0EC", dark: "2A251F")   // 分段控件底、进度条槽、置灰按钮
+    static let hover     = dyn(light: "F1EFEA", dark: "2A251F")
+    static let track     = dyn(light: "EDEBE6", dark: "302B24")
+    static let desk      = dyn(light: "DEDBD5", dark: "151310")   // 只给设计稿的外壳用，App 内不出现
+
+    // 描边与文字
+    static let border     = dyn(light: "E6E3DC", dark: "332E26")
+    static let borderSoft = dyn(light: "EEEBE4", dark: "2B2721")
+    static let text       = dyn(light: "1F2320", dark: "EDEAE3")
+    static let muted      = dyn(light: "6B716B", dark: "9A938A")
+    static let faint      = dyn(light: "9A9992", dark: "6E675E")
+
+    // 品牌
+    /// 浮层底板色。iOS 上**只用于**录音面板和 toast，不做页面底色。
+    static let nav        = dyn(light: "15110E", dark: "15110E")
+    /// 唯一重点色，跨主题不变。
+    static let orange     = Color(hex: "E8590C")
+    static let orangeDeep = Color(hex: "C2410C")
+    /// 选中底、问答卡头部。深色下是半透明橙（实色浅橙在暗底上会脏）。
+    static let orangeSoft = dynColor(light: Color(hex: "FFF1E6"), dark: Color(hex: "E8590C").opacity(0.16))
+    /// 橙色**文字**。深色下提亮到 #F0A878 保对比度，不要直接用 orange 当文字色。
+    static let orangeText = dyn(light: "9A3412", dark: "F0A878")
+
+    // 语义四档
+    static let success     = dyn(light: "0F766E", dark: "34B5A6")
+    static let successSoft = dynColor(light: Color(hex: "E2F1EF"), dark: Color(hex: "0F766E").opacity(0.20))
+    static let warning     = dyn(light: "B45309", dark: "D98A29")
+    static let warningSoft = dynColor(light: Color(hex: "FBEEDD"), dark: Color(hex: "B45309").opacity(0.22))
+    static let danger      = dyn(light: "B42318", dark: "E0675C")
+    static let dangerSoft  = dynColor(light: Color(hex: "FBE9E7"), dark: Color(hex: "B42318").opacity(0.22))
+
+    /// 用户气泡。这一条不在 colors.css 里，来自主设计稿对话页的取值。
+    static let userBubble = dyn(light: "EAF1F7", dark: "2B2620")
+
+    /// toast 上的字色。toast 底板是 --nav（两个主题都是深色），所以字色不跟主题变。
+    /// 这两个值也不在 colors.css 里，是主设计稿 toast 的实测值。
+    static let onNavText = Color(hex: "F5F2EC")
+    /// toast 里「撤销」的字色。深色底上的提亮橙，和 --orange-text 的深色值同源。
+    static let onNavAccent = Color(hex: "F0A878")
+
+    // MARK: 动态色构造
+    private static func dyn(light: String, dark: String) -> Color {
+        dynColor(light: Color(hex: light), dark: Color(hex: dark))
+    }
+    private static func dynColor(light: Color, dark: Color) -> Color {
+        let l = UIColor(light), d = UIColor(dark)
+        return Color(UIColor { $0.userInterfaceStyle == .dark ? d : l })
+    }
+}
+
+// MARK: - 排版
+//
+// 系统字体，不引入 webfont；等宽用系统等宽（SF Mono）。
+// 字重只用 400 / 560 / 600 / 650 —— 这四档之外的值一律是写错了。
+// SwiftUI 没有 560/650 这种数值字重，用 Font.system(size:weight:) 映射：
+//   400 → .regular   560 → .medium   600 → .semibold   650 → .bold
+// 560 特意映射到 .medium 而不是 .semibold：设计稿里 560 和 600 是两档，合并会让列表行主文变重。
+enum UmbraFont {
+
+    enum Weight {
+        case w400, w560, w600, w650
+        var swiftUI: Font.Weight {
+            switch self {
+            case .w400: return .regular
+            case .w560: return .medium
+            case .w600: return .semibold
+            case .w650: return .bold
+            }
+        }
+    }
+
+    static func sans(_ size: CGFloat, _ weight: Weight = .w400) -> Font {
+        .system(size: size, weight: weight.swiftUI)
+    }
+    /// 路径、JSON、密钥、TOTP、快捷键一律等宽 —— 这是硬规则，不是风格偏好。
+    static func mono(_ size: CGFloat, _ weight: Weight = .w400) -> Font {
+        .system(size: size, weight: weight.swiftUI, design: .monospaced)
+    }
+
+    // iOS 取值（括号内是桌面端原值，仅备查）
+    static let pageTitle   = sans(27, .w650)    // 页面标题
+    static let sectionTitle = sans(17, .w600)   // 区块标题 16–17
+    static let detailTitle = sans(20, .w650)    // 详情页大标题
+    static let body        = sans(15, .w400)    // 正文（桌面 12.5）
+    static let rowTitle    = sans(16, .w560)    // 列表行主文（桌面 12.5）
+    static let rowSub      = sans(13, .w400)    // 列表行副文（桌面 10.5–11）
+    static let fieldLabel  = sans(12, .w560)    // 字段标签（桌面 11），配 letterSpacing .06em
+    static let meta        = sans(11.5, .w400)  // 元信息 11–12
+    static let button      = sans(16, .w560)
+    static let tabLabel    = sans(10.5, .w400)
+
+    /// 正文行高。CSS 里是 line-height 1.65；SwiftUI 用 lineSpacing（行间距）表达，
+    /// 需要减掉字号本身：15 * 1.65 - 15 ≈ 9.75。
+    static let bodyLineSpacing: CGFloat = 9.75
+    /// 字段标签的字距，对应 letter-spacing:.06em。
+    static func labelTracking(_ size: CGFloat) -> CGFloat { size * 0.06 }
+}
+
+// MARK: - 间距 / 圆角 / 尺寸
+enum UmbraMetric {
+    // 间距
+    static let sp1: CGFloat = 4
+    static let sp2: CGFloat = 7
+    static let sp3: CGFloat = 9
+    static let sp4: CGFloat = 12
+    static let sp5: CGFloat = 14
+    static let sp6: CGFloat = 18
+    static let sp7: CGFloat = 20
+    static let sp8: CGFloat = 28
+
+    // 圆角（iOS 覆盖：控件 10、卡片 14）
+    static let radiusControl: CGFloat = 10   // 桌面 7–8
+    static let radiusCard: CGFloat = 14      // 桌面 11–12
+    static let radiusPill: CGFloat = 999
+    /// 过程截图专用，交接文档点名 8px。
+    static let radiusShot: CGFloat = 8
+
+    // 边距与行高
+    static let pagePadX: CGFloat = 16
+    static let cardPad: CGFloat = 13          // 卡片内边距 13–14
+    static let groupGap: CGFloat = 11         // 分组间距 10–12
+    /// Apple 触达底线。**所有点击区不得小于这个值**，自查清单里有这一条。
+    static let tapMin: CGFloat = 44
+    static let rowMinH: CGFloat = 44
+    static let rowMinHSub: CGFloat = 60       // 带副文的列表行
+
+    // 图标块
+    static let iconBlockSM: CGFloat = 24
+    static let iconBlockMD: CGFloat = 34      // 记录行徽标
+    static let iconBlockLG: CGFloat = 44      // 表单 / 详情头
+    static let iconBlockXL: CGFloat = 48
+
+    // 控件
+    static let progressH: CGFloat = 4
+    static let statusDot: CGFloat = 7
+    static let segmentH: CGFloat = 30
+    static let borderW: CGFloat = 1
+    static let tabBarH: CGFloat = 83
+}
+
+// MARK: - 分层
+//
+// **卡片一律无阴影**，分层靠 1px 描边 + 底色差。阴影只给真正浮起的层。
+// 这是交接文档里的硬规则，自查清单也有 —— 给卡片加阴影是最容易犯的偏离。
+enum UmbraShadow {
+    /// 菜单：0 8px 24px rgba(0,0,0,.13)
+    static let floatingColor = Color.black.opacity(0.13)
+    static let floatingRadius: CGFloat = 24 / 2   // SwiftUI 的 radius 约等于 CSS blur 的一半
+    static let floatingY: CGFloat = 8
+    /// 模态 / 浮层：0 18px 48px rgba(0,0,0,.22)
+    static let modalColor = Color.black.opacity(0.22)
+    static let modalRadius: CGFloat = 48 / 2
+    static let modalY: CGFloat = 18
+}
+
+extension View {
+    /// 菜单档阴影（上下文菜单、下拉）。
+    func umbraFloatingShadow() -> some View {
+        shadow(color: UmbraShadow.floatingColor, radius: UmbraShadow.floatingRadius, x: 0, y: UmbraShadow.floatingY)
+    }
+    /// 模态档阴影（弹窗、底部 sheet、录音浮层的波形气泡）。
+    func umbraModalShadow() -> some View {
+        shadow(color: UmbraShadow.modalColor, radius: UmbraShadow.modalRadius, x: 0, y: UmbraShadow.modalY)
+    }
+}
+
+// MARK: - 动效
+//
+// 克制：只有颜色/描边过渡、左滑回弹、弹框位移、运行中匀速旋转。
+// **无弹跳、无缩放、无入场动画** —— 所以这里刻意不提供 spring。
+enum UmbraMotion {
+    /// 颜色 / 描边过渡 .12s–.15s ease
+    static let tint = Animation.easeInOut(duration: 0.13)
+    /// 左滑回弹 .16s cubic-bezier(.2,.8,.3,1)
+    static let swipe = Animation.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.16)
+    /// 弹框推入 / 返回 .22s 横向位移
+    static let push = Animation.easeOut(duration: 0.22)
+    /// 运行中图标旋转：1s linear，无限
+    static let spin = Animation.linear(duration: 1).repeatForever(autoreverses: false)
+}

@@ -1,0 +1,26 @@
+/* Umbra 文字 —— 全程系统字体，不引入 webfont，中文用 PingFang SC / 微软雅黑 */
+:root{
+  /* 系统字体栈，不引入 webfont：system-ui 在 macOS/iOS 上解析为 SF Pro + PingFang SC，
+     在 Windows 上解析为 Segoe UI + 微软雅黑，因此不再显式列出这些系统家族
+     （显式列出会被当成需要上传的自定义字体）。 */
+  --font-sans:-apple-system,system-ui,sans-serif;
+  --font-mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+
+  --fs-page-title:27px;
+  --fs-section-title:18px;
+  --fs-detail-title:15.5px;
+  --fs-item-title:13.5px;
+  --fs-body:12.5px;
+  --fs-meta:11.5px;
+  --fs-field-label:11px;
+
+  --fw-regular:400; /* @kind font */
+  --fw-medium:560; /* @kind font */
+  --fw-semibold:600; /* @kind font */
+  --fw-bold:650; /* @kind font */
+
+  --lh-tight:1.35; /* @kind font */
+  --lh-title:1.45; /* @kind font */
+  --lh-body:1.7; /* @kind font */
+  --ls-label:.06em;
+}

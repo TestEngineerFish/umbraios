@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet><meta name="design_doc_mode" content="canvas"><link rel="stylesheet" href="_ds/umbra-design-system-ec7cf6a5-891a-4152-8562-120f755dfe2d/styles.css"><style>body{margin:0;background:var(--desk,#DEDBD5)}</style></helmet>
+<div style="padding:36px 40px 48px;font-family:var(--font-sans);color:var(--text)">
+  <div style="max-width:1420px;margin:0 auto">
+    <div style="display:flex;align-items:center;gap:11px">
+      <span style="width:26px;height:26px;border-radius:8px;background:var(--orange);color:#fff;display:flex;align-items:center;justify-content:center;font:650 14px var(--font-sans)">U</span>
+      <h1 style="margin:0;font:650 27px var(--font-sans)">设计规范增补 · iOS</h1>
+    </div>
+    <p style="margin:10px 0 0;max-width:720px;font:400 12.5px/1.7 var(--font-sans);color:var(--muted)">13 张规范卡，全部用真实 token 渲染。文件在 <code style="font:400 11px var(--font-mono)">ds-handoff-ios/</code>，目录结构与设计系统项目一致：<code style="font:400 11px var(--font-mono)">tokens/ios.css</code> 和 <code style="font:400 11px var(--font-mono)">guidelines/ios-*.html</code> 可以整体拷过去，卡片带 <code style="font:400 11px var(--font-mono)">@dsCard</code> 标记，拷进去就会出现在设计系统首页。拷贝方法与合入清单见 <code style="font:400 11px var(--font-mono)">ds-handoff-ios/readme.md</code>。</p>
+    <div style="display:flex;flex-wrap:wrap;gap:22px;margin-top:26px">
+      <sc-for list="{{ cards }}" as="c" hint-placeholder-count="13">
+        <div style="flex:none;display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:baseline;gap:9px">
+            <span style="font:600 13px var(--font-sans)">{{ c.name }}</span>
+            <span style="font:400 11px var(--font-sans);color:var(--faint)">{{ c.sub }}</span>
+          </div>
+          <iframe src="{{ c.src }}" title="{{ c.name }}" style="width:700px;height:340px;border:1px solid var(--border);border-radius:12px;background:var(--card);display:block"></iframe>
+        </div>
+      </sc-for>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  renderVals(){
+    const d=[
+      ['ios-overrides','iOS 取值覆盖','正文 15px、卡片圆角 14px、行高 44px 起'],
+      ['ios-status-bar-chip','StatusBarChip','连接状态行'],
+      ['ios-segmented-control','SegmentedControl','分段控件，iOS 特有'],
+      ['ios-swipe-action-row','SwipeActionRow','左滑操作行'],
+      ['ios-question-card','QuestionCard','分页式问答卡'],
+      ['ios-task-progress-card','TaskProgressCard','任务进度卡'],
+      ['ios-voice-hold-overlay','VoiceHoldOverlay','按住说话浮层'],
+      ['ios-field-row','FieldRow','字段行 · 敏感值'],
+      ['ios-strength-meter','StrengthMeter','密码强度'],
+      ['ios-totp-row','TotpRow','两步验证码'],
+      ['ios-score-ring','ScoreRing','分数环'],
+      ['ios-notification-preview','NotificationPreview','锁屏通知'],
+      ['ios-mask-screen','MaskScreen','后台遮盖']
+    ];
+    return { cards:d.map(x=>({src:'ds-handoff-ios/guidelines/'+x[0]+'.html', name:x[1], sub:x[2]})) };
+  }
+}
+</script>
+</body>
+</html>

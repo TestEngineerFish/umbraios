@@ -1,0 +1,20 @@
+<!-- @dsCard group="iOS Components" viewport="620x170" name="TotpRow 两步验证码" subtitle="等宽数字分组 + 匀速倒计时" -->
+<meta charset="utf-8"/>
+<link rel="stylesheet" href="../styles.css"/>
+<link rel="stylesheet" href="../tokens/ios.css"/>
+<script>document.documentElement.dataset.platform='ios';</script>
+<style>
+  body{margin:0;padding:16px;background:var(--bg);color:var(--text);font-family:var(--font-sans);-webkit-font-smoothing:antialiased;}
+  .lbl{font-size:11px;letter-spacing:.06em;color:var(--faint);}
+  .note{font-size:11px;line-height:1.6;color:var(--muted);margin:10px 0 0;}
+  code{font-family:var(--font-mono);font-size:11px;}
+  .ios{font-size:15px;line-height:1.65;}
+</style>
+
+<div style="border:1px solid var(--border);border-radius:var(--radius-xl);background:var(--card);padding:13px 14px">
+  <div class="lbl" style="font-weight:560">两步验证码</div>
+  <div style="font:600 24px var(--font-mono);letter-spacing:.14em;margin:5px 0 9px">418 902</div>
+  <div style="height:4px;border-radius:999px;background:var(--chip);overflow:hidden"><span style="display:block;width:40%;height:100%;background:var(--orange)"></span></div>
+  <p style="margin:7px 0 0;font-size:12px;color:var(--muted)">12 秒后刷新</p>
+</div>
+<p class="note">1 秒 tick，30 秒换码，必须真的在动。数字 24px/600/.14em 等宽三位一组。</p>
