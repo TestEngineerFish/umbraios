@@ -54,7 +54,7 @@ struct UmbraRouteView: View {
 
         // ── Tab 根页（第 3–5 步逐个替换成真实实现）
         case .chatContacts:
-            placeholder("聊天", "会话列表", step: 3)
+            UmbraChatContactsView()
         case .chatThread:
             placeholder("对话", "下指令、问答卡、任务进度卡、按住说话", step: 3)
 

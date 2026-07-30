@@ -39,6 +39,7 @@
 		A1000001266A0000000000E2 /* UmbraOverlays.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000E3 /* UmbraOverlays.swift */; };
 		A1000001266A0000000000E4 /* UmbraRouter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000E5 /* UmbraRouter.swift */; };
 		A1000001266A0000000000E6 /* UmbraShell.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000E7 /* UmbraShell.swift */; };
+		A1000001266A0000000000F0 /* UmbraChatContactsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1000001266A0000000000F1 /* UmbraChatContactsView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -76,6 +77,7 @@
 		A1000001266A0000000000E3 /* UmbraOverlays.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraOverlays.swift; sourceTree = "<group>"; };
 		A1000001266A0000000000E5 /* UmbraRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraRouter.swift; sourceTree = "<group>"; };
 		A1000001266A0000000000E7 /* UmbraShell.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraShell.swift; sourceTree = "<group>"; };
+		A1000001266A0000000000F1 /* UmbraChatContactsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UmbraChatContactsView.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXGroup section */
@@ -112,6 +114,7 @@
 				A1000001266A000000000039 /* AbilitiesView.swift */,
 				A1000001266A000000000041 /* MeView.swift */,
 				A1000001266A0000000000B1 /* VaultFeature.swift */,
+				A1000001266A0000000000F1 /* UmbraChatContactsView.swift */,
 			);
 			path = UmbraiOS/Views;
 			sourceTree = "<group>";
@@ -257,6 +260,7 @@
 				A1000001266A000000000038 /* AbilitiesView.swift in Sources */,
 				A1000001266A000000000040 /* MeView.swift in Sources */,
 				A1000001266A0000000000B0 /* VaultFeature.swift in Sources */,
+				A1000001266A0000000000F0 /* UmbraChatContactsView.swift in Sources */,
 				A1000001266A000000000042 /* ChatViewModel.swift in Sources */,
 				A1000001266A000000000044 /* TasksViewModel.swift in Sources */,
 				A1000001266A000000000046 /* AbilitiesViewModel.swift in Sources */,
