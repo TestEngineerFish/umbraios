@@ -452,7 +452,21 @@ struct UmbraConnSettingsView: View {
                 ])
             ])
             // 输入类的浮层用系统 alert 承接：Router 的 UmbraSheet 只支持选项，没有输入框。
-            // 与其为两个入口给 Sheet 加一套字段模型，不如直接用系统的输入 alert。
+            //
+            // **两个 alert 必须挂在两个不同的视图上。** 直接连着写
+            // `.alert(A).alert(B)` 的话 SwiftUI 只认第一个，第二个点了毫无反应 ——
+            // 「访问 Token」那一行之前就是这么哑掉的，而且它哑掉会连带保险箱解不开。
+            .background(
+                Color.clear.alert("访问 Token", isPresented: $editingToken) {
+                    TextField("粘贴 ASSIST_TOKEN", text: $tokenInput)
+                        .textInputAutocapitalization(.never)
+                        .autocorrectionDisabled(true)
+                    Button("取消", role: .cancel) {}
+                    Button("保存 Token") { saveToken() }
+                } message: {
+                    Text("填服务端的 ASSIST_TOKEN，要和电脑端一模一样。只存在这台手机上。")
+                }
+            )
             .alert("服务端地址", isPresented: $editingAddr) {
                 TextField("https://主机名:端口", text: $addr)
                     .textInputAutocapitalization(.never)
@@ -461,15 +475,6 @@ struct UmbraConnSettingsView: View {
                 Button("保存并重连") { saveAddr() }
             } message: {
                 Text("改完会立刻重连一次。要带上 http:// 或 https://。")
-            }
-            .alert("访问 Token", isPresented: $editingToken) {
-                TextField("粘贴 ASSIST_TOKEN", text: $tokenInput)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                Button("取消", role: .cancel) {}
-                Button("保存 Token") { saveToken() }
-            } message: {
-                Text("只存在这台手机上。留空表示不改。")
             }
     }
 

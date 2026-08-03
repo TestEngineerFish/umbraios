@@ -25,6 +25,8 @@ struct UmbraChatThreadView: View {
     @State private var voiceMode = false
     /// 整页尺寸，按住说话时用来判断手指落在哪个区。
     @State private var pageSize: CGSize = .zero
+    /// 输入框焦点。点消息区、往下拖、切到语音态都靠它收键盘。
+    @FocusState private var inputFocused: Bool
 
     private var isAssistant: Bool { conv == ChatViewModel.mainConv }
     private var title: String { chat.convLabel(conv) }
@@ -115,7 +117,14 @@ struct UmbraChatThreadView: View {
                 .padding(.top, UmbraMetric.sp5)
                 .padding(.bottom, UmbraMetric.sp6)
             }
+            // 往下拖收键盘。IM 里这是肌肉记忆，不给的话只能去够那个「完成」键。
+            .scrollDismissesKeyboard(.interactively)
+            // 点消息区的空白处收键盘。用 simultaneousGesture 而不是 onTapGesture：
+            // onTapGesture 会把气泡上的按钮（展开轨迹、批准、填答案）一起吃掉。
+            .simultaneousGesture(TapGesture().onEnded { inputFocused = false })
             .onChange(of: chat.blocks.count) { _ in scrollToEnd(proxy) }
+            // 键盘弹起来会把可视区压掉一半，不跟着滚的话正在看的那条就被顶到键盘后面了。
+            .onChange(of: inputFocused) { on in if on { scrollToEnd(proxy) } }
             .onAppear { scrollToEnd(proxy) }
         }
     }
@@ -208,6 +217,16 @@ struct UmbraChatThreadView: View {
         }
     }
 
+    /// 长按气泡复制。IM 的通行做法，textSelection 只能选不能一键复制整条。
+    private func copyMenu(_ text: String) -> some View {
+        Button {
+            UIPasteboard.general.string = text
+            router.showToast("已复制")
+        } label: {
+            Label("复制", systemImage: "doc.on.doc")
+        }
+    }
+
     private func userBubble(_ text: String) -> some View {
         Text(text)
             .font(UmbraFont.sans(15.5, .w400))
@@ -218,6 +237,7 @@ struct UmbraChatThreadView: View {
             .padding(.vertical, 9)
             .frame(maxWidth: 270, alignment: .leading)
             .background(UmbraBubbleShape(mine: true).fill(UmbraColor.userBubble))
+            .contextMenu { copyMenu(text) }
     }
 
     private func plainLeftBubble(_ text: String) -> some View {
@@ -231,6 +251,7 @@ struct UmbraChatThreadView: View {
             .frame(maxWidth: 300, alignment: .leading)
             .background(UmbraBubbleShape(mine: false).fill(UmbraColor.card))
             .overlay(UmbraBubbleShape(mine: false).stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+            .contextMenu { copyMenu(text) }
     }
 
     private func aiBubble(_ a: ChatBlock.AssistantBlock) -> some View {
@@ -250,6 +271,7 @@ struct UmbraChatThreadView: View {
         .frame(maxWidth: 300, alignment: .leading)
         .background(UmbraBubbleShape(mine: false).fill(UmbraColor.card))
         .overlay(UmbraBubbleShape(mine: false).stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+        .contextMenu { if !a.text.isEmpty { copyMenu(a.text) } }
     }
 
     /// 工具轨迹卡。工程里的 trace 是一行行字符串（「🔧 名字(参数)」「↳ 名字 → 结果」），
@@ -609,7 +631,10 @@ struct UmbraChatThreadView: View {
                 .foregroundColor(UmbraColor.text)
                 .lineLimit(1...4)
                 .textFieldStyle(.plain)
-                .submitLabel(.send)
+                .focused($inputFocused)
+                // **没有** submitLabel(.send)：axis:.vertical 的输入框里回车是换行，
+                // 系统不会触发 onSubmit。把键盘上那个键标成「发送」却按了只换行，
+                // 比标着「换行」更糟。发送统一走右边那个按钮。
             Button {
                 router.showToast("这一版还不支持发图片")
             } label: {
@@ -698,9 +723,15 @@ struct UmbraChatThreadView: View {
         let fg = voiceMode ? UmbraColor.orangeText : (hasDraft ? Color.white : UmbraColor.muted)
         let bc = voiceMode ? UmbraColor.orange : (hasDraft ? UmbraColor.orange : UmbraColor.border)
         return Button {
-            if voiceMode { voiceMode = false }
-            else if hasDraft { chat.send() }
-            else { voiceMode = true }
+            if voiceMode {
+                voiceMode = false
+                inputFocused = true          // 回到打字态就把键盘叫回来，少一次点击
+            } else if hasDraft {
+                chat.send()                  // 发完**不收键盘** —— IM 里都是连着打下一句
+            } else {
+                inputFocused = false         // 切语音前先收键盘，否则浮层被键盘顶掉一半
+                voiceMode = true
+            }
         } label: {
             UmbraIcon(d: icon, size: 19, strokeWidth: hasDraft && !voiceMode ? 2.4 : 1.9)
                 .foregroundColor(fg)

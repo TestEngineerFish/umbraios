@@ -169,6 +169,10 @@ final class VaultStore: ObservableObject {
     @Published var error: String = ""
     @Published var hasSecretKey = VaultKeychain.load() != nil
     @Published var recordExists = false
+    /// 这次用的是本机缓存（拉不到服务端）。界面要如实说出来。
+    @Published var offline = false
+    /// 有本地改动还没推上去。离线改了东西时置起来，下次同步成功清掉。
+    @Published var pendingPush = false
 
     private var auk: Data?
     private var record: VRecord?
@@ -179,24 +183,84 @@ final class VaultStore: ObservableObject {
     private var base: String { NetworkConfig.shared.serverUrl }
     private var token: String { NetworkConfig.shared.token }
 
+    // MARK: 本机缓存（离线可用）
+    //
+    // 缓存的是**密文** —— 和服务端存的是同一份 blob，没有 AUK 谁也读不懂。
+    // 没有它的话，飞机上、地铁里、服务端挂了的时候保险箱就是一块砖：
+    // 密码管理器最该顶用的时刻恰恰是网络不通的时刻。
+    // 文件用 completeFileProtection：设备锁屏后连这份密文都读不到。
+    private struct VCache: Codable { var blob: String; var rev: Int }
+
+    private var cacheURL: URL? {
+        guard let dir = try? FileManager.default.url(for: .applicationSupportDirectory,
+                                                     in: .userDomainMask,
+                                                     appropriateFor: nil, create: true) else { return nil }
+        return dir.appendingPathComponent("umbra-vault-cache.json")
+    }
+
+    private func writeCache(blob: String, rev: Int) {
+        guard let url = cacheURL, let data = try? JSONEncoder().encode(VCache(blob: blob, rev: rev)) else { return }
+        try? data.write(to: url, options: [.atomic, .completeFileProtection])
+    }
+
+    private func readCache() -> VCache? {
+        guard let url = cacheURL, let data = try? Data(contentsOf: url) else { return nil }
+        return try? JSONDecoder().decode(VCache.self, from: data)
+    }
+
+    private func clearCache() {
+        if let url = cacheURL { try? FileManager.default.removeItem(at: url) }
+    }
+
     // 拉取云端记录（未解锁也可拉，用于取 salt/verifier）。失败时给出可区分的原因。
+    /// 网络拉不到时回落到本机缓存 —— 有缓存就当作拉到了，只是标成离线。
+    private func fallBackToCache(_ netError: String) {
+        guard let c = readCache(),
+              let rd = try? JSONDecoder().decode(VRecord.self, from: Data(c.blob.utf8)) else {
+            error = netError          // 连缓存都没有，才是真的用不了
+            offline = true
+            return
+        }
+        record = rd
+        syncRev = c.rev
+        recordExists = true
+        offline = true
+        error = ""                    // 有缓存就能解锁，别拿网络问题挡着用户
+    }
+
     func pullRecord() async {
         guard !base.isEmpty, let url = URL(string: "\(base)/vault/sync?have_rev=-1") else { error = "未配置服务器地址（在「我的」页填写）"; return }
-        if token.isEmpty { error = "未配置访问令牌（在「我的」页填与电脑相同的令牌）"; return }
-        var req = URLRequest(url: url); req.setValue(token, forHTTPHeaderField: "X-Umbra-Token")
+        // 这里**不再**因为 token 为空就直接拒绝。服务端只有在自己配了 ASSIST_TOKEN 时才校验，
+        // 客户端提前拦一道的结果是：服务端根本没设 token 的部署，iOS 也永远解不开保险箱，
+        // 而且报的是「未配置访问令牌」——用户按提示去填，填什么都没用。
+        // 现在照发不误，让服务端的 401 来说话。
+        var req = URLRequest(url: url)
+        if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
         do {
             let (data, resp) = try await URLSession.shared.data(for: req)
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
-            if code == 401 || code == 403 { error = "访问令牌不正确（请与电脑端一致）"; return }
-            if code == 404 { error = "服务器未部署同步接口（请更新并重启服务端）"; return }
-            if code != 200 { error = "服务器返回 \(code)"; return }
-            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { error = "服务器响应异常"; return }
+            if code == 401 || code == 403 {
+                // 区分「没填」和「填错了」——两种情况下一步要做的事不一样。
+                error = token.isEmpty
+                    ? "服务端要访问令牌，但这台手机上还没填。去「我 › 连接 › 访问 Token」填上服务端的 ASSIST_TOKEN。"
+                    : "访问令牌不正确，要和服务端的 ASSIST_TOKEN 一模一样（在「我 › 连接」里改）。"
+                return
+            }
+            if code == 404 { fallBackToCache("服务器未部署同步接口（请更新并重启服务端）"); return }
+            if code != 200 { fallBackToCache("服务器返回 \(code)"); return }
+            guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { fallBackToCache("服务器响应异常"); return }
             recordExists = (obj["exists"] as? Bool) ?? false
             syncRev = (obj["rev"] as? Int) ?? 0
             if let blobStr = obj["blob"] as? String, let rd = try? JSONDecoder().decode(VRecord.self, from: Data(blobStr.utf8)) {
-                record = rd; error = ""
-            } else if recordExists { error = "云端数据解析失败（版本不一致？）" }
-        } catch let e { error = "连不上服务器：\(e.localizedDescription)" }
+                record = rd; error = ""; offline = false
+                writeCache(blob: blobStr, rev: syncRev)   // 拉到就落一份，下次断网还能开
+            } else if recordExists {
+                fallBackToCache("云端数据解析失败（版本不一致？）")
+            }
+        } catch let e {
+            // 断网 / 超时 / DNS 挂了 —— 这正是缓存该顶上的时候。
+            fallBackToCache("连不上服务器：\(e.localizedDescription)")
+        }
     }
 
     func unlock(password: String, secretKey: String) async {
@@ -204,7 +268,8 @@ final class VaultStore: ObservableObject {
         defer { loading = false }
         if record == nil { await pullRecord() }
         guard let rec = record else {
-            if error.isEmpty { error = "云端还没有数据，请先在电脑端「立即同步」一次" } // 否则保留 pullRecord 给出的具体原因（令牌/网络/404）
+            // 保留 pullRecord 给出的具体原因（令牌 / 网络 / 404）；都没有才说这句。
+            if error.isEmpty { error = "云端还没有数据，请先在电脑端「立即同步」一次" }
             return
         }
         let salt = Data(base64Encoded: rec.salt) ?? Data()
@@ -218,6 +283,17 @@ final class VaultStore: ObservableObject {
         VaultKeychain.save(sk); hasSecretKey = true
         applySnapshot(snap)
         unlocked = true
+    }
+
+    /// 只校验主密码对不对，**不解密、不改状态**。开启 Face ID 时要先验一次主密码，
+    /// 用 unlock() 会把整个快照解一遍还会翻状态，副作用太大。
+    /// 走的是和 unlock 同一条派生 + verifier 比对，纯本地、不联网。
+    func verifyPassword(_ password: String) -> Bool {
+        guard let rec = record else { return false }
+        guard let sk = VaultKeychain.load(), !sk.isEmpty else { return false }
+        let salt = Data(base64Encoded: rec.salt) ?? Data()
+        let a = VaultCrypto.deriveAUK(password: password, secretKey: sk, salt: salt, kdf: rec.kdf ?? "pbkdf2")
+        return VaultCrypto.verifierOf(VaultCrypto.authHash(auk: a, salt: salt)) == rec.verifier
     }
 
     private func applySnapshot(_ snap: VSnapshot) {
@@ -235,7 +311,22 @@ final class VaultStore: ObservableObject {
     }
     func switchVault(_ id: String) { curVaultId = id; loadCurrent() }
 
+    /// 上锁只清内存里的明文与密钥。**缓存不清** —— 它是密文，留着下次离线还能开；
+    /// 真要清掉是「忘掉这台设备」那一档的事（forgetLocalData）。
     func lock() { unlocked = false; auk = nil; snapshot = nil; vaultKeys.removeAll(); items = []; types = [] }
+
+    /// 彻底忘掉这台设备上的本地痕迹：密文缓存 + Keychain 里的 Secret Key。
+    func forgetLocalData() {
+        lock()
+        clearCache()
+        VaultKeychain.clear()
+        hasSecretKey = false
+        record = nil
+        recordExists = false
+        syncRev = 0
+        offline = false
+        pendingPush = false
+    }
 
     func imageData(_ attId: String) -> Data? {
         guard let b64 = snapshot?.data[curVaultId]?.attachments[attId] else { return nil }
@@ -317,6 +408,9 @@ final class VaultStore: ObservableObject {
             return
         }
         let recordStr = "{\"v\":1,\"kdf\":\"\(rec.kdf ?? "pbkdf2")\",\"salt\":\"\(rec.salt)\",\"verifier\":\"\(rec.verifier)\",\"enc\":\"\(enc)\"}"
+        // **先落本机缓存再推**。顺序反过来的话，离线时改的东西一关 App 就没了 ——
+        // 快照只在内存里，服务端又没收到。
+        writeCache(blob: recordStr, rev: syncRev)
         for attempt in 0..<3 {
             guard let url = URL(string: "\(base)/vault/sync") else { return }
             var req = URLRequest(url: url); req.httpMethod = "PUT"
@@ -324,8 +418,19 @@ final class VaultStore: ObservableObject {
             if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
             req.httpBody = try? JSONSerialization.data(withJSONObject: ["blob": recordStr, "baseRev": syncRev, "deviceId": NetworkConfig.shared.clientId, "force": attempt == 2])
             guard let (data, _) = try? await URLSession.shared.data(for: req),
-                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
-            if (obj["ok"] as? Bool) == true { syncRev = (obj["rev"] as? Int) ?? syncRev; return }
+                  let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                // 推不上去（多半是断网）：改动已经在本机缓存里了，标一下等下次同步。
+                offline = true
+                pendingPush = true
+                return
+            }
+            if (obj["ok"] as? Bool) == true {
+                syncRev = (obj["rev"] as? Int) ?? syncRev
+                writeCache(blob: recordStr, rev: syncRev)
+                offline = false
+                pendingPush = false
+                return
+            }
             if (obj["conflict"] as? Bool) == true { await pullMerge() } else { return }
         }
     }

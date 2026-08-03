@@ -23,60 +23,116 @@ struct UmbraVaultHomeView: View {
     @State private var query = ""
     /// "" 全部 / "fav" 收藏 / typeId
     @State private var cat = ""
+    /// 主密码框的焦点。错误卡里的「用主密码解锁 / 重新输入」要能把键盘直接叫起来，
+    /// 否则用户点完按钮还得再点一次输入框。
+    @FocusState private var passwordFocused: Bool
+    /// 识别中的呼吸/扫描线动画开关（上锁页出现即置 true，动画本身是 repeatForever）。
+    @State private var breathing = false
+    /// 连续输错主密码的次数。到第三次错误卡的第二段换成「只能用 Secret Key 恢复」。
+    @State private var wrongPasswordCount = 0
+    /// 从详情返回时要滚回的那一行。交给 UmbraPage 去滚，滚完它自己清空。
+    @State private var scrollAnchor: String?
 
     private var locked: Bool { !store.unlocked || session.softLocked }
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "我", title: "密码保险箱", onBack: { router.back() })
-        }, content: {
+        UmbraPage(scrollAnchor: $scrollAnchor, navBar: { navBar }, content: {
             if locked { lockedBody } else { unlockedBody }
         })
         .task { await store.pullRecord() }
-        .onAppear { session.startAutoLock() }
-        .onDisappear { session.stopAutoLock() }
+        .onAppear {
+            session.startAutoLock()
+            autoScanIfNeeded()
+            restoreScroll()
+        }
+        // 记录是异步拉回来的：onAppear 那一刻列表往往还是空的，滚了也没用。
+        // 等真的有行了再滚一次。
+        .onChange(of: store.items.count) { _ in restoreScroll() }
+        .onDisappear {
+            session.stopAutoLock()
+            // 离开页面就把「这一趟已经自动识别过」的标记清掉，下次进来才会再自动刷一次。
+            session.resetVisit()
+        }
+        // 上锁状态是异步变的（软锁到点、store 拉完数据才知道解没解开），
+        // 只在 onAppear 判一次会漏掉「进来时还没上锁、几分钟后自动上锁」这一档。
+        .onChange(of: locked) { _ in autoScanIfNeeded() }
+    }
+
+    /// 导航栏。＋ 与 ⋮ 只在解锁态出现 —— 上锁时点它们没有任何事情能做，
+    /// 摆在那里只会让人点了发现没反应。
+    @ViewBuilder
+    private var navBar: some View {
+        if locked {
+            UmbraNavBar(backLabel: "我", title: "密码保险箱", onBack: { router.back() })
+        } else {
+            UmbraNavBar(
+                backLabel: "我",
+                title: "密码保险箱",
+                onBack: { router.back() },
+                trailing: {
+                    UmbraNavIcon(iconPath: UmbraIconPath.plus, size: 22, strokeWidth: 2.2) {
+                        addRecord()
+                    }
+                    UmbraNavDots { session.touch(); router.present(moreSheet()) }
+                }
+            )
+        }
+    }
+
+    /// 从记录详情退回来时，滚回刚才看的那一行。
+    /// 上锁态不滚（那时候列表根本没画出来），滚完把标记清掉 ——
+    /// 不清的话下次从「我」重新进保险箱也会莫名其妙跳到中间那条。
+    private func restoreScroll() {
+        guard !locked, let id = session.lastOpenedRecordId else { return }
+        guard store.items.contains(where: { $0.id == id }) else {
+            session.lastOpenedRecordId = nil
+            return
+        }
+        scrollAnchor = id
+        session.lastOpenedRecordId = nil
+    }
+
+    /// 进页面自动刷脸：延迟 420ms 再发起，让转场先走完 ——
+    /// 页面还在滑动时弹系统识别面板，两个动画会打架，而且用户根本来不及看清。
+    private func autoScanIfNeeded() {
+        guard session.shouldAutoScan(unlocked: store.unlocked) else { return }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 420_000_000)
+            // 这 420ms 里状态可能已经变了（比如用户手动输密码进去了），再确认一次。
+            guard locked, session.faceState == .idle else { return }
+            startScan()
+        }
     }
 
     // MARK: 上锁态
+    //
+    // 状态机见「Face ID 解锁-实现说明」：idle / scanning / failed + fallbackOnly 旁路。
+    // 结构自上而下：96 识别图标区 → 标题+副文 → 主密码框 → 错误卡 → 解锁按钮 →
+    // 文字按钮 → 两行灰色链接。
 
     @ViewBuilder
     private var lockedBody: some View {
         VStack(spacing: 16) {
-            UmbraIcon(d: UmbraIconPath.faceId, size: 56, strokeWidth: 1.4)
-                .foregroundColor(session.faceIDEnabled && session.biometryAvailable ? UmbraColor.orange : UmbraColor.faint)
-                .padding(.top, 30)
+            faceIconArea
 
             VStack(spacing: 7) {
-                Text(session.softLocked ? "保险箱已自动上锁" : "保险箱已上锁")
+                Text(lockTitle)
                     .font(UmbraFont.sans(20, .w600))
                     .foregroundColor(UmbraColor.text)
-                Text(session.softLocked
-                     ? "\(session.autoLockMinutes) 分钟没动了，验证一下继续。"
-                     : "用主密码解锁。主密码不保存、不上传，忘记无法找回。")
+                Text(lockSubtitle)
                     .font(UmbraFont.sans(13, .w400))
                     .foregroundColor(UmbraColor.muted)
                     .lineSpacing(13 * 0.65)
                     .multilineTextAlignment(.center)
             }
 
-            // 软锁只要验证身份，不必再输主密码 —— AUK 还在内存里。
-            if session.softLocked {
-                if session.faceIDEnabled && session.biometryAvailable {
-                    UmbraButton(title: "用 \(session.biometryName) 解锁", kind: .primary, height: 52) {
-                        session.unlockWithBiometry()
-                    }
-                }
-                if let e = session.faceError { faceErrorCard(e) }
-                UmbraButton(title: "改用主密码（会完全上锁）", kind: .secondary, height: 48) {
-                    store.lock()
-                    session.softLocked = false
-                    session.faceError = nil
-                }
-            } else {
+            // 软锁时 AUK 还在内存里，只要证明是本人，不必再输主密码。
+            if !session.softLocked {
                 SecureField("主密码", text: $password)
                     .font(UmbraFont.mono(15))
                     .multilineTextAlignment(.center)
                     .textFieldStyle(.plain)
+                    .focused($passwordFocused)
                     .padding(.horizontal, 13)
                     .frame(height: 52)
                     .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous).fill(UmbraColor.card))
@@ -85,8 +141,7 @@ struct UmbraVaultHomeView: View {
                             .strokeBorder(store.error.isEmpty ? UmbraColor.border : UmbraColor.danger, lineWidth: UmbraMetric.borderW)
                     )
 
-                // 本机第一次解锁要 Secret Key（电脑端的 Emergency Kit 里那串）。
-                // 存过一次之后进 Keychain，就不再问了。
+                // 本机第一次解锁要 Secret Key（电脑端 Emergency Kit 里那串）。存过就不再问。
                 if !store.hasSecretKey {
                     TextField("Secret Key（电脑端 Emergency Kit）", text: $secretKey)
                         .font(UmbraFont.mono(14))
@@ -101,27 +156,179 @@ struct UmbraVaultHomeView: View {
                                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
                         )
                 }
+            }
 
-                if !store.error.isEmpty { errorCard(store.error) }
+            if let f = session.faceFailure, session.faceState == .failed { faceErrorCard(f) }
+            if !store.error.isEmpty { errorCard(store.error) }
 
+            if session.softLocked {
+                UmbraButton(title: "解锁保险箱", kind: .primary, height: 52) { session.scanForSoftUnlock() }
+                UmbraButton(title: "改用主密码（会完全上锁）", kind: .secondary, height: 48) {
+                    store.lock()
+                    session.markManualLock()
+                }
+            } else {
                 UmbraButton(title: store.loading ? "解锁中…" : "解锁保险箱",
                             kind: store.loading ? .disabled : .primary, height: 52) {
-                    Task {
-                        await store.unlock(password: password, secretKey: secretKey)
-                        if store.unlocked { password = ""; secretKey = ""; session.touch() }
-                    }
+                    submitPassword()
                 }
-
-                VStack(spacing: 9) {
-                    linkText("换了新设备？输入 Secret Key") { router.go(.vaultRecover) }
-                    linkText("还没有保险箱？看看怎么建") { router.go(.vaultCreate) }
-                }
-                .padding(.top, 4)
+                // 用不了就不摆这颗按钮。摆一个点了只会弹「已关掉」的按钮
+                // 比不摆更糟 —— 用户会以为是自己操作不对。
+                if faceUsable { textButton }
             }
+
+            VStack(spacing: 9) {
+                linkText("换了新设备？输入 Secret Key") { router.go(.vaultRecover) }
+                linkText("还没有保险箱？看看怎么建") { router.go(.vaultCreate) }
+            }
+            .padding(.top, 4)
         }
         .padding(.horizontal, 20)
-        .padding(.bottom, 30)
+        .padding(.vertical, 30)
         .frame(maxWidth: .infinity)
+    }
+
+    // MARK: 识别图标区
+    //
+    // 96×96 / 圆角 26，内含 56 的 Face ID 线性图标。底色与描边随状态过渡 .2s。
+    // scanning 时呼吸（.55→1 透明度、.97→1.03 缩放，1.4s）+ 一条扫描线上下走（1.1s）。
+    // 「看起来在动的东西必须真的在动」—— 这两个动效是自查清单里点名的。
+    /// 这台设备、这个时刻，刷脸这条路走不走得通。
+    /// 软锁只要验身份，不需要存过主密码；硬锁必须有存好的凭证才能把密码取回来。
+    private var faceUsable: Bool {
+        session.biometryAvailable && session.faceIDEnabled
+            && (session.hasBiometricCredential || session.softLocked)
+    }
+
+    private var faceIconArea: some View {
+        let scanning = session.faceState == .scanning
+        let failed = session.faceState == .failed
+        let bg = scanning ? UmbraColor.orangeSoft : (failed ? UmbraColor.warningSoft : UmbraColor.chip)
+        let fg = scanning ? UmbraColor.orange : (failed ? UmbraColor.warning : UmbraColor.faint)
+        // 刷脸走不通时画一把锁，不画 Face ID 图标 —— 画了就是在暗示「点我能刷脸」。
+        let icon = faceUsable ? UmbraIconPath.faceId : UmbraIconPath.lock
+        return Button(action: tapFaceIcon) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 26, style: .continuous).fill(bg)
+                UmbraIcon(d: icon, size: 56, strokeWidth: 1.4)
+                    .foregroundColor(fg)
+                    .opacity(scanning && breathing ? 1 : (scanning ? 0.55 : 1))
+                    .scaleEffect(scanning && breathing ? 1.03 : (scanning ? 0.97 : 1))
+                    .animation(scanning
+                               ? .easeInOut(duration: 1.4).repeatForever(autoreverses: true)
+                               : .default,
+                               value: breathing)
+                if scanning {
+                    Capsule()
+                        .fill(UmbraColor.orange)
+                        .frame(height: 2)
+                        .padding(.horizontal, 22)
+                        .opacity(0.7)
+                        .offset(y: breathing ? 18 : -18)
+                        .animation(.easeInOut(duration: 1.1).repeatForever(autoreverses: true), value: breathing)
+                }
+            }
+            .frame(width: 96, height: 96)
+            .animation(UmbraMotion.tint, value: session.faceState)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(!faceUsable ? "保险箱已上锁"
+                            : (failed ? "再识别一次" : "用\(session.biometryName)解锁"))
+        .onAppear { breathing = true }
+    }
+
+    /// 点图标：scanning 时忽略；关掉 / 不支持各给自己的提示；其余发起识别。
+    private func tapFaceIcon() {
+        guard session.faceState != .scanning else { return }
+        guard session.faceIDEnabled else {
+            router.showToast("\(session.biometryName) 已在保险箱设置里关掉")
+            return
+        }
+        guard session.biometryAvailable else {
+            router.showToast("这台设备没有可用的 \(session.biometryName)")
+            return
+        }
+        startScan()
+    }
+
+    /// 发起识别。软锁只验身份；硬锁验完还要把主密码取回来去解密。
+    private func startScan() {
+        if session.softLocked {
+            session.scanForSoftUnlock()
+        } else {
+            guard session.hasBiometricCredential else {
+                router.showToast("还没开启\(session.biometryName)解锁，先用主密码进一次")
+                return
+            }
+            session.scanForPassword { pw in
+                Task {
+                    await store.unlock(password: pw, secretKey: "")
+                    if store.unlocked {
+                        session.markUnlocked()
+                        router.showToast("\(session.biometryName) 通过，已解锁")
+                    }
+                }
+            }
+        }
+    }
+
+    private func submitPassword() {
+        let attempted = password
+        Task {
+            await store.unlock(password: attempted, secretKey: secretKey)
+            if store.unlocked {
+                password = ""; secretKey = ""
+                session.markUnlocked()
+            } else {
+                wrongPasswordCount += 1
+            }
+        }
+    }
+
+    // MARK: 上锁态文案（照搬规格，别改写）
+
+    private var lockTitle: String {
+        switch session.faceState {
+        case .scanning: return "正在识别…"
+        case .failed: return "\(session.biometryName) 没通过"
+        case .idle: return session.softLocked ? "保险箱已自动上锁" : "保险箱已上锁"
+        }
+    }
+
+    private var lockSubtitle: String {
+        switch session.faceState {
+        case .scanning: return "看一下屏幕就好"
+        case .failed: return "点一下上面的图标再识别一次，或者输入主密码。"
+        case .idle:
+            if session.softLocked { return "\(session.autoLockMinutes) 分钟没动了，验证一下继续。" }
+            if !session.faceIDEnabled {
+                return "\(session.biometryName) 已关闭，输入主密码解锁。主密码不保存、不上传，忘记无法找回。"
+            }
+            if session.hasBiometricCredential {
+                return "进来时会自动识别 \(session.biometryName)。也可以输入主密码，主密码存在这台设备的安全隔区里，不上传，忘记无法找回。"
+            }
+            return "用主密码解锁。主密码不保存、不上传，忘记无法找回。"
+        }
+    }
+
+    private var textButton: some View {
+        let label: String = {
+            switch session.faceState {
+            case .scanning: return "识别中…"
+            case .failed: return "再识别一次"
+            case .idle: return "用\(session.biometryName)解锁"
+            }
+        }()
+        return Button(action: tapFaceIcon) {
+            Text(label)
+                .font(UmbraFont.sans(15, .w560))
+                .foregroundColor(session.faceState == .scanning ? UmbraColor.faint : UmbraColor.orange)
+                .frame(minHeight: UmbraMetric.tapMin)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(session.faceState == .scanning)
     }
 
     private func linkText(_ t: String, _ act: @escaping () -> Void) -> some View {
@@ -135,9 +342,34 @@ struct UmbraVaultHomeView: View {
         .buttonStyle(.plain)
     }
 
-    /// 解锁失败走错误三段式：发生了什么 → 为什么 → 现在能做什么。
-    /// store.error 已经是「为什么」那一段（令牌不对 / 连不上 / 主密码不对…），
-    /// 第三段是两个真按钮，不是一句「请重试」。
+    // MARK: 两种错误卡（都必须是三段式）
+
+    /// 生物识别未通过（琥珀）。
+    private func faceErrorCard(_ f: UmbraBiometricStore.Failure) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 7) {
+                UmbraIcon(d: UmbraIconPath.alertTriangle, size: 14, strokeWidth: 2.1)
+                Text("\(session.biometryName) 没通过").font(UmbraFont.sans(14.5, .w560))
+            }
+            .foregroundColor(UmbraColor.warning)
+            Text(f.message)
+                .font(UmbraFont.sans(13, .w400))
+                .foregroundColor(UmbraColor.muted)
+                .lineSpacing(13 * 0.6)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(spacing: 7) {
+                UmbraButton(title: "再试一次", kind: .secondary, height: 40) { startScan() }
+                UmbraButton(title: "用主密码解锁", kind: .secondary, height: 40) {
+                    session.preferPassword()
+                    passwordFocused = true
+                }
+            }
+        }
+        .padding(13)
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.warningSoft))
+    }
+
+    /// 主密码错误 / 连接问题（砖红）。第三段按问题类型给不同按钮。
     private func errorCard(_ why: String) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
@@ -145,18 +377,22 @@ struct UmbraVaultHomeView: View {
                 Text("没能解锁").font(UmbraFont.sans(14.5, .w560))
             }
             .foregroundColor(UmbraColor.danger)
-            Text(why)
+            Text(wrongPasswordCount >= 3 && !isConnectionProblem(why)
+                 ? "已经错了 \(wrongPasswordCount) 次。忘记主密码只能用 Secret Key 恢复，Umbra 这边没有备份。"
+                 : why)
                 .font(UmbraFont.sans(13, .w400))
                 .foregroundColor(UmbraColor.muted)
                 .lineSpacing(13 * 0.6)
                 .frame(maxWidth: .infinity, alignment: .leading)
             HStack(spacing: 7) {
-                UmbraButton(title: "重新输入", kind: .secondary, height: 40) {
-                    password = ""
-                    store.error = ""
-                }
-                UmbraButton(title: "用 Secret Key 恢复", kind: .secondary, height: 40) {
-                    router.go(.vaultRecover)
+                if isConnectionProblem(why) {
+                    UmbraButton(title: "去填连接", kind: .primary, height: 40) { router.go(.setConn) }
+                    UmbraButton(title: "重新输入", kind: .secondary, height: 40) { clearPasswordError() }
+                } else {
+                    UmbraButton(title: "重新输入", kind: .secondary, height: 40) { clearPasswordError() }
+                    UmbraButton(title: "用 Secret Key 恢复", kind: .secondary, height: 40) {
+                        router.go(.vaultRecover)
+                    }
                 }
             }
         }
@@ -164,24 +400,17 @@ struct UmbraVaultHomeView: View {
         .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.dangerSoft))
     }
 
-    private func faceErrorCard(_ why: String) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 7) {
-                UmbraIcon(d: UmbraIconPath.alertTriangle, size: 15, strokeWidth: 2.1)
-                Text("\(session.biometryName) 没通过").font(UmbraFont.sans(14.5, .w560))
-            }
-            .foregroundColor(UmbraColor.warning)
-            Text(why)
-                .font(UmbraFont.sans(13, .w400))
-                .foregroundColor(UmbraColor.muted)
-                .lineSpacing(13 * 0.6)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            UmbraButton(title: "再试一次", kind: .secondary, height: 40) {
-                session.unlockWithBiometry()
-            }
-        }
-        .padding(13)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.warningSoft))
+    private func clearPasswordError() {
+        password = ""
+        store.error = ""
+        passwordFocused = true
+    }
+
+    /// 这条错误是「连接/令牌」还是「密码」。两类问题下一步要做的事完全不同，
+    /// 给错按钮比不给按钮更糟（用户会照着按，然后发现没用）。
+    private func isConnectionProblem(_ why: String) -> Bool {
+        for k in ["令牌", "服务器", "连不上", "地址", "同步接口"] where why.contains(k) { return true }
+        return false
     }
 
     // MARK: 解锁态
@@ -192,6 +421,7 @@ struct UmbraVaultHomeView: View {
 
         VStack(alignment: .leading, spacing: UmbraMetric.sp4) {
             unlockedNote
+            if store.offline { offlineNote }
             profileCard
 
             UmbraSearchField(placeholder: "搜名称、账号或网址", text: $query)
@@ -199,30 +429,15 @@ struct UmbraVaultHomeView: View {
 
             catRow
 
+            // 安全体检压成**一行细摘要**放在这里，而不是列表底下那张大卡：
+            // 它是「顺手看一眼」的东西，挡在记录前面会天天被略过，
+            // 埋在最底下又等于没有 —— 记录多了根本滚不到。
+            checkupLine(audit)
+
             if rows.isEmpty {
                 emptyState
             } else {
                 ForEach(groups) { g in groupCard(g) }
-            }
-
-            checkupCard(audit)
-            toolsCard
-
-            if !store.items.isEmpty {
-                Button { addRecord() } label: {
-                    Text("存一条新的")
-                        .font(UmbraFont.sans(15.5, .w560))
-                        .foregroundColor(UmbraColor.orange)
-                        .frame(maxWidth: .infinity)
-                        .frame(height: 48)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .strokeBorder(style: StrokeStyle(lineWidth: 1, dash: [5, 4]))
-                                .foregroundColor(UmbraColor.border)
-                        )
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
             }
 
             Text("主密码派生走 PBKDF2-SHA256，参数与电脑端一致，两端能互相解开同一份密文。复制出来的内容 60 秒后自动清空剪贴板。")
@@ -243,7 +458,9 @@ struct UmbraVaultHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 store.lock()
-                session.softLocked = false
+                // 手动上锁 = 「我现在就要它锁上」。这一档**不自动刷脸**，
+                // 否则刚点完上锁系统就把识别面板弹出来，等于没锁。
+                session.markManualLock()
                 router.showToast("已重新上锁")
             } label: {
                 Text("立即上锁")
@@ -257,6 +474,40 @@ struct UmbraVaultHomeView: View {
         .padding(.horizontal, UmbraMetric.sp4)
         .padding(.vertical, 9)
         .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous).fill(UmbraColor.successSoft))
+    }
+
+    /// 离线提示。用的是本机那份密文缓存，能看能改，只是还没同步。
+    /// 不说清楚的话，用户会以为在别的设备上改的东西没同步过来是 App 坏了。
+    private var offlineNote: some View {
+        HStack(alignment: .top, spacing: 9) {
+            UmbraIcon(d: UmbraIconPath.alertTriangle, size: 15, strokeWidth: 2).padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(store.pendingPush ? "离线 · 有改动还没同步上去" : "离线 · 看的是本机缓存")
+                    .font(UmbraFont.sans(12.5, .w560))
+                Text(store.pendingPush
+                     ? "改动已经存在这台手机上了，连上网会自动补推。"
+                     : "别的设备上的新改动要等联网后才看得到。")
+                    .font(UmbraFont.sans(12, .w400))
+                    .lineSpacing(12 * 0.55)
+            }
+            Spacer(minLength: 0)
+            Button {
+                Task {
+                    await store.pullRecord()
+                    await store.syncNow()
+                }
+            } label: {
+                Text("重试")
+                    .font(UmbraFont.sans(12.5, .w560))
+                    .frame(minHeight: 34)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+        .foregroundColor(UmbraColor.warning)
+        .padding(.horizontal, UmbraMetric.sp4)
+        .padding(.vertical, 9)
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous).fill(UmbraColor.warningSoft))
     }
 
     private var currentVault: VVaultInfo? { store.vaults.first { $0.id == store.curVaultId } }
@@ -379,7 +630,9 @@ struct UmbraVaultHomeView: View {
             VStack(spacing: 0) {
                 ForEach(Array(g.items.enumerated()), id: \.element.id) { idx, it in
                     if idx > 0 { UmbraRowDivider() }
-                    recordRow(it)
+                    // .id 供返回时的 scrollTo 定位。收藏组里同一条记录会出现两次，
+                    // 所以锚点带上组 id，不然 ScrollViewReader 会拿到两个同名目标。
+                    recordRow(it).id(g.id == "fav" ? "fav-\(it.id)" : it.id)
                 }
             }
             .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
@@ -393,6 +646,8 @@ struct UmbraVaultHomeView: View {
     private func recordRow(_ it: VItem) -> some View {
         Button {
             session.touch()
+            // 记下这一行，返回时滚回来（页面每次返回都会重建，不记就回到最上方）。
+            session.lastOpenedRecordId = it.id
             router.go(.vaultRecord(id: it.id))
         } label: {
             HStack(spacing: 12) {
@@ -531,77 +786,72 @@ struct UmbraVaultHomeView: View {
         router.go(.vaultEdit(id: nil))
     }
 
-    private func checkupCard(_ audit: UmbraVaultAudit) -> some View {
+    /// 安全体检的一行细摘要。左边一个 22 的小分数环，右边一句话，整行可点进详情。
+    /// 有问题时数字用警示色，没问题时整行都是弱色 —— 不打扰。
+    private func checkupLine(_ audit: UmbraVaultAudit) -> some View {
         Button {
             session.touch()
             router.go(.vaultCheck)
         } label: {
-            HStack(spacing: 13) {
-                UmbraScoreRing(score: audit.score, size: 44)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("安全体检")
-                        .font(UmbraFont.sans(16, .w560))
-                        .foregroundColor(UmbraColor.text)
-                    Text(audit.total == 0 ? "没有发现问题 · 只在本机计算，不上传"
-                                          : "\(audit.total) 项需要处理 · 只在本机计算，不上传")
-                        .font(UmbraFont.sans(13, .w400))
-                        .foregroundColor(UmbraColor.muted)
-                        .lineLimit(1)
-                }
-                Spacer(minLength: 0)
-                UmbraIcon(d: UmbraIconPath.chevronRight, size: 16, strokeWidth: 2.2)
-                    .foregroundColor(UmbraColor.faint)
-            }
-            .padding(13)
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
-            .overlay(
-                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
-                    .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var toolsCard: some View {
-        VStack(spacing: 0) {
-            toolRow(UmbraIconPath.key, "密码生成器", nil) { router.go(.vaultGen) }
-            UmbraRowDivider()
-            toolRow(UmbraIconPath.trash, "回收站", "在电脑上") { router.go(.vaultTrash) }
-            UmbraRowDivider()
-            toolRow(UmbraIconPath.settings, "保险箱设置", "\(session.autoLockMinutes) 分钟自动锁定") { router.go(.vaultSettings) }
-        }
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
-        .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
-                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
-        )
-    }
-
-    private func toolRow(_ icon: String, _ label: String, _ value: String?, _ act: @escaping () -> Void) -> some View {
-        Button {
-            session.touch()
-            act()
-        } label: {
-            HStack(spacing: 11) {
-                UmbraIcon(d: icon, size: 17, strokeWidth: 1.9)
+            HStack(spacing: 8) {
+                UmbraScoreRing(score: audit.score, size: 22)
+                Text("安全体检")
+                    .font(UmbraFont.sans(13, .w560))
                     .foregroundColor(UmbraColor.muted)
-                Text(label)
-                    .font(UmbraFont.sans(16, .w400))
-                    .foregroundColor(UmbraColor.text)
+                Text(audit.total == 0 ? "没有发现问题" : "\(audit.total) 项需要处理")
+                    .font(UmbraFont.sans(13, .w400))
+                    .foregroundColor(audit.total == 0 ? UmbraColor.faint : UmbraColor.warning)
+                    .lineLimit(1)
                 Spacer(minLength: 0)
-                if let v = value {
-                    Text(v).font(UmbraFont.sans(14, .w400)).foregroundColor(UmbraColor.faint)
-                }
-                UmbraIcon(d: UmbraIconPath.chevronRight, size: 15, strokeWidth: 2.2)
+                UmbraIcon(d: UmbraIconPath.chevronRight, size: 14, strokeWidth: 2.2)
                     .foregroundColor(UmbraColor.faint)
             }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 11)
-            .frame(minHeight: 52)
+            .frame(minHeight: UmbraMetric.tapMin)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+
+    // MARK: 「⋮」动作面板
+    //
+    // 原来这些入口是列表**底下**的大卡与三行卡：记录一多就滚不到，
+    // 而且它们和「翻记录」根本不是一件事，横在中间还挡路。
+    // 收进导航栏的「⋮」里，每一行都带**当下的真实值**（几项待处理、几个分组、
+    // 几分钟自动锁），不用点进去才知道现在是什么状态。
+    private func moreSheet() -> UmbraSheet {
+        let audit = UmbraVaultAudit(items: store.items)
+        let vaultName = currentVault?.name ?? "默认库"
+        let bio = session.faceIDEnabled && session.hasBiometricCredential
+            ? "\(session.biometryName) 已开启"
+            : "只用主密码"
+        return UmbraSheet(
+            title: "保险箱",
+            subtitle: "\(store.items.count) 条记录 · \(vaultName)",
+            items: [
+                UmbraSheetItem(label: "安全体检",
+                               note: audit.total == 0 ? "没有发现问题" : "\(audit.total) 项需要处理") {
+                    session.touch(); router.go(.vaultCheck)
+                },
+                UmbraSheetItem(label: "密码生成器", note: "本机随机，不联网") {
+                    session.touch(); router.go(.vaultGen)
+                },
+                UmbraSheetItem(label: "分组", note: "\(store.types.count) 个") {
+                    session.touch(); router.go(.vaultGroups)
+                },
+                UmbraSheetItem(label: "身份库", note: "当前：\(vaultName) · 共 \(store.vaults.count) 个") {
+                    session.touch(); router.go(.vaultProfiles)
+                },
+                UmbraSheetItem(label: "回收站", note: "这一版在电脑上") {
+                    session.touch(); router.go(.vaultTrash)
+                },
+                UmbraSheetItem(label: "从别处导入", note: "这一版在电脑上") {
+                    session.touch(); router.go(.vaultImport)
+                },
+                UmbraSheetItem(label: "保险箱设置",
+                               note: "\(session.autoLockMinutes) 分钟自动锁定 · \(bio)") {
+                    session.touch(); router.go(.vaultSettings)
+                }
+            ])
     }
 }
 

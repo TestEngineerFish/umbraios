@@ -51,7 +51,10 @@ struct UmbraShell: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .clipped()
 
-            if router.current.showsTabBar {
+            // 底栏只在**每个 Tab 的根页**显示。进了任何子页面（对话、详情、编辑、
+            // 保险箱子树…）都收起来 —— 这是 iOS 的通行做法，设计稿的
+            // `showTabBar: stack.length===1` 写的也是这个，之前是我实现漏了。
+            if router.stack.count == 1 && router.current.showsTabBar {
                 UmbraTabBar(
                     selection: .constant(router.tab),
                     badges: badges,
@@ -60,6 +63,20 @@ struct UmbraShell: View {
             }
         }
         .background(UmbraColor.bg)
+        // 从左边缘右划返回。自绘导航栈没有系统 NavigationStack 自带的这个手势，
+        // 而它在 iOS 上是肌肉记忆级的操作 —— 没有的话用户只能去够左上角那个按钮。
+        // 起点限制在左边缘 24pt 内：再往右就会和聊天里「按住说话」、
+        // 提醒的左滑行、指位卡的拖拽抢手势。
+        .simultaneousGesture(
+            DragGesture(minimumDistance: 24, coordinateSpace: .local)
+                .onEnded { g in
+                    guard router.canGoBack,
+                          g.startLocation.x < 24,
+                          g.translation.width > 80,
+                          abs(g.translation.height) < 60 else { return }
+                    router.back()
+                }
+        )
         .umbraOverlays(router)
         // 后台遮盖是**真功能**不是演示：切后台时系统会给当前屏幕截一张图放进多任务卡片，
         // 保险箱页面被截进去等于密码泄漏。只在保险箱子树里盖 —— 别的页面盖了纯属打扰。

@@ -20,37 +20,44 @@ struct UmbraNavBar<Trailing: View>: View {
     @ViewBuilder var trailing: () -> Trailing
 
     var body: some View {
-        HStack(spacing: 0) {
-            // 左侧：返回或占位。占位宽度和右侧一致，标题才能真正居中。
-            if let label = backLabel, let onBack {
-                Button(action: onBack) {
-                    HStack(spacing: 1) {
-                        if backChevron {
-                            UmbraIcon(d: UmbraIconPath.chevronLeft, size: 20, strokeWidth: 2.4)
-                        }
-                        Text(label).font(UmbraFont.sans(16, .w400))
-                    }
-                    .foregroundColor(UmbraColor.orange)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 6)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                // 44 高的栏里，点击区靠 frame 撑满高度而不是加内边距（加了会顶开栏高）
-                .frame(minWidth: UmbraMetric.tapMin, minHeight: UmbraMetric.tapMin, alignment: .leading)
-            } else {
-                Spacer().frame(width: 44)
-            }
-
+        // 标题用 ZStack **绝对居中**，不是夹在左右两坨之间靠 Spacer 挤出来的：
+        // 右侧放两个图标（＋ 与 ⋮）时左右宽度不等，夹心写法会把标题推偏几个点，
+        // 一眼看不出来但和左右两页一比就歪了。
+        ZStack {
             Text(title)
                 .font(UmbraFont.sectionTitle)     // 600 / 17
                 .foregroundColor(UmbraColor.text)
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .frame(maxWidth: .infinity)
+                // 留出左右动作区的宽度，标题长了先截断，不会压到按钮上。
+                .padding(.horizontal, 96)
 
-            HStack(spacing: 2) { trailing() }
-                .frame(minWidth: 44, minHeight: UmbraMetric.tapMin, alignment: .trailing)
+            HStack(spacing: 0) {
+                if let label = backLabel, let onBack {
+                    Button(action: onBack) {
+                        HStack(spacing: 1) {
+                            if backChevron {
+                                UmbraIcon(d: UmbraIconPath.chevronLeft, size: 20, strokeWidth: 2.4)
+                            }
+                            Text(label).font(UmbraFont.sans(16, .w400))
+                        }
+                        .foregroundColor(UmbraColor.orange)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 6)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    // 44 高的栏里，点击区靠 frame 撑满高度而不是加内边距（加了会顶开栏高）
+                    .frame(minWidth: UmbraMetric.tapMin, minHeight: UmbraMetric.tapMin, alignment: .leading)
+                } else {
+                    Spacer().frame(width: 44)
+                }
+
+                Spacer(minLength: 0)
+
+                HStack(spacing: 2) { trailing() }
+                    .frame(minWidth: 44, minHeight: UmbraMetric.tapMin, alignment: .trailing)
+            }
         }
         .padding(.leading, 4)
         .padding(.trailing, 8)
@@ -187,6 +194,10 @@ struct UmbraTabBar: View {
 // 滚动区左右不加边距 —— 由各页自己按 16 加，因为有些块（分段控件、卡片）
 // 的左右边距和正文不一样，统一加会失去这个自由度。
 struct UmbraPage<Content: View, Bar: View, Bottom: View>: View {
+    /// 要滚回去的锚点 id（对应内容里某个 `.id(...)`）。置上之后本页滚到那一行并立刻清空。
+    /// 用来做「从详情返回时保持列表位置」—— 自绘导航栈每次返回都会重建页面，
+    /// 不主动滚回去的话列表永远弹回最上方，翻到第 40 条看一眼再回来就得重新翻一次。
+    var scrollAnchor: Binding<String?>? = nil
     @ViewBuilder var navBar: () -> Bar
     @ViewBuilder var content: () -> Content
     @ViewBuilder var bottom: () -> Bottom
@@ -194,12 +205,26 @@ struct UmbraPage<Content: View, Bar: View, Bottom: View>: View {
     var body: some View {
         VStack(spacing: 0) {
             navBar()
-            ScrollView {
-                VStack(alignment: .leading, spacing: 0) { content() }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.bottom, UmbraMetric.sp8)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) { content() }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.bottom, UmbraMetric.sp8)
+                }
+                // 往下拖就收键盘。iOS 上这是所有带输入框的滚动页面的默认预期，
+                // 不给的话用户在表单里只能去点那个不知道在哪的「完成」。
+                .scrollDismissesKeyboard(.interactively)
+                .background(UmbraColor.bg)
+                .onChange(of: scrollAnchor?.wrappedValue) { target in
+                    guard let target else { return }
+                    // 让出一帧再滚：这一帧目标行可能还没进视图树，scrollTo 会落空。
+                    Task { @MainActor in
+                        try? await Task.sleep(nanoseconds: 30_000_000)
+                        proxy.scrollTo(target, anchor: .center)
+                        scrollAnchor?.wrappedValue = nil
+                    }
+                }
             }
-            .background(UmbraColor.bg)
             bottom()
         }
         .background(UmbraColor.bg)

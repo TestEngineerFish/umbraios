@@ -467,8 +467,7 @@ struct UmbraVaultRecoverView: View {
                         await store.unlock(password: password,
                                            secretKey: key.trimmingCharacters(in: .whitespacesAndNewlines))
                         if store.unlocked {
-                            session.softLocked = false
-                            session.touch()
+                            session.markUnlocked()
                             router.back()
                             router.showToast("已在这台设备上恢复保险箱")
                         }
@@ -572,6 +571,14 @@ struct UmbraVaultSettingsView: View {
     @EnvironmentObject private var store: VaultStore
     @EnvironmentObject private var session: UmbraVaultSession
 
+    /// 开启生物识别时的主密码确认浮层。开这个开关**当场就要验一次**：
+    /// 先验主密码（证明是保险箱主人），再验面容/指纹（证明人在跟前），两关都过才写入。
+    @State private var askPassword = false
+    @State private var confirmPwd = ""
+    @State private var confirmErr = ""
+    @State private var confirmBusy = false
+    @FocusState private var confirmFocused: Bool
+
     var body: some View {
         UmbraSettingsPage(
             backLabel: "返回", title: "保险箱设置", onBack: { router.back() },
@@ -604,16 +611,123 @@ struct UmbraVaultSettingsView: View {
                     rows: [
                         UmbraSettingRow(label: "看看系统填充面板长什么样", chevron: true) { router.go(.vaultAutofill) }
                     ]),
-                UmbraSettingSection(header: "同步", footer: "服务端只存密文，解不开也读不懂。", rows: [
-                    UmbraSettingRow(label: store.loading ? "同步中…" : "立即同步", tint: UmbraColor.orange) {
-                        Task {
-                            await store.syncNow()
-                            router.showToast("已同步")
+                UmbraSettingSection(
+                    header: "同步与本机数据",
+                    footer: store.offline
+                        ? "当前离线，用的是本机那份密文缓存。缓存是加密的，没有主密码谁也读不懂。"
+                        : "服务端只存密文，解不开也读不懂。本机也留一份同样的密文，断网时照样能开。",
+                    rows: [
+                        UmbraSettingRow(label: store.loading ? "同步中…" : "立即同步",
+                                        value: store.pendingPush ? "有改动待推" : nil,
+                                        tint: UmbraColor.orange) {
+                            Task {
+                                await store.syncNow()
+                                router.showToast(store.pendingPush ? "还是没推上去，等联网" : "已同步")
+                            }
+                        },
+                        UmbraSettingRow(label: "忘掉这台设备上的本地数据",
+                                        sub: "清掉密文缓存与 Secret Key，下次要重新输一遍",
+                                        tint: UmbraColor.danger) {
+                            router.confirm(UmbraAlert(
+                                title: "忘掉本机数据？",
+                                body: "清掉本机的密文缓存和 Secret Key。云端的数据不受影响，但这台设备之后要重新输主密码和 Secret Key，而且断网时打不开保险箱。",
+                                confirmLabel: "忘掉",
+                                confirmDestructive: true,
+                                onConfirm: {
+                                    store.forgetLocalData()
+                                    session.forgetPassword()
+                                    router.back()
+                                    router.showToast("已清掉本机数据")
+                                }))
                         }
-                    }
-                ])
+                    ])
             ])
             .onAppear { session.touch() }
+            .overlay { if askPassword { passwordConfirm } }
+    }
+
+    // MARK: 开启生物识别前的主密码确认
+    //
+    // 用浮层而不是系统 alert：系统 alert 上塞输入框在 SwiftUI 里只能用
+    // `.alert(...) { TextField }`，而这个页面已经有别的 alert 了 ——
+    // 同一个视图上挂两个 .alert，SwiftUI 只认第一个（这个坑「我 › 连接」页踩过一次）。
+    private var passwordConfirm: some View {
+        ZStack {
+            Color.black.opacity(0.42)
+                .ignoresSafeArea()
+                .onTapGesture { closeConfirm() }
+            VStack(spacing: 13) {
+                VStack(spacing: 6) {
+                    Text("先验一次主密码")
+                        .font(UmbraFont.sans(16, .w600))
+                        .foregroundColor(UmbraColor.text)
+                    Text("确认之后会立刻验一次 \(session.biometryName)，两关都过才把主密码存进这台设备的安全隔区。")
+                        .font(UmbraFont.sans(13, .w400))
+                        .foregroundColor(UmbraColor.muted)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(13 * 0.55)
+                }
+                SecureField("主密码", text: $confirmPwd)
+                    .font(UmbraFont.mono(15))
+                    .multilineTextAlignment(.center)
+                    .textFieldStyle(.plain)
+                    .focused($confirmFocused)
+                    .padding(.horizontal, 13)
+                    .frame(height: 48)
+                    .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous).fill(UmbraColor.bg))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous)
+                            .strokeBorder(confirmErr.isEmpty ? UmbraColor.border : UmbraColor.danger,
+                                          lineWidth: UmbraMetric.borderW)
+                    )
+                if !confirmErr.isEmpty {
+                    Text(confirmErr)
+                        .font(UmbraFont.sans(12.5, .w400))
+                        .foregroundColor(UmbraColor.danger)
+                        .lineSpacing(12.5 * 0.55)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                HStack(spacing: 9) {
+                    UmbraButton(title: "取消", kind: .secondary, height: 44) { closeConfirm() }
+                    UmbraButton(title: confirmBusy ? "验证中…" : "继续",
+                                kind: confirmBusy || confirmPwd.isEmpty ? .disabled : .primary,
+                                height: 44) { submitConfirm() }
+                }
+            }
+            .padding(17)
+            .frame(maxWidth: 320)
+            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
+            .overlay(
+                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
+                    .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
+            )
+            .padding(.horizontal, 28)
+        }
+        .onAppear { confirmFocused = true }
+    }
+
+    private func closeConfirm() {
+        askPassword = false
+        confirmPwd = ""
+        confirmErr = ""
+        confirmBusy = false
+    }
+
+    private func submitConfirm() {
+        guard !confirmBusy, !confirmPwd.isEmpty else { return }
+        session.touch()
+        confirmBusy = true
+        confirmErr = ""
+        let pwd = confirmPwd
+        session.enableBiometry(password: pwd, verifyPassword: { store.verifyPassword($0) }) { err in
+            confirmBusy = false
+            if let err {
+                confirmErr = err
+            } else {
+                closeConfirm()
+                router.showToast("\(session.biometryName) 解锁已开启")
+            }
+        }
     }
 
     private var lockRows: [UmbraSettingRow] {
@@ -630,18 +744,42 @@ struct UmbraVaultSettingsView: View {
                             toggle: session.maskEnabled) { session.maskEnabled.toggle() }
         ]
         if session.biometryAvailable {
-            rows.append(UmbraSettingRow(label: "用 \(session.biometryName) 解锁",
-                                        sub: "只用来解开自动锁定；完全上锁后仍要主密码",
-                                        toggle: session.faceIDEnabled) { session.faceIDEnabled.toggle() })
+            let on = session.faceIDEnabled && session.hasBiometricCredential
+            rows.append(UmbraSettingRow(
+                label: "用 \(session.biometryName) 解锁",
+                sub: on
+                    ? "主密码存在这台设备的安全隔区里，不上传、不进备份。重新录入面容/指纹后会自动失效。"
+                    : "打开时会当场验一次主密码和 \(session.biometryName)，之后才存进这台设备的安全隔区。",
+                toggle: on) {
+                    session.touch()
+                    if on {
+                        session.disableBiometry()
+                        router.showToast("已关闭，存的主密码也一并清掉了")
+                    } else if !store.unlocked {
+                        // 没解锁就没法验主密码对不对（校验值在快照里）。
+                        router.showToast("先解锁保险箱，再开这个开关")
+                    } else {
+                        confirmPwd = ""
+                        confirmErr = ""
+                        askPassword = true
+                    }
+                })
         } else {
             // 不可用时不给一个点不动的开关，直接说明为什么。
             rows.append(UmbraSettingRow(label: "用 \(session.biometryName) 解锁",
                                         sub: "这台设备没有可用的生物识别",
                                         value: "不可用", tint: UmbraColor.faint))
         }
+        if session.hasBiometricCredential {
+            rows.append(UmbraSettingRow(label: "忘掉已存的主密码", tint: UmbraColor.danger) {
+                session.forgetPassword()
+                router.showToast("已清掉，下次要用主密码解锁")
+            })
+        }
         rows.append(UmbraSettingRow(label: "立即上锁", tint: UmbraColor.orange) {
             store.lock()
-            session.softLocked = false
+            // 主动上锁这一档不自动刷脸 —— 刚锁完就弹识别面板等于没锁。
+            session.markManualLock()
             router.back()
             router.showToast("已重新上锁")
         })

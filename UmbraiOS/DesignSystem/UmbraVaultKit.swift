@@ -4,35 +4,212 @@
 // AES-256-GCM、Secret Key 存 Keychain、服务端零知识只存密文）已经跑通并和电脑端互通，
 // **一行都不动**。这里只加界面这一层缺的东西。
 //
-// 两级锁定（这是新加的，设计稿的「自动锁定 + Face ID」要它才成立）：
-//   软锁 —— 界面锁住，AUK 还在内存里。自动锁定走这一档，Face ID 就能解开。
-//   硬锁 —— VaultStore.lock()，AUK 清掉。「立即上锁」和退出应用走这一档，只能用主密码。
-// 为什么不做「Face ID 直接解锁」：那需要把主密码存进 Keychain，而设计稿和上锁页
-// 都写着「主密码不保存、不上传」。软锁这一档能在不存主密码的前提下把 Face ID 用起来。
+// 两级锁定（设计稿的「自动锁定 + Face ID」要它才成立）：
+//   软锁 —— 界面锁住，AUK 还在内存里。自动锁定走这一档，刷脸即可。
+//   硬锁 —— VaultStore.lock()，AUK 清掉。「立即上锁」和退出应用走这一档。
+//
+// 硬锁下的「Face ID 直接解锁」是**可选**的：打开之后主密码会存进这台设备带生物识别
+// 保护的 Keychain（细节与取舍见 UmbraBiometricStore）。默认关闭 —— 关着的时候
+// 「主密码不保存」这句话仍然成立，界面文案也会跟着变。
 import SwiftUI
 import UIKit
 import LocalAuthentication
+import Security
+
+// MARK: - 生物识别凭证
+//
+// 「用 Face ID 解锁」不是「跳过主密码」，而是**用生物识别取回本地保存的主密钥**：
+// 解密需要 AUK，AUK 只能由主密码 + Secret Key 派生，所以主密码必须存在这台设备上。
+//
+// 这是一个明确的取舍，界面上说清楚了：
+//   · 开关默认开，但**开启时会先验一次主密码 + 走一次生物识别**才写入；
+//   · Keychain 项带 `.biometryCurrentSet` —— 只有刷脸/指纹取得出，
+//     而且一旦录入的面容/指纹变化，这条凭证**立刻作废**（别人事后加一张脸也没用）；
+//   · `WhenUnlockedThisDeviceOnly` —— 不进 iCloud 钥匙串、不进备份、只在本机解锁时可读；
+//   · 关掉开关 / 「忘掉已存的主密码」/「忘掉本机数据」都会清除。
+//
+// **兜底必须是保险箱主密码，不能是设备锁屏密码**：设备密码解不开密文。
+// 所以策略用 `.deviceOwnerAuthenticationWithBiometrics`（不是 deviceOwnerAuthentication），
+// 并把 localizedFallbackTitle 置空，隐藏系统那颗「输入密码」。
+enum UmbraBiometricStore {
+    private static let account = "umbra.vault.masterPassword"
+    /// 存过没有的标记。**不用查 Keychain 来判断** ——
+    /// 带 .biometryCurrentSet 的项一旦被查询就可能触发系统验证 UI，
+    /// 而这个判断是在每次画上锁页时都要用的，那会变成"进页面就弹脸"。
+    /// （上一版用 kSecUseAuthenticationUI 想跳过 UI，那个 API 已废弃、在新系统上不保证生效，
+    ///  结果是后台线程里 SecItemCopyMatching 直接把进程带崩。）
+    private static let flagKey = "umbra.vault.hasBioCred"
+
+    /// 必须显式声明 Error（Result 的失败类型有这个约束）和 Equatable（下面要 == 比较）。
+    enum Failure: Error, Equatable {
+        /// 用户取消系统弹窗 / 点了兜底 —— 之后不要再自动弹。
+        case cancelled
+        /// 连错太多次被系统锁住，要先用设备密码解锁一次 iPhone。
+        case lockout
+        /// 面容/指纹数据变了，`.biometryCurrentSet` 保护的项已失效。
+        case invalidated
+        /// 设备不支持或没录入。
+        case unavailable
+        /// 其它（没识别通过、超时…）。
+        case failed
+
+        var message: String {
+            switch self {
+            case .cancelled: return "已取消。可以点上面的图标再识别一次，或者输入主密码。"
+            case .lockout: return "Face ID 被系统锁定了，需要先用设备密码解锁一次 iPhone。现在可以用主密码打开保险箱。"
+            case .invalidated: return "设备的面容数据变了，需要重新输入一次主密码来重新授权 Face ID。"
+            case .unavailable: return "这台设备没有可用的生物识别。"
+            case .failed: return "系统没能识别，可能是被遮挡或超过了等待时间。点一下上面的图标再识别一次，或者直接输入主密码。"
+            }
+        }
+    }
+
+    static var hasCredential: Bool { UserDefaults.standard.bool(forKey: flagKey) }
+
+    private static func baseQuery() -> [String: Any] {
+        [kSecClass as String: kSecClassGenericPassword,
+         kSecAttrAccount as String: account]
+    }
+
+    /// 写入。调用方**必须**已经验过主密码 —— 这里不做验证。
+    @discardableResult
+    static func save(password: String) -> Bool {
+        clear()
+        guard let data = password.data(using: .utf8),
+              let access = SecAccessControlCreateWithFlags(
+                nil,
+                kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+                .biometryCurrentSet,
+                nil) else { return false }
+        var add = baseQuery()
+        add[kSecValueData as String] = data
+        add[kSecAttrAccessControl as String] = access
+        let ok = SecItemAdd(add as CFDictionary, nil) == errSecSuccess
+        UserDefaults.standard.set(ok, forKey: flagKey)
+        return ok
+    }
+
+    /// 取回主密码。
+    ///
+    /// **两步走，顺序不能反**：先 `evaluatePolicy` 让 LocalAuthentication 自己去弹 UI，
+    /// 通过之后再拿这个已验证的 context 去读 Keychain（不会二次弹窗）。
+    /// 上一版是直接在后台线程 `SecItemCopyMatching` 让 Security 框架自己弹 ——
+    /// 那条路在这里会当场崩进程，而且拿不到 .userCancel / .biometryLockout 这些能区分的错误码。
+    ///
+    /// completion 标成 `@MainActor`：调用方全是 UI 状态（会话里的 @Published、页面里的 @State），
+    /// 而 LAContext 的回调落在任意线程上。类型上标死，就不必在每个调用点各自记得切回主线程。
+    static func load(reason: String, completion: @escaping @MainActor (Result<String, Failure>) -> Void) {
+        let ctx = LAContext()
+        ctx.localizedFallbackTitle = ""      // 隐藏系统的「输入密码」：设备密码解不开密文
+        var canErr: NSError?
+        guard ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &canErr) else {
+            let f: Failure = (canErr?.code == LAError.biometryLockout.rawValue) ? .lockout : .unavailable
+            Task { @MainActor in completion(.failure(f)) }
+            return
+        }
+        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { ok, err in
+            guard ok else {
+                let f = map(err)
+                Task { @MainActor in completion(.failure(f)) }
+                return
+            }
+            // 已经验过了，这次读不会再弹。放后台队列只是因为 Keychain 调用可能有 IO。
+            DispatchQueue.global(qos: .userInitiated).async {
+                var q = baseQuery()
+                q[kSecReturnData as String] = true
+                q[kSecUseAuthenticationContext as String] = ctx
+                var out: AnyObject?
+                let status = SecItemCopyMatching(q as CFDictionary, &out)
+                let value = (status == errSecSuccess)
+                    ? (out as? Data).flatMap { String(data: $0, encoding: .utf8) }
+                    : nil
+                Task { @MainActor in
+                    if let value {
+                        completion(.success(value))
+                    } else {
+                        // 读不出来 = 凭证已失效（多半是重新录了面容）。清掉标记，让界面回到「要输主密码」。
+                        clear()
+                        completion(.failure(.invalidated))
+                    }
+                }
+            }
+        }
+    }
+
+    /// 只做一次生物识别验证，不读 Keychain。开启开关时用。
+    static func verifyOnly(reason: String, completion: @escaping @MainActor (Result<Void, Failure>) -> Void) {
+        let ctx = LAContext()
+        ctx.localizedFallbackTitle = ""
+        guard ctx.canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil) else {
+            Task { @MainActor in completion(.failure(.unavailable)) }
+            return
+        }
+        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, localizedReason: reason) { ok, err in
+            let r: Result<Void, Failure> = ok ? .success(()) : .failure(map(err))
+            Task { @MainActor in completion(r) }
+        }
+    }
+
+    private static func map(_ err: Error?) -> Failure {
+        guard let code = (err as NSError?)?.code else { return .failed }
+        switch code {
+        case LAError.userCancel.rawValue, LAError.appCancel.rawValue, LAError.systemCancel.rawValue:
+            return .cancelled
+        case LAError.userFallback.rawValue:
+            return .cancelled
+        case LAError.biometryLockout.rawValue:
+            return .lockout
+        case LAError.biometryNotEnrolled.rawValue, LAError.biometryNotAvailable.rawValue:
+            return .unavailable
+        default:
+            return .failed
+        }
+    }
+
+    static func clear() {
+        SecItemDelete(baseQuery() as CFDictionary)
+        UserDefaults.standard.set(false, forKey: flagKey)
+    }
+}
 
 // MARK: - 会话
-
+//
+// 两级锁定：
+//   软锁 —— 界面锁住，AUK 还在内存里。自动锁定走这一档。
+//   硬锁 —— VaultStore.lock()，AUK 清掉。「立即上锁」和退出应用走这一档。
+//
+// 解锁页的状态机（规格见「Face ID 解锁-实现说明」）：
+//   idle ──进页面自动/点图标──▶ scanning ──通过──▶ unlocked
+//                                    └──未通过──▶ failed ──点图标──▶ scanning
+//   failed ──「用主密码解锁」──▶ idle + fallbackOnly
 @MainActor
 final class UmbraVaultSession: ObservableObject {
-    /// 软锁：界面锁住但 AUK 还在内存里，Face ID / 主密码都能解开。
+
+    enum FaceState { case idle, scanning, failed }
+
     @Published var softLocked = false
-    /// 自动锁定分钟数。
+    @Published private(set) var faceState: FaceState = .idle
+    @Published private(set) var faceFailure: UmbraBiometricStore.Failure? = nil
+    /// 用户明确选了「用主密码解锁」/ 主动上锁 / 取消过系统弹窗 —— **这期间不再自动发起识别**。
+    /// 少了它，用户刚点「用主密码解锁」页面又立刻弹系统识别，主密码根本输不进去。
+    @Published private(set) var fallbackOnly = false
+    /// 本次进入解锁页是否已经自动发起过。只在离开页面时清，防止重渲染反复弹窗。
+    private var autoTriedThisVisit = false
+
     @Published var autoLockMinutes: Int {
         didSet { UserDefaults.standard.set(autoLockMinutes, forKey: "umbra.vault.lockMin"); touch() }
     }
-    /// 切后台遮盖。
     @Published var maskEnabled: Bool {
         didSet { UserDefaults.standard.set(maskEnabled, forKey: "umbra.vault.mask") }
     }
-    /// 允许 Face ID 解开软锁。
-    @Published var faceIDEnabled: Bool {
-        didSet { UserDefaults.standard.set(faceIDEnabled, forKey: "umbra.vault.faceID") }
-    }
-    /// Face ID 失败提示。
-    @Published var faceError: String? = nil
+    /// 设置里的「用 Face ID 解锁」。**只读**——要改走 enableBiometry / disableBiometry，
+    /// 因为开启必须先验主密码再验生物识别，直接赋值会绕过这两步。
+    @Published private(set) var faceIDEnabled: Bool
+    @Published private(set) var hasBiometricCredential = UmbraBiometricStore.hasCredential
+
+    /// 从记录详情返回时要滚回哪一行。存在 session 上而不是页面 @State 里：
+    /// 页面在 pop 之后会被重建，@State 会跟着没。
+    @Published var lastOpenedRecordId: String?
 
     private var lastActivity = Date()
     private var ticker: Task<Void, Never>?
@@ -44,10 +221,10 @@ final class UmbraVaultSession: ObservableObject {
         faceIDEnabled = d.object(forKey: "umbra.vault.faceID") as? Bool ?? true
     }
 
-    /// 设备上有没有 Face ID / Touch ID 可用。没有的话设置里那一项要说明原因，而不是给个点不动的开关。
+    // MARK: 生物识别可用性
+
     var biometryAvailable: Bool {
-        var err: NSError?
-        return LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &err)
+        LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: nil)
     }
 
     var biometryName: String {
@@ -60,10 +237,10 @@ final class UmbraVaultSession: ObservableObject {
         }
     }
 
-    /// 有操作就往后推一次自动锁定。**每次交互都要调**，否则用户正在读密码时会被锁掉。
+    // MARK: 自动锁定
+
     func touch() { lastActivity = Date() }
 
-    /// 开始计时。倒计时是真 tick（每 5 秒查一次），不是进页面时算一次。
     func startAutoLock() {
         touch()
         ticker?.cancel()
@@ -74,6 +251,8 @@ final class UmbraVaultSession: ObservableObject {
                 guard !self.softLocked else { continue }
                 if Date().timeIntervalSince(self.lastActivity) >= Double(self.autoLockMinutes * 60) {
                     self.softLocked = true
+                    // 超时上锁时用户多半已经不看手机了，这时候弹识别没意义。
+                    self.fallbackOnly = true
                 }
             }
         }
@@ -84,26 +263,135 @@ final class UmbraVaultSession: ObservableObject {
         ticker = nil
     }
 
-    /// 用 Face ID 解开软锁。失败原因如实回传 —— 「没通过」和「不支持」是两回事。
-    func unlockWithBiometry() {
-        guard faceIDEnabled, biometryAvailable else {
-            faceError = "这台设备没有可用的 \(biometryName)"
-            return
-        }
-        let ctx = LAContext()
-        ctx.localizedFallbackTitle = "用主密码解锁"
-        ctx.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
-                           localizedReason: "解锁密码保险箱") { ok, error in
-            Task { @MainActor in
-                if ok {
-                    self.faceError = nil
-                    self.softLocked = false
-                    self.touch()
-                } else {
-                    self.faceError = (error as NSError?)?.localizedDescription ?? "没有通过验证"
-                }
+    // MARK: 解锁页状态
+
+    /// 进入解锁页时调。返回 true 表示"该自动发起一次识别了"。
+    /// 六个条件全满足才给过，逐条对应规格第 2 节。
+    func shouldAutoScan(unlocked: Bool) -> Bool {
+        guard !unlocked,
+              faceIDEnabled,
+              hasBiometricCredential || softLocked,   // 软锁只要验身份，不必有存好的凭证
+              biometryAvailable,
+              !fallbackOnly,
+              faceState == .idle,
+              !autoTriedThisVisit else { return false }
+        autoTriedThisVisit = true
+        return true
+    }
+
+    /// 离开解锁页时调，让下次进来重新自动识别一次。
+    func resetVisit() {
+        autoTriedThisVisit = false
+        faceState = .idle
+        faceFailure = nil
+    }
+
+    /// 用户主动选择走主密码：收起错误、这期间不再自动弹。
+    func preferPassword() {
+        faceState = .idle
+        faceFailure = nil
+        fallbackOnly = true
+    }
+
+    /// 主动上锁（首页「立即上锁」/ 设置里那颗）。同样要压住自动识别。
+    func markManualLock() {
+        softLocked = false
+        fallbackOnly = true
+        faceState = .idle
+        faceFailure = nil
+    }
+
+    /// 解锁成功后复位，下次上锁又是新的一轮。
+    func markUnlocked() {
+        faceState = .idle
+        faceFailure = nil
+        fallbackOnly = false
+        touch()
+    }
+
+    // MARK: 发起识别
+
+    /// 硬锁：刷脸 → 取回主密码 → 交给调用方去解密。
+    func scanForPassword(_ onPassword: @escaping @MainActor (String) -> Void) {
+        guard faceState != .scanning else { return }
+        guard faceIDEnabled else { return }
+        guard biometryAvailable else { faceState = .failed; faceFailure = .unavailable; return }
+        guard hasBiometricCredential else { faceState = .failed; faceFailure = .invalidated; return }
+        faceState = .scanning
+        faceFailure = nil
+        UmbraBiometricStore.load(reason: "解锁密码保险箱") { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let pw):
+                self.faceState = .idle
+                onPassword(pw)
+            case .failure(let f):
+                self.faceState = .failed
+                self.faceFailure = f
+                if f == .cancelled { self.fallbackOnly = true }
+                if f == .invalidated { self.hasBiometricCredential = false }
             }
         }
+    }
+
+    /// 软锁：AUK 还在内存里，只要证明是本人就行，不用取密码。
+    func scanForSoftUnlock() {
+        guard faceState != .scanning else { return }
+        guard biometryAvailable else { faceState = .failed; faceFailure = .unavailable; return }
+        faceState = .scanning
+        faceFailure = nil
+        UmbraBiometricStore.verifyOnly(reason: "解锁密码保险箱") { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                self.faceState = .idle
+                self.softLocked = false
+                self.touch()
+            case .failure(let f):
+                self.faceState = .failed
+                self.faceFailure = f
+                if f == .cancelled { self.fallbackOnly = true }
+            }
+        }
+    }
+
+    // MARK: 开关
+
+    /// 开启。**先验主密码、再验生物识别，两关都过才写入** ——
+    /// 用户点开关时期望立刻被验证一次，而不是"下次解锁时悄悄存下来"。
+    /// verifyPassword 由调用方（VaultStore）提供，本地校验，不联网。
+    func enableBiometry(password: String,
+                        verifyPassword: (String) -> Bool,
+                        completion: @escaping @MainActor (String?) -> Void) {
+        guard biometryAvailable else { completion("这台设备没有可用的\(biometryName)"); return }
+        guard verifyPassword(password) else { completion("主密码不对"); return }
+        UmbraBiometricStore.verifyOnly(reason: "开启用\(biometryName)解锁保险箱") { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success:
+                if UmbraBiometricStore.save(password: password) {
+                    self.hasBiometricCredential = true
+                    self.faceIDEnabled = true
+                    UserDefaults.standard.set(true, forKey: "umbra.vault.faceID")
+                    completion(nil)
+                } else {
+                    completion("存不进钥匙串，检查一下这台设备有没有设锁屏密码")
+                }
+            case .failure(let f):
+                completion(f.message)
+            }
+        }
+    }
+
+    func disableBiometry() {
+        faceIDEnabled = false
+        UserDefaults.standard.set(false, forKey: "umbra.vault.faceID")
+        forgetPassword()
+    }
+
+    func forgetPassword() {
+        UmbraBiometricStore.clear()
+        hasBiometricCredential = false
     }
 }
 
@@ -284,12 +572,16 @@ struct UmbraScoreRing: View {
     }
 
     var body: some View {
-        Circle()
-            .strokeBorder(color, lineWidth: size >= 60 ? 5 : 3)
+        // 三档尺寸。首页那一行细摘要用 22 —— 沿用 44 档的 15pt 数字会顶破圆环，
+        // 所以描边和字号都要跟着缩。
+        let lw: CGFloat = size >= 60 ? 5 : (size >= 40 ? 3 : 2)
+        let fs: CGFloat = size >= 60 ? 24 : (size >= 40 ? 15 : 10)
+        return Circle()
+            .strokeBorder(color, lineWidth: lw)
             .frame(width: size, height: size)
             .overlay(
                 Text("\(score)")
-                    .font(UmbraFont.mono(size >= 60 ? 24 : 15, .w600))
+                    .font(UmbraFont.mono(fs, .w600))
                     .foregroundColor(score >= 80 ? UmbraColor.success : (score >= 50 ? UmbraColor.orangeText : UmbraColor.danger))
             )
     }
@@ -404,3 +696,4 @@ struct UmbraFieldRow: View {
         }
     }
 }
+
