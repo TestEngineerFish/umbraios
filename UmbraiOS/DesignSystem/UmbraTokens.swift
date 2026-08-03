@@ -21,9 +21,36 @@ import UIKit
 // 每个 token 都是「随浅深色自动切换」的动态色：底层用 UIColor 的 trait 解析，
 // 所以它既跟随系统外观，也跟随 .preferredColorScheme 的强制指定（外观设置要用到）。
 //
-// 注意：这里的取值以交接包的 colors.css 为准。工程原来的 UmbraColors 有几处对不上
+// 注意：这里的取值以交接包的 colors.css 为准。工程原来那套 UmbraColors(isDark:) 有几处对不上
 //（bg 深色写成了 #15110E、chip/track 浅色偏了一档、缺 borderSoft/faint/nav/hover/titlebar/desk），
-// 已按 token 修正，见 UmbraColors 的注释。
+// 已按 token 修正。旧那套现在**已经删掉**，全项目只认这一份颜色。
+// MARK: - 十六进制取色
+//
+// 交接包的 colors.css 里颜色全是 #RRGGBB，所以这里需要一个从字符串构造的入口。
+// 原来它和一整套旧配色（UmbraColors(isDark:)）挤在 Utils/ColorHelpers.swift 里，
+// 旧配色删掉时**它被一起带走了** —— 而它其实只服务本文件下面这批 token。
+// 放在这里：唯一的使用者就在同一个文件，不必为一个 20 行的扩展单开一个文件。
+extension Color {
+    /// 从 "RRGGBB" 或 "AARRGGBB" 构造。位数不对时返回不透明黑 ——
+    /// 静默返回透明色会让整块 UI 直接消失，反而更难查。
+    init(hex: String) {
+        let hex = hex.trimmingCharacters(in: CharacterSet.alphanumerics.inverted)
+        var int: UInt64 = 0
+        Scanner(string: hex).scanHexInt64(&int)
+        let a, r, g, b: UInt64
+        switch hex.count {
+        case 6: (a, r, g, b) = (255, int >> 16, int >> 8 & 0xFF, int & 0xFF)
+        case 8: (a, r, g, b) = (int >> 24, int >> 16 & 0xFF, int >> 8 & 0xFF, int & 0xFF)
+        default: (a, r, g, b) = (255, 0, 0, 0)
+        }
+        self.init(.sRGB,
+                  red: Double(r) / 255,
+                  green: Double(g) / 255,
+                  blue: Double(b) / 255,
+                  opacity: Double(a) / 255)
+    }
+}
+
 enum UmbraColor {
 
     // 表面 / 中性

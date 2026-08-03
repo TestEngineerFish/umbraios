@@ -1,56 +1,13 @@
+// 麦克风语音输入 → 文字。
+//
+// 原来和一个 TTSService（朗读回复）挤在 Utils/TTSService.swift 里，
+// 而 TTSService 全项目没有任何调用点 —— 那是很早的一版「朗读秘书回复」留下的，
+// 界面上早就没有入口了，一并删掉，这里只留还在用的识别器。
+//
+// 使用方：聊天页的「按住说话」（UmbraVoiceInput）。
 import AVFoundation
 import Speech
 
-// MARK: - TTS Service
-@MainActor
-class TTSService: NSObject, ObservableObject {
-    static let shared = TTSService()
-
-    private let synthesizer = AVSpeechSynthesizer()
-    @Published var isSpeaking: Bool = false
-    /// 当前正在朗读的消息 id（用于让每条消息的“朗读回复”按钮各自独立，只有正在播放的那条显示播放态）。
-    @Published var speakingId: String?
-    @Published var currentTime: TimeInterval = 0
-
-    /// 某条消息是否正在朗读。
-    func isSpeaking(id: String) -> Bool {
-        isSpeaking && speakingId == id
-    }
-
-    func speak(_ text: String, id: String) {
-        guard !text.isEmpty else { return }
-        stop()
-
-        let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: LanguageManager.shared.speechLocaleIdentifier)
-        utterance.rate = 0.5
-
-        synthesizer.delegate = self
-        synthesizer.speak(utterance)
-        speakingId = id
-        isSpeaking = true
-    }
-
-    func stop() {
-        if synthesizer.isSpeaking {
-            synthesizer.stopSpeaking(at: .immediate)
-        }
-        isSpeaking = false
-        speakingId = nil
-        currentTime = 0
-    }
-
-    /// 切换某条消息的朗读：正在读同一条→停止；否则读这一条（会自动停掉上一条）。
-    func toggle(_ text: String, id: String) {
-        if isSpeaking && speakingId == id {
-            stop()
-        } else {
-            speak(text, id: id)
-        }
-    }
-}
-
-// MARK: - Speech Recognizer（麦克风语音输入 → 文字）
 @MainActor
 final class SpeechRecognizer: ObservableObject {
     @Published var isRecording = false
@@ -142,38 +99,5 @@ final class SpeechRecognizer: ObservableObject {
         task = nil
         isRecording = false
         try? AVAudioSession.sharedInstance().setActive(false, options: .notifyOthersOnDeactivation)
-    }
-}
-
-// MARK: - AVSpeechSynthesizerDelegate
-extension TTSService: AVSpeechSynthesizerDelegate {
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didStart utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            isSpeaking = true
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            isSpeaking = false
-            currentTime = 0
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            isSpeaking = false
-            currentTime = 0
-        }
-    }
-
-    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, willSpeakRangeOfSpeechString characterRange: NSRange, utterance: AVSpeechUtterance) {
-        Task { @MainActor in
-            let text = utterance.speechString
-            if let range = Range(characterRange, in: text) {
-                let substring = text[range]
-                currentTime = Double(substring.count) * 0.1 // Rough estimate
-            }
-        }
     }
 }

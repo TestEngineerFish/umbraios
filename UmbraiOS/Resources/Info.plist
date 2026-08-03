@@ -61,5 +61,7 @@
 	<string>Umbra需要访问相册以选择和发送图片</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Umbra需要使用相机以拍摄照片</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Umbra用Face ID确认是你本人，以此解锁密码保险箱。主密码只存在这台设备的安全隔区里，不会上传，Umbra也读不到你的面容数据。</string>
 </dict>
 </plist>

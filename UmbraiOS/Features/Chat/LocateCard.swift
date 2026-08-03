@@ -45,10 +45,10 @@ struct LocateCard: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 7) {
-                Image(systemName: "hand.point.up.left.fill").foregroundColor(.orangeText)
+                Image(systemName: "hand.point.up.left.fill").foregroundColor(UmbraColor.orangeText)
                 Text(L("operate.locate.title"))
                     .font(.system(size: 13.5, weight: .semibold))
-                    .foregroundColor(.orangeText)
+                    .foregroundColor(UmbraColor.orangeText)
             }
             Text(data.hint).font(.system(size: 12.5)).lineSpacing(4)
 
@@ -76,14 +76,14 @@ struct LocateCard: View {
     private func resolvedView(_ status: ChatBlock.LocateStatus) -> some View {
         switch status {
         case .located:
-            Text(L("operate.locate.done")).font(.system(size: 12)).foregroundColor(.umbraMuted)
+            Text(L("operate.locate.done")).font(.system(size: 12)).foregroundColor(UmbraColor.muted)
         case .feedbackSent:
-            Text(L("operate.locate.feedbackSent")).font(.system(size: 12)).foregroundColor(.umbraMuted)
+            Text(L("operate.locate.feedbackSent")).font(.system(size: 12)).foregroundColor(UmbraColor.muted)
         case .resumed:
-            Text(L("operate.locate.resumed")).font(.system(size: 12)).foregroundColor(.umbraMuted)
+            Text(L("operate.locate.resumed")).font(.system(size: 12)).foregroundColor(UmbraColor.muted)
         case .paused:
             VStack(alignment: .leading, spacing: 8) {
-                Text(L("operate.locate.paused")).font(.system(size: 12)).foregroundColor(.umbraMuted)
+                Text(L("operate.locate.paused")).font(.system(size: 12)).foregroundColor(UmbraColor.muted)
                 Button(L("operate.locate.resume")) { onResume() }
                     .buttonStyle(.borderedProminent).tint(.orange)
                     .frame(maxWidth: .infinity)
@@ -95,7 +95,7 @@ struct LocateCard: View {
     private func activeView(_ img: UIImage) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(L("operate.locate.arrowHint"))
-                .font(.system(size: 11)).foregroundColor(.umbraMuted)
+                .font(.system(size: 11)).foregroundColor(UmbraColor.muted)
             imageWithArrow(img)
             Button(L("operate.locate.confirm")) {
                 if let n = tipNorm { onLocate(Int(n.x), Int(n.y)) }

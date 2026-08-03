@@ -235,6 +235,15 @@ extension UmbraPage where Bottom == EmptyView {
     init(@ViewBuilder navBar: @escaping () -> Bar, @ViewBuilder content: @escaping () -> Content) {
         self.init(navBar: navBar, content: content, bottom: { EmptyView() })
     }
+
+    /// 带滚动锚点、不带底部动作条的那一档。**必须单独写一个** ——
+    /// 成员逐一初始化器要求把 bottom 也传上，这个 extension 的存在意义就是把它省掉，
+    /// 加了 scrollAnchor 参数之后同样得补一个对应的重载。
+    init(scrollAnchor: Binding<String?>?,
+         @ViewBuilder navBar: @escaping () -> Bar,
+         @ViewBuilder content: @escaping () -> Content) {
+        self.init(scrollAnchor: scrollAnchor, navBar: navBar, content: content, bottom: { EmptyView() })
+    }
 }
 
 /// 大标题页（Tab 根页）：没有返回箭头，用 27/650 的页面标题。
