@@ -216,9 +216,9 @@ struct UmbraSettingsPage<Extra: View>: View {
     @ViewBuilder var extra: () -> Extra
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: backLabel, title: title, onBack: onBack)
-        }, content: {
+        // v2：导航交给系统（返回钮/边缘手势/标题都是系统的）。
+        // backLabel / onBack 参数保留只为不动十几个调用点 —— 系统返回自己会弹栈。
+        UmbraScreen(content: {
             VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
                 if let hero {
                     hero().padding(.horizontal, UmbraMetric.pagePadX)
@@ -248,6 +248,8 @@ struct UmbraSettingsPage<Extra: View>: View {
             }
             .padding(.top, UmbraMetric.sp5)
         })
+        .navigationTitle(title)
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

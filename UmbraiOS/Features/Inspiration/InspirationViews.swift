@@ -19,31 +19,20 @@ struct UmbraInspirationListView: View {
     @State private var tag: String? = nil
     @State private var query = ""
     @State private var sort = UmbraInspSort.recent
+    /// 搜索框焦点放在页面上（不塞组件里）：「点空白处收键盘」得由页面来收。
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
-        UmbraPage(navBar: { EmptyView() }, content: {
-            UmbraTitleHeader(title: "灵感", subtitle: "随手记下的点子") {
-                HStack(spacing: 0) {
-                    Button(action: openSort) {
-                        UmbraIcon(d: UmbraIconPath.filter, size: 17, strokeWidth: 2)
-                            .foregroundColor(UmbraColor.muted)
-                            .frame(width: 36, height: 36)
-                            .background(Circle().fill(UmbraColor.card))
-                            .overlay(Circle().strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-                            .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    UmbraRoundPlusButton { router.go(.inspEdit(id: nil)) }
-                }
-            }
-
+        UmbraScreen {
             UmbraFilterChips(items: statusChips, selection: $status)
+                .padding(.top, 2)
                 .padding(.bottom, 10)
 
             tagRow
 
-            UmbraSearchField(placeholder: "搜索灵感", text: $query, trailingNote: sort.label)
+            // 默认收成一个搜索图标，点开才占一行（用户点名；任务列表同款）。
+            UmbraCollapsingSearch(placeholder: "搜索灵感", text: $query,
+                                  trailingNote: sort.label, focused: $searchFocused)
                 .padding(.horizontal, UmbraMetric.pagePadX)
                 .padding(.bottom, UmbraMetric.sp4)
 
@@ -60,14 +49,33 @@ struct UmbraInspirationListView: View {
                 }
                 .padding(.horizontal, UmbraMetric.pagePadX)
 
-                Text("长按卡片可以快捷标记已实现、归档或删除。手机上记的灵感来源会标成「手机端」。")
-                    .font(UmbraFont.sans(12, .w400))
-                    .foregroundColor(UmbraColor.faint)
-                    .lineSpacing(12 * 0.65)
-                    .padding(.horizontal, UmbraMetric.pagePadX)
-                    .padding(.top, UmbraMetric.sp4)
             }
-        })
+        }
+        .navigationTitle("灵感")
+        // 点内容区任意空白收键盘。只在真有焦点时动手，不和别的点击抢。
+        .simultaneousGesture(TapGesture().onEnded { if searchFocused { searchFocused = false } })
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                // 排序 = 系统 Menu 锚定弹出（≤6 项纯选择不用底部弹层）。
+                Menu {
+                    ForEach(UmbraInspSort.allCases, id: \.self) { o in
+                        Button {
+                            sort = o
+                        } label: {
+                            if sort == o { Label(o.label, systemImage: "checkmark") } else { Text(o.label) }
+                        }
+                    }
+                } label: {
+                    Image(systemName: "arrow.up.arrow.down")
+                }
+                .tint(UmbraColor.orange)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { router.go(.inspEdit(id: nil)) } label: { Image(systemName: "plus") }
+                    .tint(UmbraColor.orange)
+            }
+        }
+        .refreshable { await insp.refresh() }
         .onAppear { insp.startPolling() }
         .onDisappear { insp.stopPolling() }
     }
@@ -190,8 +198,38 @@ struct UmbraInspirationListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        // 长按 = 快捷菜单。设计稿写的是右键，手机上对应长按。
-        .onLongPressGesture { openMenu(i) }
+        // 长按 = 快捷菜单。v2 换系统 contextMenu：锚定卡片、带预览缩放，
+        // 破坏性项系统自动红色；删除仍必进确认弹窗。
+        .contextMenu {
+            Button {
+                Task { await insp.setStatus(id: i.id, status: i.status == "done" ? "open" : "done") }
+            } label: {
+                Label(i.status == "done" ? "标回待办" : "标记已实现", systemImage: "checkmark.circle")
+            }
+            Button {
+                Task { await insp.setStatus(id: i.id, status: i.status == "archived" ? "open" : "archived") }
+            } label: {
+                Label(i.status == "archived" ? "取消归档" : "归档", systemImage: "archivebox")
+            }
+            Button {
+                router.go(.inspEdit(id: String(i.id)))
+            } label: {
+                Label("编辑", systemImage: "pencil")
+            }
+            Button(role: .destructive) {
+                router.confirm(UmbraAlert(
+                    title: "确认删除这条灵感？",
+                    body: "删除后无法恢复。",
+                    confirmLabel: "删除",
+                    confirmDestructive: true,
+                    onConfirm: {
+                        Task { await insp.delete(id: i.id) }
+                        router.showToast("已删除")
+                    }))
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        }
     }
 
     private func statusBadge(_ s: String) -> some View {
@@ -204,28 +242,6 @@ struct UmbraInspirationListView: View {
             .background(Capsule().fill(bg))
     }
 
-    private func openMenu(_ i: Inspiration) {
-        router.present(UmbraSheet(title: i.title.isEmpty ? "这条灵感" : i.title, items: [
-            UmbraSheetItem(label: i.status == "done" ? "标回待办" : "标记已实现") {
-                Task { await insp.setStatus(id: i.id, status: i.status == "done" ? "open" : "done") }
-            },
-            UmbraSheetItem(label: i.status == "archived" ? "取消归档" : "归档") {
-                Task { await insp.setStatus(id: i.id, status: i.status == "archived" ? "open" : "archived") }
-            },
-            UmbraSheetItem(label: "编辑") { router.go(.inspEdit(id: String(i.id))) },
-            UmbraSheetItem(label: "删除", destructive: true) {
-                router.confirm(UmbraAlert(
-                    title: "确认删除这条灵感？",
-                    body: "删除后无法恢复。",
-                    confirmLabel: "删除",
-                    confirmDestructive: true,
-                    onConfirm: {
-                        Task { await insp.delete(id: i.id) }
-                        router.showToast("已删除")
-                    }))
-            }
-        ]))
-    }
 
     /// 来源渠道 → 中文。认不出来的照原样显示，不要一律写成「未知来源」——
     /// 服务端以后加了新渠道，原样显示至少还能看出是什么。
@@ -274,39 +290,98 @@ struct UmbraInspirationDetailView: View {
 
     private var item: Inspiration? { insp.list.first { String($0.id) == id } }
 
+    /// 编辑草稿。非 nil = 编辑态。**就地编辑**：同页切换，不推新页（v2 交接清单）。
+    @State private var dRaw = ""
+    @State private var dTitle = ""
+    @State private var dTags = ""
+    @State private var editing = false
+
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "灵感", title: "", onBack: { router.back() }) {
-                if let i = item {
-                    UmbraNavAction(title: "编辑") { router.go(.inspEdit(id: id)) }
-                    UmbraNavDots { openMenu(i) }
+        UmbraScreen(content: {
+            if editing {
+                UmbraInspForm(raw: $dRaw, title: $dTitle, tagsText: $dTags,
+                              allTags: allTags, isNew: false)
+            } else if let i = item {
+                content(i)
+            } else {
+                missing
+            }
+        }, bottom: {
+            if !editing, let i = item { bottomBar(i) }
+        })
+        .navigationTitle(editing ? "编辑灵感" : "灵感详情")
+        .navigationBarTitleDisplayMode(.inline)
+        // 编辑态藏系统返回：会丢改动的出口只留「取消」一个。
+        .navigationBarBackButtonHidden(editing)
+        .toolbar {
+            if editing {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button("取消") { editing = false }
+                        .tint(UmbraColor.text)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { saveEdit() } label: {
+                        Text("保存").font(UmbraFont.sans(16, .w600))
+                    }
+                    .tint(UmbraColor.orange)
+                }
+            } else if let i = item {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("编辑") { startEdit(i) }
+                        .tint(UmbraColor.orange)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // 「⋯」。破坏性操作不占详情页底部，收进这里 —— iOS 增补规范的硬规则。
+                    Menu {
+                        Button(role: .destructive) {
+                            router.confirm(UmbraAlert(
+                                title: "确认删除这条灵感？",
+                                body: "删除后无法恢复。",
+                                confirmLabel: "删除",
+                                confirmDestructive: true,
+                                onConfirm: {
+                                    Task { await insp.delete(id: i.id) }
+                                    router.back()
+                                    router.showToast("已删除")
+                                }))
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .tint(UmbraColor.orange)
                 }
             }
-        }, content: {
-            if let i = item { content(i) } else { missing }
-        }, bottom: {
-            if let i = item { bottomBar(i) }
-        })
+        }
         .onAppear { Task { await insp.load() } }
     }
 
-    /// 右上角「⋯」。破坏性操作**不占详情页底部**，收进这里 —— 这是 iOS 增补规范的硬规则。
-    private func openMenu(_ i: Inspiration) {
-        router.present(UmbraSheet(title: i.title.isEmpty ? "这条灵感" : i.title, items: [
-            UmbraSheetItem(label: "编辑") { router.go(.inspEdit(id: id)) },
-            UmbraSheetItem(label: "删除", destructive: true) {
-                router.confirm(UmbraAlert(
-                    title: "确认删除这条灵感？",
-                    body: "删除后无法恢复。",
-                    confirmLabel: "删除",
-                    confirmDestructive: true,
-                    onConfirm: {
-                        Task { await insp.delete(id: i.id) }
-                        router.back()
-                        router.showToast("已删除")
-                    }))
-            }
-        ]))
+    private var allTags: [String] {
+        var seen: [String] = []
+        for i in insp.list {
+            for t in i.tags where !seen.contains(t) { seen.append(t) }
+        }
+        return seen
+    }
+
+    private func startEdit(_ i: Inspiration) {
+        dRaw = i.raw
+        dTitle = i.title
+        dTags = i.tags.joined(separator: "，")
+        editing = true
+    }
+
+    private func saveEdit() {
+        guard let i = item else { editing = false; return }
+        let body = dRaw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { router.showToast("内容不能是空的"); return }
+        let tags = UmbraInspForm.parseTags(dTags)
+        Task { await insp.update(id: i.id, raw: body,
+                                 title: dTitle.trimmingCharacters(in: .whitespacesAndNewlines),
+                                 tags: tags, note: i.summary) }
+        editing = false
+        router.showToast("已保存")
     }
 
     /// 灵感被别的端删了：如实说明并给出口，而不是留一个空白页。
@@ -437,7 +512,10 @@ struct UmbraInspirationDetailView: View {
     }
 }
 
-// MARK: - 编辑
+// MARK: - 编辑（新建）
+//
+// 编辑已有灵感走详情页的就地编辑；这个页面只服务「记一条新的」。
+// 路由仍接受 id（兼容旧入口），带 id 进来也能编。
 
 struct UmbraInspirationEditView: View {
     /// nil = 新建
@@ -458,46 +536,35 @@ struct UmbraInspirationEditView: View {
 
     private var canSave: Bool { !raw.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
+    private var allTags: [String] {
+        var seen: [String] = []
+        for i in insp.list {
+            for t in i.tags where !seen.contains(t) { seen.append(t) }
+        }
+        return seen
+    }
+
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "取消", title: id == nil ? "记一条灵感" : "编辑灵感",
-                        onBack: { router.back() }, backChevron: false) {
-                UmbraNavAction(title: "存下", weight: .w600, enabled: canSave, action: save)
+        UmbraScreen {
+            UmbraInspForm(raw: $raw, title: $title, tagsText: $tagsText,
+                          allTags: allTags, isNew: id == nil)
+        }
+        .navigationTitle(id == nil ? "记一条灵感" : "编辑灵感")
+        .navigationBarTitleDisplayMode(.inline)
+        // 左上角是「取消」不是返回箭头 —— 放弃这次编辑，不是回上一页。
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("取消") { router.back() }
+                    .tint(UmbraColor.text)
             }
-        }, content: {
-            VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
-                field("内容") {
-                    // 多行输入。iOS 16 的 TextField 支持 axis: .vertical，不必再包 UITextView。
-                    TextField("想到什么就写什么，不用组织语言。", text: $raw, axis: .vertical)
-                        .font(UmbraFont.sans(16, .w400))
-                        .lineSpacing(16 * 0.65)
-                        .lineLimit(6...)
-                        .textFieldStyle(.plain)
-                        .padding(12)
-                        .frame(minHeight: 150, alignment: .topLeading)
-                        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(UmbraColor.card))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 11, style: .continuous)
-                                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
-                        )
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { save() } label: {
+                    Text("保存").font(UmbraFont.sans(16, .w600))
                 }
-                field("标题") { input("留空由秘书补", text: $title) }
-                field("标签") { input("逗号分隔，可留空", text: $tagsText) }
-
-                Text("标题和标签留空时，秘书会读一遍内容替你补上。这条会记成「手机端」来源。")
-                    .font(UmbraFont.sans(12, .w400))
-                    .foregroundColor(UmbraColor.faint)
-                    .lineSpacing(12 * 0.65)
-
-                if !canSave {
-                    // 「存下」置灰时必须给出原因，就一行。
-                    Text("内容还是空的，写点什么才能存。")
-                        .font(UmbraFont.sans(12, .w400))
-                        .foregroundColor(UmbraColor.faint)
-                }
+                .tint(canSave ? UmbraColor.orange : UmbraColor.faint)
             }
-            .padding(UmbraMetric.pagePadX)
-        })
+        }
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -507,6 +574,85 @@ struct UmbraInspirationEditView: View {
                 tagsText = e.tags.joined(separator: "，")
             }
         }
+    }
+
+    private func save() {
+        let body = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 空内容点保存 → toast 说原因，不在页面上常驻一行小字（用户点名删）。
+        guard !body.isEmpty else { router.showToast("内容还是空的，写点什么才能存"); return }
+        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let tags = UmbraInspForm.parseTags(tagsText)
+        if let e = existing {
+            Task { await insp.update(id: e.id, raw: body, title: name, tags: tags, note: e.summary) }
+        } else {
+            Task { await insp.create(raw: body, title: name, tags: tags, note: "") }
+        }
+        router.back()
+        router.showToast("已保存")
+    }
+}
+
+// MARK: - 表单（详情就地编辑与新建共用）
+
+struct UmbraInspForm: View {
+    @Binding var raw: String
+    @Binding var title: String
+    @Binding var tagsText: String
+    /// 现有全部标签，供 chips 点选（交接清单：标签输入框上方列已有标签）。
+    let allTags: [String]
+    let isNew: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
+            field("内容") {
+                TextField("想到什么就写什么，不用组织语言。", text: $raw, axis: .vertical)
+                    .font(UmbraFont.sans(16, .w400))
+                    .lineSpacing(16 * 0.65)
+                    .lineLimit(6...12)
+                    .textFieldStyle(.plain)
+                    .padding(12)
+                    .frame(minHeight: 150, alignment: .topLeading)
+                    .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous).fill(UmbraColor.card))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous)
+                            .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW)
+                    )
+            }
+            field("标题") { input("留空由秘书补", text: $title) }
+            field("标签") {
+                VStack(alignment: .leading, spacing: UmbraMetric.sp2) {
+                    // 已有标签 chips：点选切换，写进输入框（选中 = 橙 soft 底 + 橙描边）。
+                    if !allTags.isEmpty {
+                        ScrollView(.horizontal, showsIndicators: false) {
+                            HStack(spacing: 7) {
+                                ForEach(allTags.prefix(10), id: \.self) { t in
+                                    let on = Self.parseTags(tagsText).contains(t)
+                                    Button {
+                                        var cur = Self.parseTags(tagsText)
+                                        if on { cur.removeAll { $0 == t } } else { cur.append(t) }
+                                        tagsText = cur.joined(separator: "，")
+                                    } label: {
+                                        Text(t)
+                                            .font(UmbraFont.sans(12.5, .w400))
+                                            .foregroundColor(on ? UmbraColor.orangeText : UmbraColor.muted)
+                                            .padding(.horizontal, 11)
+                                            .padding(.vertical, 5)
+                                            .background(Capsule().fill(on ? UmbraColor.orangeSoft : UmbraColor.card))
+                                            .overlay(Capsule().strokeBorder(on ? UmbraColor.orange : UmbraColor.border,
+                                                                            lineWidth: UmbraMetric.borderW))
+                                            .contentShape(Capsule())
+                                    }
+                                    .buttonStyle(.plain)
+                                }
+                            }
+                        }
+                    }
+                    input("逗号分隔，可留空", text: $tagsText)
+                }
+            }
+
+        }
+        .padding(UmbraMetric.pagePadX)
     }
 
     @ViewBuilder
@@ -523,34 +669,21 @@ struct UmbraInspirationEditView: View {
             .textFieldStyle(.plain)
             .padding(.horizontal, 12)
             .frame(height: 48)
-            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(UmbraColor.card))
+            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous).fill(UmbraColor.card))
             .overlay(
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
+                RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous)
+                    .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW)
             )
     }
 
     /// 标签串 → 数组。全角逗号、半角逗号、顿号都当分隔符 ——
     /// 输入法给什么符号是用户控制不了的事，不该让他重打一遍。
-    private var tags: [String] {
-        tagsText
+    static func parseTags(_ text: String) -> [String] {
+        text
             .replacingOccurrences(of: "，", with: ",")
             .replacingOccurrences(of: "、", with: ",")
             .split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespaces) }
             .filter { !$0.isEmpty }
-    }
-
-    private func save() {
-        let body = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !body.isEmpty else { return }
-        let name = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        if let e = existing {
-            Task { await insp.update(id: e.id, raw: body, title: name, tags: tags, note: e.summary) }
-        } else {
-            Task { await insp.create(raw: body, title: name, tags: tags, note: "") }
-        }
-        router.back()
-        router.showToast("已存下")
     }
 }

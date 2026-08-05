@@ -45,13 +45,15 @@ class HTTPService {
     }
 
     // MARK: - Jobs
-    func fetchJobs(limit: Int = 30, status: String? = nil) async -> [Job] {
+    /// 失败返回 nil 而不是空数组 —— 「拉失败了」和「真的没有任务」是两回事，
+    /// 混成一个值的话，断网时每次轮询都会把列表清成空的（真踩过）。
+    func fetchJobs(limit: Int = 30, status: String? = nil) async -> [Job]? {
         var components = URLComponents(string: "\(baseUrl)/jobs")
         var items = [URLQueryItem(name: "limit", value: String(limit))]
         if let status { items.append(URLQueryItem(name: "status", value: status)) }
         components?.queryItems = items
 
-        return await request(components?.url) ?? []
+        return await request(components?.url)
     }
 
     func fetchJobDetail(id: String) async -> JobDetail? {
@@ -75,19 +77,20 @@ class HTTPService {
     }
 
     // MARK: - Inspirations（灵感速记）
-    func fetchInspirations(status: String? = nil) async -> [Inspiration] {
+    /// 同 fetchJobs：失败返回 nil，别把列表清空。
+    func fetchInspirations(status: String? = nil) async -> [Inspiration]? {
         var components = URLComponents(string: "\(baseUrl)/inspirations")
         if let status, !status.isEmpty {
             components?.queryItems = [URLQueryItem(name: "status", value: status)]
         }
-        guard let url = components?.url else { return [] }
+        guard let url = components?.url else { return nil }
         do {
             var req = URLRequest(url: url)
             for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
             let (data, _) = try await URLSession.shared.data(for: req)
-            return (try? JSONDecoder().decode([Inspiration].self, from: data)) ?? []
+            return try? JSONDecoder().decode([Inspiration].self, from: data)
         } catch {
-            return []
+            return nil
         }
     }
 
@@ -137,9 +140,10 @@ class HTTPService {
     }
 
     /// 所有已知设备（含离线），聊天页的联系人列表。
-    func fetchAllDevices() async -> [KnownDevice] {
-        guard let url = URL(string: "\(baseUrl)/devices/all") else { return [] }
-        return await request(url) ?? []
+    /// 同 fetchJobs：失败返回 nil，联系人列表保持旧数据。
+    func fetchAllDevices() async -> [KnownDevice]? {
+        guard let url = URL(string: "\(baseUrl)/devices/all") else { return nil }
+        return await request(url)
     }
 
     /// 把某台（离线的）设备从联系人列表移除。

@@ -208,12 +208,12 @@ struct UmbraButton: View {
                 .foregroundColor(fg)
                 .frame(maxWidth: .infinity)
                 .frame(height: height)
-                .background(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous).fill(bg)
-                )
+                // v2：主/次按钮一律胶囊。胶囊只给按钮、分段控件、tab bar ——
+                // 输入框保持 12 圆角，别看着顺手也改成胶囊。
+                .background(Capsule().fill(bg))
                 .overlay(
-                    RoundedRectangle(cornerRadius: 11, style: .continuous)
-                        .strokeBorder(stroked ? UmbraColor.border : .clear, lineWidth: UmbraMetric.borderW)
+                    Capsule().strokeBorder(stroked ? UmbraColor.borderSoft : .clear,
+                                           lineWidth: UmbraMetric.borderW)
                 )
         }
         .buttonStyle(.plain)
@@ -239,9 +239,11 @@ struct UmbraBottomBar<Content: View>: View {
 
 // MARK: - 分段控件
 //
-// iOS 特有组件（桌面端没有）。外层 --chip 底 + 2px 内边距 + 圆角 9；
-// 选中片是 --card 白片 + 圆角 7；行高 30；文字 560/13.5；计数用等宽 12 + 70% 透明。
-// 刻意不用系统的 Picker(.segmented)：它的高度、圆角、选中片配色都改不到设计值。
+// iOS 特有组件（桌面端没有）。v2：胶囊轨道（--chip）+ 2px 内边距 + 白色 --card
+// 胶囊滑块；切换时滑块**平移**过去（.22s cubic-bezier(.2,.8,.3,1)，即
+// UmbraMotion.slider），不是原地淡入 —— 交接清单第一条点名的动效。
+// 行高 30；文字 560/13.5；计数用等宽 12 + 70% 透明。
+// 刻意不用系统的 Picker(.segmented)：它的高度、配色改不到设计值，也塞不进计数。
 struct UmbraSegmentedControl<T: Hashable>: View {
     struct Item: Identifiable {
         let value: T
@@ -255,13 +257,15 @@ struct UmbraSegmentedControl<T: Hashable>: View {
 
     let items: [Item]
     @Binding var selection: T
+    /// 滑块的 matchedGeometry 命名空间 —— 白片在段与段之间「滑」过去靠它。
+    @Namespace private var slider
 
     var body: some View {
         HStack(spacing: 0) {
             ForEach(items) { item in
                 let on = item.value == selection
                 Button {
-                    selection = item.value
+                    withAnimation(UmbraMotion.slider) { selection = item.value }
                 } label: {
                     HStack(spacing: 6) {
                         Text(item.label).font(UmbraFont.sans(13.5, .w560))
@@ -272,18 +276,19 @@ struct UmbraSegmentedControl<T: Hashable>: View {
                     .foregroundColor(on ? UmbraColor.text : UmbraColor.muted)
                     .frame(maxWidth: .infinity)
                     .frame(minHeight: UmbraMetric.segmentH)
-                    .background(
-                        RoundedRectangle(cornerRadius: 7, style: .continuous)
-                            .fill(on ? UmbraColor.card : Color.clear)
-                    )
+                    .background {
+                        if on {
+                            Capsule().fill(UmbraColor.card)
+                                .matchedGeometryEffect(id: "seg-slider", in: slider)
+                        }
+                    }
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
         }
-        .padding(2)
-        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(UmbraColor.chip))
-        .animation(UmbraMotion.tint, value: selection)
+        // 轨道不画背景：直接透出页面底色，只有选中滑块有底
+        //（深色下轨道底和页面底不是一个色，那条通栏轨道特别扎眼 —— 用户实测点名）。
     }
 }
 
@@ -555,7 +560,79 @@ struct UmbraSearchField: View {
         }
         .padding(.horizontal, UmbraMetric.sp4)
         .frame(height: 38)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous).fill(UmbraColor.chip))
+        // v2：输入框（含搜索框）圆角统一 12 —— 不用胶囊，胶囊只给按钮/分段/tab bar。
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous).fill(UmbraColor.chip))
+    }
+}
+
+// MARK: - 可收起的搜索框
+//
+// 默认只是一个 38×38 的搜索图标钮，点一下向右展开成完整搜索框并弹键盘；
+// 失焦且没输入内容时自动收回图标。任务列表、灵感列表用（用户点名：搜索不该常驻占一行）。
+// 焦点由**页面**持有（FocusState 传进来）—— 页面才能在「点空白处」把键盘收掉。
+struct UmbraCollapsingSearch: View {
+    let placeholder: String
+    @Binding var text: String
+    /// 右侧的一小段说明文字（灵感列表挂当前排序），只在展开且没输入时显示。
+    var trailingNote: String? = nil
+    var focused: FocusState<Bool>.Binding
+
+    @State private var expanded = false
+
+    var body: some View {
+        HStack(spacing: 8) {
+            // 图标钮：收起时是唯一入口；展开时就是搜索框左侧那个图标。
+            Button {
+                guard !expanded else { return }
+                withAnimation(UmbraMotion.push) { expanded = true }
+                // 焦点晚一拍再给：输入框和 focus 同一帧生效的话，SwiftUI 经常丢焦点
+                //（字段还没进视图树）。80ms 也正好等展开动画走过大半。
+                Task { @MainActor in
+                    try? await Task.sleep(nanoseconds: 80_000_000)
+                    focused.wrappedValue = true
+                }
+            } label: {
+                UmbraIcon(d: UmbraIconPath.search, size: 16, strokeWidth: 2)
+                    .foregroundColor(UmbraColor.faint)
+                    .frame(width: 38, height: 38)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if expanded {
+                TextField(placeholder, text: $text)
+                    .font(UmbraFont.sans(15, .w400))
+                    .foregroundColor(UmbraColor.text)
+                    .textFieldStyle(.plain)
+                    .autocorrectionDisabled(true)
+                    .focused(focused)
+                if !text.isEmpty {
+                    Button { text = "" } label: {
+                        UmbraIcon(d: UmbraIconPath.xCircle, size: 16, strokeWidth: 1.9)
+                            .foregroundColor(UmbraColor.faint)
+                            .frame(width: 28, height: 28)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.trailing, 8)
+                } else if let note = trailingNote {
+                    Text(note)
+                        .font(UmbraFont.sans(12, .w400))
+                        .foregroundColor(UmbraColor.faint)
+                        .padding(.trailing, UmbraMetric.sp4)
+                }
+            }
+        }
+        .frame(height: 38)
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous).fill(UmbraColor.chip))
+        // 收起态贴左，展开吃满整行 —— 「向右展开」的方向感来自这里。
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .onChange(of: focused.wrappedValue) { f in
+            // 失焦且没内容才收回：有内容说明筛选还在生效，收掉框会让人找不到条件在哪。
+            if !f && text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                withAnimation(UmbraMotion.push) { expanded = false }
+            }
+        }
     }
 }
 
@@ -574,6 +651,9 @@ struct UmbraFilterChips<T: Hashable>: View {
 
     let items: [Item]
     @Binding var selection: T
+    /// 两端内衬。默认 pagePadX（贴屏满宽摆放、胶囊滑到页边处渐出）；
+    /// 放进 List 行时传 0 —— 行自带左右边距，再垫一层就是双重缩进。
+    var edgeInset: CGFloat = UmbraMetric.pagePadX
 
     var body: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -586,7 +666,7 @@ struct UmbraFilterChips<T: Hashable>: View {
                     }
                 }
             }
-            .padding(.horizontal, UmbraMetric.pagePadX)
+            .padding(.horizontal, edgeInset)
         }
     }
 }

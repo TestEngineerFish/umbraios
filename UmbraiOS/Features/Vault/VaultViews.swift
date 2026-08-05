@@ -30,24 +30,50 @@ struct UmbraVaultHomeView: View {
     @State private var breathing = false
     /// 连续输错主密码的次数。到第三次错误卡的第二段换成「只能用 Secret Key 恢复」。
     @State private var wrongPasswordCount = 0
-    /// 从详情返回时要滚回的那一行。交给 UmbraPage 去滚，滚完它自己清空。
-    @State private var scrollAnchor: String?
 
     private var locked: Bool { !store.unlocked || session.softLocked }
 
+    /// 解锁横条只闪 3 秒（用户点名：一直挂着占地方）。「立即上锁」在 ⋮ 面板里常驻。
+    @State private var showUnlockedNote = false
+    @State private var noteTask: Task<Void, Never>?
+
     var body: some View {
-        UmbraPage(scrollAnchor: $scrollAnchor, navBar: { navBar }, content: {
-            if locked { lockedBody } else { unlockedBody }
-        })
+        Group {
+            // 解锁态是 List 而不是 UmbraScreen 的 ScrollView：
+            // 记录行的左滑动作（复制密码 / 删除）只有系统 List 给得出来。
+            if locked {
+                UmbraScreen { lockedBody }
+            } else {
+                unlockedList
+            }
+        }
+        .navigationTitle("密码保险箱")
+        .navigationBarTitleDisplayMode(.inline)
+        // ＋ 与 ⋮ 只在解锁态出现 —— 上锁时点它们没有任何事情能做，
+        // 摆在那里只会让人点了发现没反应。
+        .toolbar {
+            if !locked {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { addRecord() } label: { Image(systemName: "plus") }
+                        .tint(UmbraColor.orange)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    // ⋮ 面板每行带实时子值（几项待处理/几个分组/…），是「带说明的多动作」——
+                    // 按规范留在底部弹层，不塞系统 Menu。
+                    Button { session.touch(); router.present(moreSheet()) } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .tint(UmbraColor.orange)
+                }
+            }
+        }
         .task { await store.pullRecord() }
         .onAppear {
             session.startAutoLock()
             autoScanIfNeeded()
-            restoreScroll()
+            // 进来时就是解锁态（比如从别的页返回）也闪一下横条，提示自动锁还在计时。
+            if !locked { flashUnlockedNote() }
         }
-        // 记录是异步拉回来的：onAppear 那一刻列表往往还是空的，滚了也没用。
-        // 等真的有行了再滚一次。
-        .onChange(of: store.items.count) { _ in restoreScroll() }
         .onDisappear {
             session.stopAutoLock()
             // 离开页面就把「这一趟已经自动识别过」的标记清掉，下次进来才会再自动刷一次。
@@ -55,42 +81,25 @@ struct UmbraVaultHomeView: View {
         }
         // 上锁状态是异步变的（软锁到点、store 拉完数据才知道解没解开），
         // 只在 onAppear 判一次会漏掉「进来时还没上锁、几分钟后自动上锁」这一档。
-        .onChange(of: locked) { _ in autoScanIfNeeded() }
-    }
-
-    /// 导航栏。＋ 与 ⋮ 只在解锁态出现 —— 上锁时点它们没有任何事情能做，
-    /// 摆在那里只会让人点了发现没反应。
-    @ViewBuilder
-    private var navBar: some View {
-        if locked {
-            UmbraNavBar(backLabel: "我", title: "密码保险箱", onBack: { router.back() })
-        } else {
-            UmbraNavBar(
-                backLabel: "我",
-                title: "密码保险箱",
-                onBack: { router.back() },
-                trailing: {
-                    UmbraNavIcon(iconPath: UmbraIconPath.plus, size: 22, strokeWidth: 2.2) {
-                        addRecord()
-                    }
-                    UmbraNavDots { session.touch(); router.present(moreSheet()) }
-                }
-            )
+        .onChange(of: locked) { _ in
+            autoScanIfNeeded()
+            if !locked { flashUnlockedNote() }
         }
     }
 
-    /// 从记录详情退回来时，滚回刚才看的那一行。
-    /// 上锁态不滚（那时候列表根本没画出来），滚完把标记清掉 ——
-    /// 不清的话下次从「我」重新进保险箱也会莫名其妙跳到中间那条。
-    private func restoreScroll() {
-        guard !locked, let id = session.lastOpenedRecordId else { return }
-        guard store.items.contains(where: { $0.id == id }) else {
-            session.lastOpenedRecordId = nil
-            return
+    /// 解锁那一刻亮 3 秒再自己收掉。重复解锁会重置计时（先取消上一个）。
+    private func flashUnlockedNote() {
+        noteTask?.cancel()
+        withAnimation(UmbraMotion.push) { showUnlockedNote = true }
+        noteTask = Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 3_000_000_000)
+            guard !Task.isCancelled else { return }
+            withAnimation(UmbraMotion.push) { showUnlockedNote = false }
         }
-        scrollAnchor = id
-        session.lastOpenedRecordId = nil
     }
+    // 一期这里有一套「返回时滚回上次看的那行」（scrollAnchor + lastOpenedRecordId）——
+    // 那是自绘栈每次返回都重建页面逼出来的。系统 NavigationStack 返回时父页不重建，
+    // 滚动位置天然保留，整套机制删掉。
 
     /// 进页面自动刷脸：延迟 420ms 再发起，让转场先走完 ——
     /// 页面还在滑动时弹系统识别面板，两个动画会打架，而且用户根本来不及看清。
@@ -415,39 +424,49 @@ struct UmbraVaultHomeView: View {
 
     // MARK: 解锁态
 
-    @ViewBuilder
-    private var unlockedBody: some View {
+    /// 解锁态整页。顶部几张卡是透明背景的「假行」（不画行卡），
+    /// 记录分组是真正的 List Section —— 记录行的左滑动作只有系统 List 给得出来。
+    /// 一期底部那句 PBKDF2 说明删了：加密参数说明属于「保险箱设置 › 关于」，
+    /// 不该天天挂在列表底下（用户点名去掉）。
+    private var unlockedList: some View {
         let audit = UmbraVaultAudit(items: store.items)
 
-        VStack(alignment: .leading, spacing: UmbraMetric.sp4) {
-            unlockedNote
-            if store.offline { offlineNote }
-            profileCard
+        return List {
+            Section {
+                if showUnlockedNote {
+                    unlockedNote.transition(.opacity)
+                }
+                if store.offline { offlineNote }
+                profileCard
 
-            UmbraSearchField(placeholder: "搜名称、账号或网址", text: $query)
-                .onChange(of: query) { _ in session.touch() }
+                UmbraSearchField(placeholder: "搜名称、账号或网址", text: $query)
+                    .onChange(of: query) { _ in session.touch() }
 
-            catRow
+                catRow
 
-            // 安全体检压成**一行细摘要**放在这里，而不是列表底下那张大卡：
-            // 它是「顺手看一眼」的东西，挡在记录前面会天天被略过，
-            // 埋在最底下又等于没有 —— 记录多了根本滚不到。
-            checkupLine(audit)
+                // 安全体检压成**一行细摘要**放在这里，而不是列表底下那张大卡：
+                // 它是「顺手看一眼」的东西，挡在记录前面会天天被略过，
+                // 埋在最底下又等于没有 —— 记录多了根本滚不到。
+                checkupLine(audit)
+            }
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets(top: UmbraMetric.sp2, leading: 0, bottom: UmbraMetric.sp2, trailing: 0))
+            .listRowSeparator(.hidden)
 
             if rows.isEmpty {
                 emptyState
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                    .listRowInsets(EdgeInsets())
             } else {
-                ForEach(groups) { g in groupCard(g) }
+                ForEach(groups) { g in groupSection(g) }
             }
-
-            Text("主密码派生走 PBKDF2-SHA256，参数与电脑端一致，两端能互相解开同一份密文。复制出来的内容 60 秒后自动清空剪贴板。")
-                .font(UmbraFont.sans(12, .w400))
-                .foregroundColor(UmbraColor.faint)
-                .lineSpacing(12 * 0.65)
         }
-        .padding(.horizontal, UmbraMetric.pagePadX)
-        .padding(.top, UmbraMetric.sp5)
-        .padding(.bottom, UmbraMetric.sp7)
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(UmbraColor.bg)
+        .scrollDismissesKeyboard(.interactively)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
     }
 
     private var unlockedNote: some View {
@@ -575,8 +594,8 @@ struct UmbraVaultHomeView: View {
     }
 
     private var catRow: some View {
-        UmbraFilterChips(items: catItems, selection: $cat)
-            .padding(.horizontal, -UmbraMetric.pagePadX)   // 抵消外层的 16，胶囊要贴边横滑
+        // List 行自带左右边距，胶囊排里不再垫 pagePadX（垫了就是双重缩进）。
+        UmbraFilterChips(items: catItems, selection: $cat, edgeInset: 0)
     }
 
     private var rows: [VItem] {
@@ -618,8 +637,37 @@ struct UmbraVaultHomeView: View {
         return out
     }
 
-    private func groupCard(_ g: RowGroup) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+    /// 一个分组 = 一个 List Section（卡片、行分隔线交给系统），
+    /// 每行挂系统左滑：复制密码（有密码才给）+ 删除（必进确认弹窗）。
+    private func groupSection(_ g: RowGroup) -> some View {
+        Section {
+            ForEach(g.items) { it in
+                recordRow(it)
+                    .listRowBackground(UmbraColor.card)
+                    .listRowInsets(EdgeInsets())
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        // 不用 role: .destructive —— 带 role 系统会先把行划走，
+                        // 确认弹窗点取消后行回不来（与提醒列表同一个坑）。
+                        Button {
+                            confirmDelete(it)
+                        } label: {
+                            Label("删除", systemImage: "trash")
+                        }
+                        .tint(UmbraColor.danger)
+
+                        if let p = passwordOf(it) {
+                            Button {
+                                session.touch()
+                                UmbraClipboard.copySensitive(p)
+                                router.showToast("已复制密码 · 60 秒后自动清除")
+                            } label: {
+                                Label("复制密码", systemImage: "doc.on.doc")
+                            }
+                            .tint(UmbraColor.orange)
+                        }
+                    }
+            }
+        } header: {
             HStack(alignment: .firstTextBaseline) {
                 UmbraFieldLabel(text: g.name)
                 Spacer(minLength: 0)
@@ -627,27 +675,33 @@ struct UmbraVaultHomeView: View {
                     .font(UmbraFont.mono(12))
                     .foregroundColor(UmbraColor.faint)
             }
-            VStack(spacing: 0) {
-                ForEach(Array(g.items.enumerated()), id: \.element.id) { idx, it in
-                    if idx > 0 { UmbraRowDivider() }
-                    // .id 供返回时的 scrollTo 定位。收藏组里同一条记录会出现两次，
-                    // 所以锚点带上组 id，不然 ScrollViewReader 会拿到两个同名目标。
-                    recordRow(it).id(g.id == "fav" ? "fav-\(it.id)" : it.id)
-                }
-            }
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
-            .overlay(
-                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
-                    .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
-            )
+            .textCase(nil)
         }
+    }
+
+    /// 账号块里的密码。左滑「复制密码」只在真有密码时出现 —— 摆一个点了没反应的动作最糟。
+    private func passwordOf(_ it: VItem) -> String? {
+        let p = it.blocks.first { $0.type == "account" }?.data["password"]?.string
+        return (p?.isEmpty == false) ? p : nil
+    }
+
+    /// 删除确认。左滑和长按菜单共用这一份，文案只维护一处。
+    private func confirmDelete(_ it: VItem) {
+        session.touch()
+        router.confirm(UmbraAlert(
+            title: "删除「\(it.title)」？",
+            body: "会同步删除到所有设备。这一版没有回收站，删了找不回来。",
+            confirmLabel: "删除",
+            confirmDestructive: true,
+            onConfirm: {
+                Task { await store.deleteItem(it.id) }
+                router.showToast("已删除")
+            }))
     }
 
     private func recordRow(_ it: VItem) -> some View {
         Button {
             session.touch()
-            // 记下这一行，返回时滚回来（页面每次返回都会重建，不记就回到最上方）。
-            session.lastOpenedRecordId = it.id
             router.go(.vaultRecord(id: it.id))
         } label: {
             HStack(spacing: 12) {
@@ -727,17 +781,7 @@ struct UmbraVaultHomeView: View {
             Task { await store.toggleFav(it.id) }
         })
         items.append(UmbraSheetItem(label: "移动到分组") { movePicker(it) })
-        items.append(UmbraSheetItem(label: "删除", destructive: true) {
-            router.confirm(UmbraAlert(
-                title: "删除「\(it.title)」？",
-                body: "会同步删除到所有设备。这一版没有回收站，删了找不回来。",
-                confirmLabel: "删除",
-                confirmDestructive: true,
-                onConfirm: {
-                    Task { await store.deleteItem(it.id) }
-                    router.showToast("已删除")
-                }))
-        })
+        items.append(UmbraSheetItem(label: "删除", destructive: true) { confirmDelete(it) })
         router.present(UmbraSheet(title: it.title, items: items))
     }
 
@@ -850,6 +894,13 @@ struct UmbraVaultHomeView: View {
                 UmbraSheetItem(label: "保险箱设置",
                                note: "\(session.autoLockMinutes) 分钟自动锁定 · \(bio)") {
                     session.touch(); router.go(.vaultSettings)
+                },
+                // 解锁横条 3 秒就收起了，「立即上锁」得有个常驻入口 —— 收在这里。
+                UmbraSheetItem(label: "立即上锁",
+                               note: "\(session.autoLockMinutes) 分钟后也会自动锁") {
+                    store.lock()
+                    session.markManualLock()
+                    router.showToast("已重新上锁")
                 }
             ])
     }
@@ -867,28 +918,31 @@ struct UmbraVaultRecordView: View {
     private var item: VItem? { store.items.first { $0.id == id } }
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "密码保险箱", title: "", onBack: { router.back() }) {
-                if let it = item {
+        UmbraScreen {
+            if let it = item { content(it) } else { missing }
+        }
+        .navigationTitle("")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            if let it = item {
+                ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         session.touch()
                         Task { await store.toggleFav(it.id) }
                     } label: {
-                        UmbraIcon(d: UmbraIconPath.star, size: 19, strokeWidth: 2)
-                            .foregroundColor(it.favorite == true ? UmbraColor.orange : UmbraColor.faint)
-                            .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)
-                            .contentShape(Rectangle())
+                        Image(systemName: it.favorite == true ? "star.fill" : "star")
                     }
-                    .buttonStyle(.plain)
-                    UmbraNavAction(title: "编辑") {
+                    .tint(it.favorite == true ? UmbraColor.orange : UmbraColor.faint)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("编辑") {
                         session.touch()
                         router.go(.vaultEdit(id: it.id))
                     }
+                    .tint(UmbraColor.orange)
                 }
             }
-        }, content: {
-            if let it = item { content(it) } else { missing }
-        })
+        }
         .onAppear { session.touch() }
     }
 
@@ -1089,12 +1143,7 @@ struct UmbraVaultEditView: View {
     private var canSave: Bool { !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "取消", title: id == nil ? "存一条新的" : "编辑记录",
-                        onBack: { router.back() }, backChevron: false) {
-                UmbraNavAction(title: "存下", weight: .w600, enabled: canSave, action: save)
-            }
-        }, content: {
+        UmbraScreen(content: {
             VStack(alignment: .leading, spacing: UmbraMetric.sp5) {
                 field("名称") {
                     input("例如「GitHub」", text: $title)
@@ -1152,6 +1201,22 @@ struct UmbraVaultEditView: View {
             }
             .padding(UmbraMetric.pagePadX)
         })
+        .navigationTitle(id == nil ? "存一条新的" : "编辑记录")
+        .navigationBarTitleDisplayMode(.inline)
+        // 左上角是「取消」不是返回箭头 —— 放弃这次编辑，不是回上一页。
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("取消") { router.back() }
+                    .tint(UmbraColor.text)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { save() } label: {
+                    Text("保存").font(UmbraFont.sans(16, .w600))
+                }
+                .tint(canSave ? UmbraColor.orange : UmbraColor.faint)
+            }
+        }
         .onAppear {
             session.touch()
             guard !loaded else { return }

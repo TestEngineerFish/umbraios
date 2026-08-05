@@ -46,10 +46,7 @@ struct UmbraVaultGenView: View {
     @State private var value = ""
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "取消", title: "密码生成器",
-                        onBack: { router.back() }, backChevron: false)
-        }, content: {
+        UmbraScreen(content: {
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 11) {
                     Text(value)
@@ -117,6 +114,8 @@ struct UmbraVaultGenView: View {
             }
             .padding(UmbraMetric.pagePadX)
         })
+        .navigationTitle("密码生成器")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             session.touch()
             if value.isEmpty { regen() }
@@ -143,9 +142,7 @@ struct UmbraVaultCheckView: View {
 
     var body: some View {
         let audit = UmbraVaultAudit(items: store.items)
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "密码保险箱", title: "安全体检", onBack: { router.back() })
-        }, content: {
+        UmbraScreen(content: {
             VStack(alignment: .leading, spacing: 16) {
                 HStack(spacing: 16) {
                     UmbraScoreRing(score: audit.score, size: 72)
@@ -187,6 +184,8 @@ struct UmbraVaultCheckView: View {
             .padding(.top, UmbraMetric.pagePadX)
             .padding(.bottom, UmbraMetric.sp8)
         })
+        .navigationTitle("安全体检")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear { session.touch() }
     }
 
@@ -398,9 +397,7 @@ struct UmbraVaultRecoverView: View {
     }
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "返回", title: "用 Secret Key 恢复", onBack: { router.back() })
-        }, content: {
+        UmbraScreen(content: {
             VStack(alignment: .leading, spacing: UmbraMetric.sp5) {
                 Text("换了新设备时用。Secret Key 在电脑端的 Emergency Kit 里，和主密码一起才能解开数据 —— 两者缺一不可，服务端两样都没有。")
                     .font(UmbraFont.sans(12.5, .w400))
@@ -481,6 +478,8 @@ struct UmbraVaultRecoverView: View {
             }
             .padding(UmbraMetric.pagePadX)
         })
+        .navigationTitle("用 Secret Key 恢复")
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 
@@ -496,9 +495,7 @@ struct UmbraVaultKeyView: View {
     private var secretKey: String? { VaultKeychain.load() }
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "返回", title: "Secret Key", onBack: { router.back() })
-        }, content: {
+        UmbraScreen(content: {
             VStack(alignment: .leading, spacing: UmbraMetric.sp5) {
                 Text("Secret Key 和主密码一起才能解开数据。换设备、重装应用都要用它 —— 丢了就再也进不去，服务端帮不上忙。")
                     .font(UmbraFont.sans(12.5, .w400))
@@ -548,6 +545,8 @@ struct UmbraVaultKeyView: View {
             }
             .padding(UmbraMetric.pagePadX)
         })
+        .navigationTitle("Secret Key")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear { session.touch() }
         .onDisappear { revealTask?.cancel() }
     }

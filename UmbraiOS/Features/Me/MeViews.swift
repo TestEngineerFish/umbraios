@@ -19,15 +19,14 @@ struct UmbraMeHomeView: View {
     @EnvironmentObject private var chat: ChatViewModel
 
     var body: some View {
-        UmbraPage(navBar: { EmptyView() }, content: {
-            UmbraTitleHeader(title: "我")
-
+        UmbraScreen {
             UmbraHeroCard(iconPath: UmbraIconPath.smartphone,
                           name: NetworkConfig.shared.deviceName,
                           badge: "此设备",
                           badgeOn: false,
                           sub: serverHost,
                           subMono: true)
+                .padding(.top, 2)
                 .padding(.horizontal, UmbraMetric.pagePadX)
                 .padding(.bottom, UmbraMetric.sp5)
 
@@ -45,7 +44,9 @@ struct UmbraMeHomeView: View {
                 .lineSpacing(12 * 0.65)
                 .padding(.horizontal, UmbraMetric.pagePadX)
                 .padding(.top, UmbraMetric.sp6)
-        })
+        }
+        .navigationTitle("我")
+        .refreshable { await chat.reloadDevices() }
         .onAppear { chat.loadDevices() }
     }
 

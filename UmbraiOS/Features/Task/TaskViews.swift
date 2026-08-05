@@ -20,10 +20,17 @@ struct UmbraTaskListView: View {
     @State private var query = ""
     /// nil = 全部
     @State private var filter: UmbraStatus? = nil
+    /// 搜索框焦点放在页面上（不塞组件里）：「点空白处收键盘」得由页面来收。
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
-        UmbraPage(navBar: { EmptyView() }, content: {
-            UmbraTitleHeader(title: "任务", subtitle: counts)
+        UmbraScreen {
+            // 大标题交给系统栏；数量小结放内容首行（v2 原型的位置）。
+            Text(counts)
+                .font(UmbraFont.sans(13, .w400))
+                .foregroundColor(UmbraColor.muted)
+                .padding(.horizontal, UmbraMetric.pagePadX)
+                .padding(.bottom, UmbraMetric.sp3)
 
             UmbraSegmentedControl(items: [
                 .init(value: Seg.history, label: "历史"),
@@ -33,7 +40,12 @@ struct UmbraTaskListView: View {
             .padding(.bottom, UmbraMetric.sp4)
 
             if seg == .history { history } else { plan }
-        })
+        }
+        .navigationTitle("任务")
+        // 点内容区任意空白收键盘。simultaneousGesture 不吞行内按钮的点击；
+        // 只在真有焦点时动手，避免和「点图标展开搜索」抢同一下点击。
+        .simultaneousGesture(TapGesture().onEnded { if searchFocused { searchFocused = false } })
+        .refreshable { await tasks.refreshJobs() }
         .onAppear { tasks.startPolling() }
         .onDisappear { tasks.stopPolling() }
     }
@@ -70,7 +82,9 @@ struct UmbraTaskListView: View {
     @ViewBuilder
     private var history: some View {
         VStack(alignment: .leading, spacing: 11) {
-            UmbraSearchField(placeholder: "搜索任务目标或结果摘要", text: $query)
+            // 默认收成一个搜索图标，点开才占一行（用户点名；灵感列表同款）。
+            UmbraCollapsingSearch(placeholder: "搜索任务目标或结果摘要", text: $query,
+                                  focused: $searchFocused)
                 .padding(.horizontal, UmbraMetric.pagePadX)
 
             UmbraFilterChips(items: chipItems, selection: Binding(
@@ -113,46 +127,34 @@ struct UmbraTaskListView: View {
         return Button {
             router.go(.taskDetail(id: job.id))
         } label: {
-            HStack(alignment: .top, spacing: 11) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 7, style: .continuous).fill(st.soft)
-                    if st == .running {
-                        UmbraSpinningIcon(d: st.iconPath, size: 14, strokeWidth: 2.1)
-                    } else {
-                        UmbraIcon(d: st.iconPath, size: 14, strokeWidth: 2.1)
-                    }
-                }
-                .foregroundColor(st.fg)
-                .frame(width: 24, height: 24)
-                .padding(.top, 1)
+            // 不再单画一个状态图标方块：标题下面那行 UmbraStatusBadge 已经是
+            // 图标 + 文字的完整状态表达，再来一个就是同一信息说两遍（用户点名去掉）。
+            VStack(alignment: .leading, spacing: 7) {
+                Text(job.goal)
+                    .font(UmbraFont.sans(16, .w400))
+                    .foregroundColor(UmbraColor.text)
+                    .lineSpacing(16 * 0.4)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
 
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(job.goal)
-                        .font(UmbraFont.sans(16, .w400))
-                        .foregroundColor(UmbraColor.text)
-                        .lineSpacing(16 * 0.4)
-                        .lineLimit(2)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    HStack(spacing: 7) {
-                        UmbraStatusBadge(status: st)
-                        if let ch = job.channel, !ch.isEmpty {
-                            Text("来自 \(ch)")
-                                .font(UmbraFont.sans(13, .w400))
-                                .foregroundColor(UmbraColor.faint)
-                        }
-                        Text("· \(UmbraTime.relative(job.updated_at))")
+                HStack(spacing: 7) {
+                    UmbraStatusBadge(status: st)
+                    if let ch = job.channel, !ch.isEmpty {
+                        Text("来自 \(ch)")
                             .font(UmbraFont.sans(13, .w400))
                             .foregroundColor(UmbraColor.faint)
-                        Spacer(minLength: 0)
                     }
+                    Text("· \(UmbraTime.relative(job.updated_at))")
+                        .font(UmbraFont.sans(13, .w400))
+                        .foregroundColor(UmbraColor.faint)
+                    Spacer(minLength: 0)
+                }
 
-                    // 进度只在**服务端真给了步骤数**时画。没有步骤数就不画进度条 ——
-                    // 画一根永远 0% 的条比不画更容易被当成「卡住了」。
-                    if st == .running && total > 0 {
-                        UmbraProgressBar(progress: Double(done) / Double(total))
-                    }
+                // 进度只在**服务端真给了步骤数**时画。没有步骤数就不画进度条 ——
+                // 画一根永远 0% 的条比不画更容易被当成「卡住了」。
+                if st == .running && total > 0 {
+                    UmbraProgressBar(progress: Double(done) / Double(total))
                 }
             }
             .padding(.horizontal, 13)
@@ -212,9 +214,7 @@ struct UmbraTaskDetailView: View {
     private var detail: JobDetail? { tasks.jobDetail?.job.id == id ? tasks.jobDetail : nil }
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "任务", title: shortId, onBack: { router.back() })
-        }, content: {
+        UmbraScreen(content: {
             if let d = detail {
                 content(d)
             } else {
@@ -228,6 +228,8 @@ struct UmbraTaskDetailView: View {
         }, bottom: {
             if let d = detail { bottomBar(d) }
         })
+        .navigationTitle(shortId)
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear { Task { await tasks.loadJobDetail(id: id) } }
         .onDisappear { tasks.closeJobDetail() }
     }

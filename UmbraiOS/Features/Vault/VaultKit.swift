@@ -207,10 +207,6 @@ final class UmbraVaultSession: ObservableObject {
     @Published private(set) var faceIDEnabled: Bool
     @Published private(set) var hasBiometricCredential = UmbraBiometricStore.hasCredential
 
-    /// 从记录详情返回时要滚回哪一行。存在 session 上而不是页面 @State 里：
-    /// 页面在 pop 之后会被重建，@State 会跟着没。
-    @Published var lastOpenedRecordId: String?
-
     private var lastActivity = Date()
     private var ticker: Task<Void, Never>?
 

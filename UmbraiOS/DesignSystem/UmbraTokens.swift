@@ -54,7 +54,9 @@ extension Color {
 enum UmbraColor {
 
     // 表面 / 中性
-    static let bg        = dyn(light: "F6F5F2", dark: "1C1A17")   // 页面底色：暖灰 / 暖棕黑，不是纯白或冷黑
+    /// v2（iOS 26 Liquid Glass 版）把底色调到贴近 systemGroupedBackground 但仍偏暖：
+    /// 浅色 #F6F5F2→#F1EFEA、深色 #1C1A17→#151310。其余表面色不变。
+    static let bg        = dyn(light: "F1EFEA", dark: "151310")   // 页面底色：暖灰 / 暖棕黑，不是纯白或冷黑
     static let card      = dyn(light: "FFFFFF", dark: "26231F")   // 卡片、列表分组
     static let titlebar  = dyn(light: "EFEDE8", dark: "1C1A17")
     static let rail      = dyn(light: "FBFAF8", dark: "1F1C18")
@@ -97,6 +99,21 @@ enum UmbraColor {
     static let onNavText = Color(hex: "F5F2EC")
     /// toast 里「撤销」的字色。深色底上的提亮橙，和 --orange-text 的深色值同源。
     static let onNavAccent = Color(hex: "F0A878")
+
+    // MARK: 玻璃 token（v2 · iOS 26 Liquid Glass）
+    //
+    // 玻璃**只给系统 chrome 层**：导航按钮、tab bar、浮层。内容卡片一律不透明 ——
+    // Umbra「几乎不用透明与模糊」在内容层继续成立，这是规范增补第 4 节的原话。
+    // 模糊本体交给 .ultraThinMaterial；这里只提供叠在材质上的 tint / 描边 / 阴影。
+    static let glassBg  = dynColor(light: Color.white.opacity(0.55),
+                                   dark: Color(hex: "2E2A25").opacity(0.55))
+    static let glassBrd = dynColor(light: Color.white.opacity(0.65),
+                                   dark: Color.white.opacity(0.14))
+    /// 玻璃件的投影色。浅色暖黑 12%、深色纯黑 38%。
+    static let glassShadow = dynColor(light: Color(hex: "1F1B16").opacity(0.12),
+                                      dark: Color.black.opacity(0.38))
+    /// toast 底：深色玻璃胶囊（两个主题都是深色，配 .ultraThinMaterial 使用）。
+    static let toastGlass = Color(hex: "15110E").opacity(0.72)
 
     // MARK: 动态色构造
     private static func dyn(light: String, dark: String) -> Color {
@@ -168,9 +185,14 @@ enum UmbraMetric {
     static let sp7: CGFloat = 20
     static let sp8: CGFloat = 28
 
-    // 圆角（iOS 覆盖：控件 10、卡片 14）
-    static let radiusControl: CGFloat = 10   // 桌面 7–8
-    static let radiusCard: CGFloat = 14      // 桌面 11–12
+    // 圆角（v2 · iOS 26 覆盖）
+    // 规则：**胶囊只给按钮、分段控件、tab bar**；输入框统一 12、不用胶囊；
+    // 卡片 18 且描边转 borderSoft；操作表/弹窗 26–28。
+    static let radiusControl: CGFloat = 10    // 小控件（图标块、行内徽标）
+    static let radiusCard: CGFloat = 18       // 卡片 / 分组列表（一期 14）
+    static let radiusInput: CGFloat = 12      // 单行 / 多行 / 搜索输入框
+    static let radiusSwipeRow: CGFloat = 16   // 左滑操作行
+    static let radiusSheet: CGFloat = 26      // 操作表 / 底部面板（弹窗 28）
     static let radiusPill: CGFloat = 999
     /// 过程截图专用，交接文档点名 8px。
     static let radiusShot: CGFloat = 8
@@ -195,7 +217,14 @@ enum UmbraMetric {
     static let statusDot: CGFloat = 7
     static let segmentH: CGFloat = 30
     static let borderW: CGFloat = 1
-    static let tabBarH: CGFloat = 83
+
+    // v2 chrome（玻璃层）
+    /// 导航栏内容高（系统 bar 自管高度，这个值给自绘的对齐参考与玻璃钮尺寸）。
+    static let navBarH: CGFloat = 54
+    /// 导航栏上的玻璃圆钮（返回 / ⋯）。
+    static let navGlassRound: CGFloat = 38
+    /// 导航栏上的玻璃胶囊文字按钮（保存 / 取消）。
+    static let navGlassPillH: CGFloat = 36
 }
 
 // MARK: - 分层
@@ -233,8 +262,10 @@ enum UmbraMotion {
     static let tint = Animation.easeInOut(duration: 0.13)
     /// 左滑回弹 .16s cubic-bezier(.2,.8,.3,1)
     static let swipe = Animation.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.16)
-    /// 弹框推入 / 返回 .22s 横向位移
+    /// 弹框推入 / 返回 .22s 横向位移（页面转场已交系统，这条只剩浮层在用）
     static let push = Animation.easeOut(duration: 0.22)
+    /// 分段控件滑块平移 .22s cubic-bezier(.2,.8,.3,1) —— v2 交接清单点名的取值
+    static let slider = Animation.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.22)
     /// 运行中图标旋转：1s linear，无限
     static let spin = Animation.linear(duration: 1).repeatForever(autoreverses: false)
 }

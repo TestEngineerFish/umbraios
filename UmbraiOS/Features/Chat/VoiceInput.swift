@@ -58,6 +58,12 @@ final class UmbraHoldRecorder: ObservableObject {
     /// 短于 0.4 秒当误触。
     static let minTenths = 4
 
+    /// 浮层里「取消 / 转文字」两个圆钮的实测全局 frame，浮层出现时写进来。
+    /// 落区判定拿它做命中测试 —— 按屏幕比例猜位置在不同机型上会猜偏（实测踩过）。
+    /// 不用 @Published：只在拖拽回调里读，不需要驱动界面刷新。
+    var cancelZoneFrame: CGRect = .zero
+    var textZoneFrame: CGRect = .zero
+
     private let audioEngine = AVAudioEngine()
     private var request: SFSpeechAudioBufferRecognitionRequest?
     private var task: SFSpeechRecognitionTask?
@@ -213,6 +219,23 @@ final class UmbraHoldRecorder: ObservableObject {
 struct UmbraVoiceHoldOverlay: View {
     @ObservedObject var rec: UmbraHoldRecorder
 
+    // 浮层配色随主题走：深色主题 = 原设计（近黑底板 + 白字）；
+    // 浅色主题 = 白底板 + 深字、遮罩压暗减半、落区圈换浅灰。
+    // 橙色波形气泡与 danger/orange 的选中态两个主题不变 —— 品牌重点色跨主题恒定。
+    @Environment(\.colorScheme) private var scheme
+    private var dark: Bool { scheme == .dark }
+    /// 主文字（松开发送、选中落区标签）。
+    private var primaryFg: Color { dark ? .white : UmbraColor.text }
+    /// 次级（落区图标未选中态）。
+    private var secondaryFg: Color { dark ? Color.white.opacity(0.72) : UmbraColor.muted }
+    /// 弱文字（提示语、未选中标签、计时）。
+    private var tertiaryFg: Color { dark ? Color.white.opacity(0.5) : UmbraColor.faint }
+    /// 浮层内的浅色填充（落区圈底、状态条底）。
+    private var fillSoft: Color { dark ? Color.white.opacity(0.14) : Color.black.opacity(0.07) }
+    /// 更浅的填充（识别文字气泡底）。
+    private var fillFaint: Color { dark ? Color.white.opacity(0.1) : Color.black.opacity(0.05) }
+    private var panelBg: Color { dark ? UmbraColor.nav : .white }
+
     var body: some View {
         VStack(spacing: 0) {
             VStack(spacing: UmbraMetric.sp5) {
@@ -224,13 +247,13 @@ struct UmbraVoiceHoldOverlay: View {
                         .opacity(rec.tenths % 11 < 6 ? 1 : 0.25)
                     Text(rec.durationText)
                         .font(UmbraFont.mono(13, .w560))
-                        .foregroundColor(Color.white.opacity(0.6))
+                        .foregroundColor(dark ? Color.white.opacity(0.6) : UmbraColor.muted)
                 }
 
                 if !rec.text.isEmpty {
                     Text(rec.text)
                         .font(UmbraFont.sans(15, .w400))
-                        .foregroundColor(Color.white.opacity(0.92))
+                        .foregroundColor(primaryFg)
                         .lineSpacing(15 * 0.6)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 15)
@@ -238,7 +261,7 @@ struct UmbraVoiceHoldOverlay: View {
                         .frame(maxWidth: 288)
                         .background(
                             RoundedRectangle(cornerRadius: 13, style: .continuous)
-                                .fill(Color.white.opacity(0.1))
+                                .fill(fillFaint)
                         )
                 }
 
@@ -250,7 +273,12 @@ struct UmbraVoiceHoldOverlay: View {
 
             panel
         }
-        .background(Color(red: 12 / 255, green: 10 / 255, blue: 9 / 255).opacity(0.62).ignoresSafeArea())
+        // 遮罩：深色主题压暗 0.62；浅色主题减到 0.32 —— 白底板配重遮罩会显得像出错弹窗。
+        .background(Color(red: 12 / 255, green: 10 / 255, blue: 9 / 255).opacity(dark ? 0.62 : 0.32).ignoresSafeArea())
+        // 底板要**贴到屏幕物理底边**：浮层默认排在安全区内，底板停在 home 条上沿，
+        // 下面会露出一条只有遮罩的缝（实机截图点名）。底板自己的 26pt 底边距
+        // 正好给 home 指示条留出呼吸位，和原型的取值一致。
+        .ignoresSafeArea(edges: .bottom)
     }
 
     private var waveBubble: some View {
@@ -282,16 +310,18 @@ struct UmbraVoiceHoldOverlay: View {
         VStack(spacing: UmbraMetric.sp6) {
             HStack(alignment: .top, spacing: 0) {
                 dropZone(icon: UmbraIconPath.x, label: "取消",
-                         on: rec.zone == .cancel, onColor: UmbraColor.danger)
+                         on: rec.zone == .cancel, onColor: UmbraColor.danger,
+                         report: { rec.cancelZoneFrame = $0 })
                 Text(rec.zone == .send ? "上滑到两边可以取消或转文字" : "")
                     .font(UmbraFont.sans(12, .w400))
-                    .foregroundColor(Color.white.opacity(0.5))
+                    .foregroundColor(tertiaryFg)
                     .lineSpacing(12 * 0.6)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: .infinity)
                     .padding(.top, 16)
                 dropZone(icon: UmbraIconPath.sortLines, label: "转文字",
-                         on: rec.zone == .text, onColor: UmbraColor.orange)
+                         on: rec.zone == .text, onColor: UmbraColor.orange,
+                         report: { rec.textZoneFrame = $0 })
             }
 
             // 底部状态条：文字随落区变，「松开 发送 / 取消 / 转文字」。
@@ -299,19 +329,19 @@ struct UmbraVoiceHoldOverlay: View {
                 UmbraIcon(d: UmbraIconPath.mic, size: 19, strokeWidth: 2)
                 Text(hint).font(UmbraFont.sans(16, .w600))
             }
-            .foregroundColor(Color.white.opacity(rec.zone == .send ? 1 : 0.4))
+            .foregroundColor(rec.zone == .send ? primaryFg : tertiaryFg)
             .frame(maxWidth: .infinity)
             .frame(height: 56)
             .background(
                 RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color.white.opacity(rec.zone == .send ? 0.12 : 0))
+                    .fill(rec.zone == .send ? fillSoft : Color.clear)
             )
         }
         .padding(.horizontal, 26)
         .padding(.top, UmbraMetric.sp7)
         .padding(.bottom, 26)
         .background(
-            UnevenRoundedCornersShape(radius: 26).fill(UmbraColor.nav)
+            UnevenRoundedCornersShape(radius: 26).fill(panelBg)
         )
     }
 
@@ -323,22 +353,30 @@ struct UmbraVoiceHoldOverlay: View {
         }
     }
 
-    private func dropZone(icon: String, label: String, on: Bool, onColor: Color) -> some View {
+    /// report：把整个落区（圆钮 + 标签）的全局 frame 交回去，供拖拽命中判定。
+    private func dropZone(icon: String, label: String, on: Bool, onColor: Color,
+                          report: @escaping (CGRect) -> Void) -> some View {
         VStack(spacing: 8) {
             Circle()
-                .fill(on ? onColor : Color.white.opacity(0.14))
+                .fill(on ? onColor : fillSoft)
                 .frame(width: 56, height: 56)
                 .overlay(
                     UmbraIcon(d: icon, size: 22, strokeWidth: 2.1)
-                        .foregroundColor(on ? .white : Color.white.opacity(0.72))
+                        // 选中态圈底是 danger/orange 实色，图标两个主题都用白。
+                        .foregroundColor(on ? .white : secondaryFg)
                 )
                 .scaleEffect(on ? 1.08 : 1)
                 .animation(UmbraMotion.tint, value: on)
             Text(label)
                 .font(UmbraFont.sans(12.5, .w560))
-                .foregroundColor(Color.white.opacity(on ? 1 : 0.5))
+                .foregroundColor(on ? primaryFg : tertiaryFg)
         }
         .frame(width: 74)
+        .background(
+            GeometryReader { g in
+                Color.clear.onAppear { report(g.frame(in: .global)) }
+            }
+        )
     }
 }
 

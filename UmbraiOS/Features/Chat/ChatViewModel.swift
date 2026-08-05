@@ -107,10 +107,14 @@ class ChatViewModel: ObservableObject {
 
     // MARK: - Devices（联系人列表）
     func loadDevices() {
-        Task {
-            let list = await HTTPService.shared.fetchAllDevices()
-            await MainActor.run { self.devices = list }
-        }
+        Task { await reloadDevices() }
+    }
+
+    /// 下拉刷新用的可等待版本 —— .refreshable 需要 async 才能让刷新圈转到数据回来。
+    func reloadDevices() async {
+        let list = await HTTPService.shared.fetchAllDevices()
+        // 拉失败（nil）保留旧联系人，别把列表清成只剩秘书。
+        if let list { await MainActor.run { self.devices = list } }
     }
 
     func forgetDevice(_ deviceId: String) {

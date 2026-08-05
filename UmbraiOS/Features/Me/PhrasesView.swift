@@ -7,13 +7,20 @@
 //
 // 本地存 UserDefaults 的一段 JSON。用 UserDefaults 而不是 Keychain：
 // 常用语是**明文**内容（页面上也这么写了），密钥类要放密码保险箱。
+//
+// v2 界面按设计稿 me.phrases / phrase.edit 重做：
+//   列表 = 系统 List + 左滑（编辑 / 删除进确认弹窗）+ 长按拖动排序；
+//   新建/编辑 = 独立推入页（名称 / 标签 chips / 内容大输入区），不再是系统输入弹窗 ——
+//   常用语内容常常是好几段话，alert 里那条单行输入框根本放不下。
 import SwiftUI
-import UIKit
 
 // MARK: - 本地存储 + 同步
 
 @MainActor
 final class PhraseStore: ObservableObject {
+    /// 列表页和编辑页是两个路由、各自建 store 会各存各的账 —— 共用这一份。
+    static let shared = PhraseStore()
+
     @Published private(set) var items: [Phrase] = []
     @Published private(set) var tombs: [PhraseTomb] = []
     /// 同步状态的一行说明。同步是后台行为，用户唯一能看到的就是这行字，所以要具体。
@@ -112,81 +119,60 @@ final class PhraseStore: ObservableObject {
     }
 }
 
-// MARK: - 页面
+// MARK: - 列表页
 
 struct UmbraPhrasesView: View {
     @EnvironmentObject private var router: UmbraRouter
-    @StateObject private var store = PhraseStore()
-
-    @State private var editing: Phrase? = nil
-    @State private var creating = false
-    @State private var draftName = ""
-    @State private var draftBody = ""
-    @State private var draftKeyword = ""
+    @ObservedObject private var store = PhraseStore.shared
 
     var body: some View {
-        UmbraPage(navBar: {
-            UmbraNavBar(backLabel: "我", title: "常用语", onBack: { router.back() }) {
-                UmbraNavIcon(iconPath: UmbraIconPath.plus, size: 20, strokeWidth: 2.4) { startCreate() }
-            }
-        }, content: {
-            VStack(alignment: .leading, spacing: UmbraMetric.sp4) {
-                header
-
-                if store.items.isEmpty {
+        Group {
+            if store.items.isEmpty {
+                UmbraScreen {
                     UmbraEmptyState(
                         iconPath: UmbraIconPath.messageText,
                         title: "还没有常用语",
                         hint: "把经常要说的话存成一条，之后在任意端直接拿来用。",
                         actionTitle: "新建一条",
-                        action: { startCreate() })
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(Array(store.items.enumerated()), id: \.element.id) { idx, p in
-                            if idx > 0 { UmbraRowDivider() }
-                            row(p)
-                        }
-                    }
-                    .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
-                            .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
-                    )
+                        action: { router.go(.mePhraseEdit(id: nil)) })
+                        .padding(.horizontal, UmbraMetric.pagePadX)
+                        .padding(.top, UmbraMetric.sp7)
                 }
-
-                // 明文提醒。用 warning 而不是 danger：这不是错误，是一条需要知道的事实。
-                HStack(alignment: .top, spacing: UmbraMetric.sp3) {
-                    UmbraIcon(d: UmbraIconPath.alertTriangle, size: 15, strokeWidth: 2)
-                        .padding(.top, 1)
-                    Text("内容为明文存储，密钥类请放密码保险箱")
-                        .font(UmbraFont.sans(12.5, .w560))
-                        .lineSpacing(12.5 * 0.55)
-                }
-                .foregroundColor(UmbraColor.warning)
-                .padding(.horizontal, UmbraMetric.sp4)
-                .padding(.vertical, 11)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(UmbraColor.warningSoft))
-
-                Text("同步按条目合并、以最后一次写入为准，没有冲突弹窗。点一行内容直接复制。")
-                    .font(UmbraFont.sans(12, .w400))
-                    .foregroundColor(UmbraColor.faint)
-                    .lineSpacing(12 * 0.65)
+            } else {
+                list
             }
-            .padding(.horizontal, UmbraMetric.pagePadX)
-            .padding(.top, UmbraMetric.sp5)
-        })
-        .onAppear { Task { await store.sync() } }
-        .alert(editing == nil ? "新建常用语" : "编辑常用语", isPresented: sheetBinding) {
-            TextField("名称，例如「日报模板」", text: $draftName)
-            TextField("内容", text: $draftBody)
-            TextField("触发词（可留空）", text: $draftKeyword)
-                .textInputAutocapitalization(.never)
-            Button("取消", role: .cancel) { closeEditor() }
-            Button("存下来") { commit() }
-        } message: {
-            Text("秘书会把内容原文直接拿去用。")
         }
+        .navigationTitle("常用语")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { router.go(.mePhraseEdit(id: nil)) } label: { Image(systemName: "plus") }
+                    .tint(UmbraColor.orange)
+            }
+        }
+        .onAppear { Task { await store.sync() } }
+    }
+
+    private var list: some View {
+        List {
+            // 数量 + 同步按钮：设计稿里这一行在卡片外，所以背景透明、不占行样式。
+            header
+                .listRowBackground(Color.clear)
+                .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: 2, trailing: 0))
+                .listRowSeparator(.hidden)
+
+            Section {
+                ForEach(store.items) { p in row(p) }
+                    // 长按拖动排序（系统 List 不进编辑模式也能拖）。
+                    .onMove { store.reorder(from: $0, to: $1) }
+            } footer: {
+                footerNotes
+            }
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(UmbraColor.bg)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
     }
 
     private var header: some View {
@@ -195,145 +181,275 @@ struct UmbraPhrasesView: View {
                 Text("\(store.items.count) 条")
                     .font(UmbraFont.sans(13, .w400))
                     .foregroundColor(UmbraColor.muted)
-                Text(store.syncNote)
-                    .font(UmbraFont.sans(12, .w400))
-                    .foregroundColor(UmbraColor.faint)
+                // 失败信息不能只藏在按钮态里 —— 失败时补一行说明，平时不占地方。
+                if store.syncNote.hasPrefix("同步失败") {
+                    Text(store.syncNote)
+                        .font(UmbraFont.sans(12, .w400))
+                        .foregroundColor(UmbraColor.warning)
+                }
             }
             Spacer(minLength: 0)
-            Button {
-                Task { await store.sync() }
-            } label: {
-                HStack(spacing: 6) {
-                    if store.syncing {
-                        UmbraSpinningIcon(d: UmbraIconPath.spinnerArc, size: 13, strokeWidth: 2.1)
-                    }
-                    Text(store.syncing ? "同步中" : "立即同步")
-                        .font(UmbraFont.sans(13, .w560))
-                }
-                .foregroundColor(UmbraColor.text)
-                .padding(.horizontal, UmbraMetric.sp4)
-                .frame(height: 34)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(UmbraColor.card))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8, style: .continuous)
-                        .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
-                )
-                .frame(minHeight: UmbraMetric.tapMin)
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .disabled(store.syncing)
+            syncButton
         }
     }
 
+    /// 同步按钮的三态（设计稿 phVM）：同步中（橙、转圈）/ 刚刚同步 / 立即同步。
+    private var syncButton: some View {
+        Button {
+            Task { await store.sync() }
+        } label: {
+            HStack(spacing: 6) {
+                if store.syncing {
+                    UmbraSpinningIcon(d: UmbraIconPath.spinnerArc, size: 13, strokeWidth: 2.2)
+                }
+                Text(store.syncing ? "同步中…" : (store.syncNote == "刚刚同步" ? "刚刚同步" : "立即同步"))
+                    .font(UmbraFont.sans(13, .w560))
+            }
+            .foregroundColor(store.syncing ? UmbraColor.orangeText : UmbraColor.text)
+            .padding(.horizontal, 13)
+            .frame(height: 34)
+            .background(Capsule().fill(store.syncing ? UmbraColor.orangeSoft : UmbraColor.card))
+            .overlay(Capsule().strokeBorder(store.syncing ? UmbraColor.orange : UmbraColor.border,
+                                            lineWidth: UmbraMetric.borderW))
+            .frame(minHeight: UmbraMetric.tapMin)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(store.syncing)
+    }
+
+    /// 一行：名称 + 触发词胶囊 + 首行预览。点整行进编辑（设计稿的 openEdit）。
     private func row(_ p: Phrase) -> some View {
-        HStack(alignment: .top, spacing: 11) {
-            Button {
-                UIPasteboard.general.string = p.content
-                router.showToast("已复制")
-            } label: {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack(spacing: 7) {
-                        Text(p.name)
-                            .font(UmbraFont.sans(15.5, .w560))
-                            .foregroundColor(UmbraColor.text)
-                        if let k = p.keyword, !k.isEmpty {
-                            Text(k)
-                                .font(UmbraFont.mono(11, .w600))
-                                .foregroundColor(UmbraColor.muted)
-                                .padding(.horizontal, 7)
-                                .padding(.vertical, 2)
-                                .background(Capsule().fill(UmbraColor.chip))
-                        }
-                    }
-                    Text(p.content.split(separator: "\n").first.map(String.init) ?? "")
-                        .font(UmbraFont.sans(13, .w400))
-                        .foregroundColor(UmbraColor.muted)
+        Button {
+            router.go(.mePhraseEdit(id: p.id))
+        } label: {
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 7) {
+                    Text(p.name)
+                        .font(UmbraFont.sans(15.5, .w560))
+                        .foregroundColor(UmbraColor.text)
                         .lineLimit(1)
+                    if let k = p.keyword, !k.isEmpty {
+                        Text(k)
+                            .font(UmbraFont.mono(11, .w600))
+                            .foregroundColor(UmbraColor.muted)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(UmbraColor.chip))
+                    }
                 }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
+                Text(p.content.split(separator: "\n").first.map(String.init) ?? "")
+                    .font(UmbraFont.sans(13, .w400))
+                    .foregroundColor(UmbraColor.muted)
+                    .lineLimit(1)
             }
-            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(UmbraColor.card)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // 删除必进确认弹窗，所以不用 role: .destructive ——
+            // 带 role 的按钮系统会先把行划走，取消确认后行回不来。
+            Button {
+                router.confirm(UmbraAlert(
+                    title: "删除常用语「\(p.name)」？",
+                    body: "删除后无法恢复，会同步到其它设备。",
+                    confirmLabel: "删除",
+                    confirmDestructive: true,
+                    onConfirm: {
+                        withAnimation { store.delete(id: p.id) }
+                        router.showToast("已删除「\(p.name)」")
+                    }))
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+            .tint(UmbraColor.danger)
 
-            // 编辑 / 删除。破坏性动作在这里是一行内的小字（列表行，不是详情页底部），
-            // 删除仍然要过一次确认弹窗。
-            VStack(alignment: .trailing, spacing: 6) {
-                Button { startEdit(p) } label: {
-                    Text("编辑")
-                        .font(UmbraFont.sans(12.5, .w560))
-                        .foregroundColor(UmbraColor.orange)
-                        .frame(minWidth: 44, minHeight: 22, alignment: .trailing)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                Button {
-                    router.confirm(UmbraAlert(
-                        title: "删除「\(p.name)」？",
-                        body: "会同步到其它设备。",
-                        confirmLabel: "删除",
-                        confirmDestructive: true,
-                        onConfirm: {
-                            store.delete(id: p.id)
-                            router.showToast("已删除")
-                        }))
-                } label: {
-                    Text("删除")
-                        .font(UmbraFont.sans(12.5, .w560))
-                        .foregroundColor(UmbraColor.danger)
-                        .frame(minWidth: 44, minHeight: 22, alignment: .trailing)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
+            Button {
+                router.go(.mePhraseEdit(id: p.id))
+            } label: {
+                Label("编辑", systemImage: "square.and.pencil")
             }
         }
-        .padding(.horizontal, 13)
-        .padding(.vertical, UmbraMetric.sp4)
     }
 
-    // MARK: 编辑器
-    //
-    // 用系统的输入 alert 而不是设计稿的两步底部选择器：Router 的 UmbraSheet 只承载选项，
-    // 没有输入框。为两个入口给它加一整套字段模型不划算，而系统 alert 的多字段输入是现成的。
+    /// 明文警示 + 同步说明。放 Section footer：跟着卡片走、不参与滑动手势。
+    private var footerNotes: some View {
+        VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
+            HStack(alignment: .top, spacing: 9) {
+                UmbraIcon(d: UmbraIconPath.alertTriangle, size: 15, strokeWidth: 2)
+                    .padding(.top, 1)
+                Text("内容为明文存储，密钥类请放密码保险箱")
+                    .font(UmbraFont.sans(12.5, .w560))
+                    .lineSpacing(12.5 * 0.55)
+            }
+            .foregroundColor(UmbraColor.warning)
+            .padding(.horizontal, UmbraMetric.sp4)
+            .padding(.vertical, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(UmbraColor.warningSoft))
+            // 底下不再放同步/排序的说明文字（用户点名全删）；明文警示是安全事实，留着。
+        }
+        .padding(.top, UmbraMetric.sp3)
+        // Section footer 自带的横向缩进去掉，跟卡片同宽。
+        .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: 0, trailing: 0))
+        .textCase(nil)
+    }
+}
 
-    private var sheetBinding: Binding<Bool> {
-        Binding(get: { creating || editing != nil },
-                set: { if !$0 { closeEditor() } })
+// MARK: - 新建 / 编辑页（设计稿 phrase.edit）
+
+struct UmbraPhraseEditView: View {
+    /// nil = 新建。
+    let id: String?
+
+    @EnvironmentObject private var router: UmbraRouter
+    @ObservedObject private var store = PhraseStore.shared
+
+    @State private var name = ""
+    @State private var keyword = ""
+    @State private var content = ""
+    /// 只在第一次出现时灌入草稿 —— 返回再进来（系统栈保留页面）不能把用户改到一半的字冲掉。
+    @State private var seeded = false
+
+    private var editing: Phrase? { id.flatMap { i in store.items.first { $0.id == i } } }
+    private var valid: Bool {
+        !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+        !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
-    private func startCreate() {
-        editing = nil
-        draftName = ""; draftBody = ""; draftKeyword = ""
-        creating = true
+    var body: some View {
+        UmbraScreen {
+            VStack(alignment: .leading, spacing: UmbraMetric.sp5) {
+                field(label: "名称") {
+                    TextField("例如「日报模板」", text: $name)
+                        .font(UmbraFont.sans(16, .w400))
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 14)
+                        .frame(height: 48)
+                        .background(inputShape)
+                }
+
+                field(label: "标签") {
+                    VStack(alignment: .leading, spacing: 7) {
+                        if !existingKeywords.isEmpty {
+                            // 已有触发词做成 chips 预选：点一下写进输入框（再点取消），
+                            // 和灵感编辑页的标签 chips 同一套交互（横滑一行）。
+                            ScrollView(.horizontal, showsIndicators: false) {
+                                HStack(spacing: 7) {
+                                    ForEach(existingKeywords.prefix(10), id: \.self) { k in
+                                        UmbraTagPill(text: k, selected: keyword == k) {
+                                            keyword = (keyword == k) ? "" : k
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        TextField("快捷标签，例如「日报」，可留空", text: $keyword)
+                            .font(UmbraFont.sans(16, .w400))
+                            .textInputAutocapitalization(.never)
+                            .textFieldStyle(.plain)
+                            .padding(.horizontal, 14)
+                            .frame(height: 48)
+                            .background(inputShape)
+                    }
+                }
+
+                field(label: "内容") {
+                    TextEditor(text: $content)
+                        .font(UmbraFont.sans(15.5, .w400))
+                        .scrollContentBackground(.hidden)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6)
+                        .frame(minHeight: 180)
+                        .background(inputShape)
+                        .overlay(alignment: .topLeading) {
+                            if content.isEmpty {
+                                // TextEditor 到 iOS 17 还没有占位符参数，手动垫一个。
+                                Text("秘书会把这段原文直接拿去用")
+                                    .font(UmbraFont.sans(15.5, .w400))
+                                    .foregroundColor(UmbraColor.faint)
+                                    .padding(.horizontal, 14)
+                                    .padding(.top, 14)
+                                    .allowsHitTesting(false)
+                            }
+                        }
+                }
+
+                Text("内容为明文存储，密钥类请放密码保险箱。")
+                    .font(UmbraFont.sans(12, .w400))
+                    .foregroundColor(UmbraColor.faint)
+                    .lineSpacing(12 * 0.65)
+            }
+            .padding(.horizontal, UmbraMetric.pagePadX)
+            .padding(.top, UmbraMetric.sp4)
+        }
+        .navigationTitle(id == nil ? "新建常用语" : "编辑常用语")
+        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar {
+            ToolbarItem(placement: .topBarLeading) {
+                Button("取消") { router.back() }
+                    .tint(UmbraColor.text)
+            }
+            ToolbarItem(placement: .topBarTrailing) {
+                // 没填够不置灰 —— 点了告诉你缺什么（设计稿行为），比灰按钮猜哑谜好。
+                Button("保存") { save() }
+                    .font(UmbraFont.sans(16, .w600))
+                    .tint(valid ? UmbraColor.orange : UmbraColor.faint)
+            }
+        }
+        .onAppear {
+            guard !seeded else { return }
+            seeded = true
+            if let p = editing {
+                name = p.name
+                keyword = p.keyword ?? ""
+                content = p.content
+            }
+        }
     }
 
-    private func startEdit(_ p: Phrase) {
-        creating = false
-        draftName = p.name
-        draftBody = p.content
-        draftKeyword = p.keyword ?? ""
-        editing = p
+    private var inputShape: some View {
+        RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous)
+            .fill(UmbraColor.card)
+            .overlay(
+                RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous)
+                    .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW)
+            )
     }
 
-    private func closeEditor() {
-        creating = false
-        editing = nil
+    private func field(label: String, @ViewBuilder body: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            UmbraFieldLabel(text: label)
+            body()
+        }
     }
 
-    private func commit() {
-        let name = draftName.trimmingCharacters(in: .whitespacesAndNewlines)
-        let body = draftBody.trimmingCharacters(in: .whitespacesAndNewlines)
-        let kw = draftKeyword.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty else { router.showToast("常用语得有个名字"); closeEditor(); return }
-        guard !body.isEmpty else { router.showToast("内容不能是空的"); closeEditor(); return }
+    /// 其它条目已经在用的触发词（去重、按现有顺序）。
+    private var existingKeywords: [String] {
+        var seen: [String] = []
+        for p in store.items {
+            if let k = p.keyword, !k.isEmpty, !seen.contains(k) { seen.append(k) }
+        }
+        return seen
+    }
+
+    private func save() {
+        let n = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let c = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let k = keyword.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !n.isEmpty else { router.showToast("先给常用语起个名字"); return }
+        guard !c.isEmpty else { router.showToast("内容不能是空的"); return }
         if var p = editing {
-            p.name = name; p.content = body; p.keyword = kw.isEmpty ? nil : kw
+            p.name = n; p.content = c; p.keyword = k.isEmpty ? nil : k
             store.update(p)
-            router.showToast("已存下")
+            router.showToast("已保存")
         } else {
-            store.add(name: name, content: body, keyword: kw.isEmpty ? nil : kw)
-            router.showToast("已存下常用语「\(name)」")
+            store.add(name: n, content: c, keyword: k.isEmpty ? nil : k)
+            router.showToast("已保存常用语「\(n)」")
         }
-        closeEditor()
+        router.back()
     }
 }

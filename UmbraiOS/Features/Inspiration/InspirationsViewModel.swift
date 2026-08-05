@@ -32,7 +32,8 @@ class InspirationsViewModel: ObservableObject {
     func load() async {
         if list.isEmpty { loading = true }
         let fetched = await HTTPService.shared.fetchInspirations(status: filter.isEmpty ? nil : filter)
-        self.list = fetched
+        // 拉失败（nil）保留旧列表，刷新失败不清屏。
+        if let fetched { self.list = fetched }
         self.loading = false
     }
 

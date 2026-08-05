@@ -13,39 +13,36 @@ struct UmbraChatContactsView: View {
     @EnvironmentObject private var chat: ChatViewModel
 
     var body: some View {
-        UmbraPage(navBar: {
-            EmptyView()
-        }, content: {
-            UmbraTitleHeader(title: "聊天")
-
-            // 分区标题行：左「联系人」，右侧是连接状态（StatusBarChip）。
-            // 状态不占一整行 —— 增补规范里这条组件就是为了替掉占行的状态卡。
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                UmbraSectionLabel(text: "联系人")
-                Spacer(minLength: 0)
-                // 单独一个小组件去 observe ws：ChatWebSocket 是嵌套的 ObservableObject，
-                // 直接在这里读 chat.ws.status 不会触发重绘 —— 连接状态会永远停在首次渲染的值。
-                UmbraConnChip(ws: chat.ws, server: serverHost)
-            }
-            .padding(.horizontal, UmbraMetric.pagePadX)
-            .padding(.top, 2)
-            .padding(.bottom, 8)
-
-            UmbraGroupCard {
-                ForEach(Array(chat.contacts.enumerated()), id: \.element) { idx, conv in
-                    if idx > 0 { UmbraRowDivider() }
+        // v2：List 承载（系统左滑移除设备行要它），大标题交给系统栏。
+        List {
+            Section {
+                ForEach(chat.contacts, id: \.self) { conv in
                     contactRow(conv)
+                        .listRowBackground(UmbraColor.card)
+                }
+            } header: {
+                // 分区标题行：左「联系人」，右侧是连接状态（StatusBarChip）。
+                // 状态不占一整行 —— 增补规范里这条组件就是为了替掉占行的状态卡。
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text("联系人")
+                        .font(UmbraFont.sans(12, .w600))
+                        .tracking(UmbraFont.labelTracking(12))
+                        .foregroundColor(UmbraColor.faint)
+                        .textCase(nil)
+                    Spacer(minLength: 0)
+                    // 单独一个小组件去 observe ws：ChatWebSocket 是嵌套的 ObservableObject，
+                    // 直接在这里读 chat.ws.status 不会触发重绘 —— 状态会停在首次渲染的值。
+                    UmbraConnChip(ws: chat.ws, server: serverHost)
                 }
             }
-            .padding(.horizontal, UmbraMetric.pagePadX)
 
-            Text("左滑设备行可从联系人列表移除。秘书行不可移除。")
-                .font(UmbraFont.sans(12, .w400))
-                .foregroundColor(UmbraColor.faint)
-                .lineSpacing(12 * 0.7)
-                .padding(.horizontal, UmbraMetric.pagePadX)
-                .padding(.top, UmbraMetric.sp4)
-        })
+        }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(UmbraColor.bg)
+        .navigationTitle("聊天")
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .refreshable { await chat.reloadDevices() }
         .onAppear { chat.loadDevices() }
     }
 
@@ -115,11 +112,29 @@ struct UmbraChatContactsView: View {
                     }
                 }
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 11)
+            .padding(.vertical, 6)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // 只有设备行能移除；秘书行不给动作。破坏性操作必进确认弹窗。
+            if let d = dev {
+                Button {
+                    router.confirm(UmbraAlert(
+                        title: "从联系人移除「\(chat.convLabel(conv))」？",
+                        body: "只是从列表里拿掉，设备重新连上会再次出现。",
+                        confirmLabel: "移除",
+                        confirmDestructive: true,
+                        onConfirm: {
+                            chat.forgetDevice(d.device_id)
+                            router.showToast("已移除")
+                        }))
+                } label: {
+                    Label("移除", systemImage: "minus.circle")
+                }
+                .tint(UmbraColor.danger)
+            }
+        }
     }
 
     @ViewBuilder

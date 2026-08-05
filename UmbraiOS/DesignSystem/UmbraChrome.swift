@@ -1,274 +1,56 @@
-// 应用外框：导航栏、底部 Tab 栏、页面骨架。
-//
-// 取值逐个抄自主设计稿的内联样式。**没有**照抄原型里的状态栏、灵动岛和 Home 指示条 ——
-// 那三样是浏览器原型为了画出一台 iPhone 才自己绘制的，真机上它们是系统的东西，
-// 自己再画一层会和系统的重叠。这是设计稿与生产实现必然分叉的一处，不是漏做。
+// 应用外框：v2 起导航栏与 tab bar 全部交给系统，这里只剩页面骨架 UmbraScreen。
+// 自绘的玻璃导航按钮也删了 —— 系统工具栏在 iOS 26 上自带玻璃形态，
+// 再叠一层自绘玻璃就是「按钮下面好几层背景」（用户实测点名）。
+// 一期的自绘 UmbraNavBar / UmbraNavDots / UmbraNavAction / UmbraNavIcon / UmbraTabBar
+// 已随全部页面迁到系统导航后删除。
 import SwiftUI
 
-// MARK: - 导航栏
+// MARK: - v2 页面骨架（系统导航栏版）
 //
-// 高 44、左 4 右 8、底部 1px --border-soft、底色是半透明的页面色（毛玻璃）。
-// 返回按钮带**上一页的名字**（「‹ 密码保险箱」），不是统一的「‹ 返回」——
-// 这是设计稿的做法：用户在深栈里能一眼看出退回哪。
-struct UmbraNavBar<Trailing: View>: View {
-    var backLabel: String? = nil
-    var title: String = ""
-    var onBack: (() -> Void)? = nil
-    /// 返回箭头。编辑类页面左上角是**纯文字「取消」**（不是返回上一页，是放弃这次编辑），
-    /// 设计稿里那里没有箭头 —— 加了箭头会让人以为改的东西已经存下了。
-    var backChevron: Bool = true
-    @ViewBuilder var trailing: () -> Trailing
-
-    var body: some View {
-        // 标题用 ZStack **绝对居中**，不是夹在左右两坨之间靠 Spacer 挤出来的：
-        // 右侧放两个图标（＋ 与 ⋮）时左右宽度不等，夹心写法会把标题推偏几个点，
-        // 一眼看不出来但和左右两页一比就歪了。
-        ZStack {
-            Text(title)
-                .font(UmbraFont.sectionTitle)     // 600 / 17
-                .foregroundColor(UmbraColor.text)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                // 留出左右动作区的宽度，标题长了先截断，不会压到按钮上。
-                .padding(.horizontal, 96)
-
-            HStack(spacing: 0) {
-                if let label = backLabel, let onBack {
-                    Button(action: onBack) {
-                        HStack(spacing: 1) {
-                            if backChevron {
-                                UmbraIcon(d: UmbraIconPath.chevronLeft, size: 20, strokeWidth: 2.4)
-                            }
-                            Text(label).font(UmbraFont.sans(16, .w400))
-                        }
-                        .foregroundColor(UmbraColor.orange)
-                        .padding(.horizontal, 4)
-                        .padding(.vertical, 6)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    // 44 高的栏里，点击区靠 frame 撑满高度而不是加内边距（加了会顶开栏高）
-                    .frame(minWidth: UmbraMetric.tapMin, minHeight: UmbraMetric.tapMin, alignment: .leading)
-                } else {
-                    Spacer().frame(width: 44)
-                }
-
-                Spacer(minLength: 0)
-
-                HStack(spacing: 2) { trailing() }
-                    .frame(minWidth: 44, minHeight: UmbraMetric.tapMin, alignment: .trailing)
-            }
-        }
-        .padding(.leading, 4)
-        .padding(.trailing, 8)
-        .frame(height: UmbraMetric.tapMin)
-        .background(UmbraColor.bg.opacity(0.86))
-        .overlay(alignment: .bottom) {
-            Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW)
-        }
-    }
-}
-
-extension UmbraNavBar where Trailing == EmptyView {
-    init(backLabel: String? = nil, title: String = "", onBack: (() -> Void)? = nil, backChevron: Bool = true) {
-        self.init(backLabel: backLabel, title: title, onBack: onBack,
-                  backChevron: backChevron, trailing: { EmptyView() })
-    }
-}
-
-/// 导航栏右侧的「⋯」。设计稿这里画的是三个**实心圆点**（`<circle fill>`），
-/// 不是描边图标 —— 全 App 唯一一处填充图形。
-struct UmbraNavDots: View {
-    var action: () -> Void
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 4) {
-                ForEach(0..<3, id: \.self) { _ in
-                    Circle().fill(UmbraColor.orange).frame(width: 3.8, height: 3.8)
-                }
-            }
-            .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-/// 导航栏右侧的纯文字动作（「编辑」「存下」「取消」）。橙色 16/400。
-struct UmbraNavAction: View {
-    let title: String
-    var weight: UmbraFont.Weight = .w400
-    /// 置灰：不可点时用 --faint，并且**必须**在页面上给出原因，不要只把它变灰。
-    var enabled: Bool = true
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: { if enabled { action() } }) {
-            Text(title)
-                .font(UmbraFont.sans(16, weight))
-                .foregroundColor(enabled ? UmbraColor.orange : UmbraColor.faint)
-                .padding(.horizontal, 8)
-                .frame(minWidth: UmbraMetric.tapMin, minHeight: UmbraMetric.tapMin)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(!enabled)
-    }
-}
-
-/// 导航栏右侧的图标动作（「⋯」「＋」「筛选」）。
-struct UmbraNavIcon: View {
-    let iconPath: String
-    var size: CGFloat = 20
-    var strokeWidth: CGFloat = 2.0
-    var color: Color = UmbraColor.orange
-    var action: () -> Void
-
-    var body: some View {
-        Button(action: action) {
-            UmbraIcon(d: iconPath, size: size, strokeWidth: strokeWidth)
-                .foregroundColor(color)
-                .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-}
-
-// MARK: - 底部 Tab 栏
-//
-// 高 83、上内边距 6、上描边 1px --border、底色半透明页面色。
-// 图标 26 / stroke 1.9，标签 10.5（选中 560、未选中 400），选中 --orange、未选中 --faint。
-// 角标：17×17 起、橙底白字 600/11，压在图标右上（top -2、水平中线右移 6）。
-//
-// 不用系统 TabView：它的栏高、图标尺寸、角标位置和选中色都改不到设计值，
-// 而 iOS 26 之后系统底栏的观感还在变，自绘反而更稳。
-struct UmbraTabBar: View {
-    @Binding var selection: UmbraTab
-    /// tab → 角标数字。0 或缺省不显示。
-    var badges: [UmbraTab: Int] = [:]
-    var onSelect: (UmbraTab) -> Void
-
-    var body: some View {
-        HStack(spacing: 0) {
-            ForEach(UmbraTab.allCases, id: \.self) { t in
-                let on = t == selection
-                Button {
-                    onSelect(t)
-                } label: {
-                    VStack(spacing: 3) {
-                        UmbraIcon(d: t.iconPath, size: 26, strokeWidth: 1.9)
-                            .overlay(alignment: .topTrailing) {
-                                if let n = badges[t], n > 0 {
-                                    Text("\(n)")
-                                        .font(UmbraFont.sans(11, .w600))
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 5)
-                                        .frame(minWidth: 17, minHeight: 17)
-                                        .background(Capsule().fill(UmbraColor.orange))
-                                        .offset(x: 12, y: -2)
-                                }
-                            }
-                        Text(t.label).font(UmbraFont.sans(10.5, on ? .w560 : .w400))
-                    }
-                    .foregroundColor(on ? UmbraColor.orange : UmbraColor.faint)
-                    .frame(maxWidth: .infinity)
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(.top, 6)
-        .frame(height: UmbraMetric.tabBarH, alignment: .top)
-        .background(UmbraColor.bg.opacity(0.86))
-        .overlay(alignment: .top) {
-            Rectangle().fill(UmbraColor.border).frame(height: UmbraMetric.borderW)
-        }
-        .animation(UmbraMotion.tint, value: selection)
-    }
-}
-
-// MARK: - 页面骨架
-//
-// 一页 = 顶部栏（可选）+ 可滚动内容 + 底部动作条（可选）。
-// 滚动区左右不加边距 —— 由各页自己按 16 加，因为有些块（分段控件、卡片）
-// 的左右边距和正文不一样，统一加会失去这个自由度。
-struct UmbraPage<Content: View, Bar: View, Bottom: View>: View {
-    /// 要滚回去的锚点 id（对应内容里某个 `.id(...)`）。置上之后本页滚到那一行并立刻清空。
-    /// 用来做「从详情返回时保持列表位置」—— 自绘导航栈每次返回都会重建页面，
-    /// 不主动滚回去的话列表永远弹回最上方，翻到第 40 条看一眼再回来就得重新翻一次。
-    var scrollAnchor: Binding<String?>? = nil
-    @ViewBuilder var navBar: () -> Bar
+// v2 的页面容器：只管「可滚动内容 + 底部动作条 + 页面底色 + 键盘行为」，
+// 标题与导航按钮交给系统（.navigationTitle / .toolbar 由页面自己挂）。
+// 大标题 34/700、上滑小标题渐显、玻璃栏背景都是系统 bar 的默认行为，不再自绘。
+struct UmbraScreen<Content: View, Bottom: View>: View {
     @ViewBuilder var content: () -> Content
     @ViewBuilder var bottom: () -> Bottom
 
     var body: some View {
-        VStack(spacing: 0) {
-            navBar()
-            ScrollViewReader { proxy in
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 0) { content() }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.bottom, UmbraMetric.sp8)
-                }
-                // 往下拖就收键盘。iOS 上这是所有带输入框的滚动页面的默认预期，
-                // 不给的话用户在表单里只能去点那个不知道在哪的「完成」。
-                .scrollDismissesKeyboard(.interactively)
-                .background(UmbraColor.bg)
-                .onChange(of: scrollAnchor?.wrappedValue) { target in
-                    guard let target else { return }
-                    // 让出一帧再滚：这一帧目标行可能还没进视图树，scrollTo 会落空。
-                    Task { @MainActor in
-                        try? await Task.sleep(nanoseconds: 30_000_000)
-                        proxy.scrollTo(target, anchor: .center)
-                        scrollAnchor?.wrappedValue = nil
-                    }
+        Group {
+            // 没有底部动作条时 ScrollView 必须自己当根视图：包在 VStack 里会让它的
+            // 边界停在安全区上沿（= tab bar 顶），内容滚到底就被裁掉、穿不到 tab bar
+            // 底下（实机复现：列表底只到 tab bar 顶）。只有真的带底栏才包 VStack。
+            if Bottom.self == EmptyView.self {
+                scroll
+            } else {
+                VStack(spacing: 0) {
+                    scroll
+                    bottom()
                 }
             }
-            bottom()
         }
         .background(UmbraColor.bg)
-    }
-}
-
-extension UmbraPage where Bottom == EmptyView {
-    init(@ViewBuilder navBar: @escaping () -> Bar, @ViewBuilder content: @escaping () -> Content) {
-        self.init(navBar: navBar, content: content, bottom: { EmptyView() })
+        // 玻璃栏：滚动到顶时透明、有内容滚过时系统自动上材质 —— 无分隔线，靠分层。
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
     }
 
-    /// 带滚动锚点、不带底部动作条的那一档。**必须单独写一个** ——
-    /// 成员逐一初始化器要求把 bottom 也传上，这个 extension 的存在意义就是把它省掉，
-    /// 加了 scrollAnchor 参数之后同样得补一个对应的重载。
-    init(scrollAnchor: Binding<String?>?,
-         @ViewBuilder navBar: @escaping () -> Bar,
-         @ViewBuilder content: @escaping () -> Content) {
-        self.init(scrollAnchor: scrollAnchor, navBar: navBar, content: content, bottom: { EmptyView() })
-    }
-}
-
-/// 大标题页（Tab 根页）：没有返回箭头，用 27/650 的页面标题。
-struct UmbraTitleHeader<Trailing: View>: View {
-    let title: String
-    var subtitle: String? = nil
-    @ViewBuilder var trailing: () -> Trailing
-
-    var body: some View {
-        HStack(alignment: .center, spacing: UmbraMetric.sp3) {
-            UmbraPageTitle(text: title, subtitle: subtitle)
-            Spacer(minLength: UmbraMetric.sp2)
-            trailing()
+    private var scroll: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 0) { content() }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.bottom, UmbraMetric.sp8)
         }
-        .padding(.horizontal, UmbraMetric.pagePadX)
-        .padding(.top, UmbraMetric.sp2)
-        .padding(.bottom, UmbraMetric.sp4)
+        // 往下拖就收键盘。iOS 上这是所有带输入框的滚动页面的默认预期。
+        .scrollDismissesKeyboard(.interactively)
     }
 }
 
-extension UmbraTitleHeader where Trailing == EmptyView {
-    init(title: String, subtitle: String? = nil) {
-        self.init(title: title, subtitle: subtitle, trailing: { EmptyView() })
+extension UmbraScreen where Bottom == EmptyView {
+    init(@ViewBuilder content: @escaping () -> Content) {
+        self.init(content: content, bottom: { EmptyView() })
     }
 }
+
+
 
 /// 大标题页右上角那个橙色圆形「＋」（提醒、灵感列表用）。直径 34。
 struct UmbraRoundPlusButton: View {

@@ -1,16 +1,13 @@
 // Umbra 导航与瞬时 UI 的唯一状态源。
 //
-// 形状是照着主设计稿的 state 抄的（交接文档 State Management 一节列了对应关系）：
-//   stack: [{s, ...params}] → [Route]      tab → Tab
-//   sheet（支持多层）/ alert / toast / viewer / recording → 各自一个可选值
+// v2 起改用系统 NavigationStack + TabView（一期是自绘栈，理由是当时的设计稿要求
+// 带标题的返回按钮与自管转场；v2 交接清单明确改成「直接用系统 push/pop 与
+// interactivePopGestureRecognizer」，自绘的那套随之整个退场）。
 //
-// 为什么不用 SwiftUI 的 NavigationStack + NavigationLink：
-// 设计稿的返回按钮带**上一页的名字**（「‹ 密码保险箱」「‹ 我」而不是统一的「‹ Back」），
-// 而且 Tab 切换要**重置栈**（root(s, tab)）、演示态在栈底时返回要跳回主页。
-// 这三条都要求「栈本身是可读可改的数据」，NavigationStack 的 path 表达不了带标题的返回。
-// 所以自己管一个数组，转场动画用 .transition 手动给。
-//
-// 用 ObservableObject 而不是 @Observable：工程的部署目标是 iOS 16，@Observable 要 17。
+// Router 对页面暴露的 API 不变：go / back / root / present / confirm / showToast ——
+// 页面代码不用知道底下是自绘栈还是 NavigationStack。变的只是实现：
+// 每个 Tab 一条 [UmbraRoute] 路径，交给各自的 NavigationStack(path:) 渲染，
+// 转场、边缘返回、大标题渐显全部由系统负责。
 import SwiftUI
 
 // MARK: - 路由
@@ -35,6 +32,8 @@ enum UmbraRoute: Hashable {
     // Tab 5 我
     case meHome
     case mePhrases
+    /// 常用语的新建/编辑页（nil = 新建）。设计稿 phrase.edit —— 独立推入页，不是弹窗。
+    case mePhraseEdit(id: String?)
     case meDevices
     case deviceDetail(id: String)
     case meCaps
@@ -59,28 +58,18 @@ enum UmbraRoute: Hashable {
     case vaultImport
     case vaultSettings
     case vaultPwd
-    // 系统形态演示（顶部演示开关，不是应用内页面）
-    case lockScreen
+    /// 系统密码填充面板的形态说明页（真填充在 AutoFill 扩展里）。
+    /// 一期还有 lockScreen / vaultMask 两个演示路由，早已没有任何入口，v2 清掉。
     case vaultAutofill
-    case vaultMask
 
-    /// 这一页属于哪个 Tab。切 Tab 时用来决定高亮，深链跳转时用来对齐底栏。
+    /// 这一页属于哪个 Tab。深链跳转时用来对齐底栏。
     var tab: UmbraTab {
         switch self {
         case .chatContacts, .chatThread: return .chat
-        case .remList, .remDetail, .remEdit, .lockScreen: return .reminder
+        case .remList, .remDetail, .remEdit: return .reminder
         case .taskList, .taskDetail: return .task
         case .inspList, .inspDetail, .inspEdit: return .inspiration
         default: return .me
-        }
-    }
-
-    /// 是否显示底部 Tab 栏。演示态（锁屏、系统填充面板、后台遮盖）是「系统形态」，
-    /// 不该出现应用自己的底栏。
-    var showsTabBar: Bool {
-        switch self {
-        case .lockScreen, .vaultAutofill, .vaultMask: return false
-        default: return true
         }
     }
 
@@ -95,22 +84,11 @@ enum UmbraRoute: Hashable {
             return false
         }
     }
-
-    /// 演示态：栈底是它时，返回要跳回主页而不是把栈退空。
-    /// 原型里为这个专门写了兜底（「避免卡死」），自查清单第一条就是「每个演示态都要有出口」。
-    var isDemo: Bool {
-        switch self {
-        case .lockScreen, .vaultAutofill, .vaultMask: return true
-        default: return false
-        }
-    }
 }
 
 // MARK: - Tab
 //
-// 顺序按**主设计稿**的 tabsVM()：聊天 / 提醒 / 任务 / 灵感 / 我。
-// README 的 Screens 一节把任务写在第 2 位、提醒第 3 位，和设计稿不一致；
-// 以设计稿为准（README 自己写了「主设计稿…全部屏幕、状态机、文案都在这里」）。
+// 顺序按主设计稿的 tabsVM()：聊天 / 提醒 / 任务 / 灵感 / 我。
 enum UmbraTab: String, CaseIterable, Hashable {
     case chat, reminder, task, inspiration, me
 
@@ -123,13 +101,16 @@ enum UmbraTab: String, CaseIterable, Hashable {
         case .me: return "我"
         }
     }
-    var iconPath: String {
+    /// v2：tab bar 交给系统 TabView，图标用 SF Symbols ——
+    /// 系统符号才吃得到 tab bar 的选中态渲染（iOS 26 上还有玻璃胶囊与动效）。
+    /// 自绘 SVG 路径图标只在内容区继续用。
+    var sfSymbol: String {
         switch self {
-        case .chat: return UmbraIconPath.chat
-        case .reminder: return UmbraIconPath.bell
-        case .task: return UmbraIconPath.task
-        case .inspiration: return UmbraIconPath.bulb
-        case .me: return UmbraIconPath.user
+        case .chat: return "bubble.left.and.bubble.right"
+        case .reminder: return "bell"
+        case .task: return "checklist"
+        case .inspiration: return "lightbulb"
+        case .me: return "person.crop.circle"
         }
     }
     var root: UmbraRoute {
@@ -190,59 +171,58 @@ struct UmbraToast: Identifiable {
 @MainActor
 final class UmbraRouter: ObservableObject {
 
-    @Published private(set) var stack: [UmbraRoute] = [.chatContacts]
-    @Published private(set) var tab: UmbraTab = .chat
+    @Published var tab: UmbraTab = .chat
+    /// 每个 Tab 一条独立路径 —— 切走再切回来，各 Tab 的深栈还在（系统 App 的习惯）。
+    /// 一期是全局一条栈、切 Tab 就清空，那是自绘栈的简化，不是想要的行为。
+    @Published var paths: [UmbraTab: [UmbraRoute]] = [:]
 
     /// 多层底部选择器。空 = 没开。
     @Published var sheets: [UmbraSheet] = []
     @Published var alert: UmbraAlert?
     @Published var toast: UmbraToast?
 
-    /// 转场方向。push 时新页从右滑入，back 时从左滑入 —— 设计稿的 umpushA / umbackA。
-    @Published private(set) var goingBack = false
-
     private var toastTask: Task<Void, Never>?
 
-    var current: UmbraRoute { stack.last ?? .chatContacts }
-    var canGoBack: Bool { stack.count > 1 || current.isDemo }
+    /// 当前可见路由（Tab 根页时 = 根路由）。后台遮盖用它判断在不在保险箱子树。
+    var current: UmbraRoute { paths[tab]?.last ?? tab.root }
+    var canGoBack: Bool { !(paths[tab] ?? []).isEmpty }
+
+    /// 给 NavigationStack(path:) 用的 Binding。系统返回（边缘右划 / 返回钮）
+    /// 会直接改这个数组，所以 back() 和系统手势天然一致，不会各记各的账。
+    func pathBinding(_ tab: UmbraTab) -> Binding<[UmbraRoute]> {
+        Binding(
+            get: { [weak self] in self?.paths[tab] ?? [] },
+            set: { [weak self] in self?.paths[tab] = $0 }
+        )
+    }
+
+    /// 给 TabView(selection:) 用的 Binding。
+    /// setter 在**再点当前 Tab**时也会被调用（onChange 不会）—— 借这一下实现
+    /// 「再点一次回到根」，和系统 Tab 的肌肉记忆一致。
+    var tabSelection: Binding<UmbraTab> {
+        Binding(
+            get: { [weak self] in self?.tab ?? .chat },
+            set: { [weak self] new in
+                guard let self else { return }
+                if new == self.tab { self.paths[new] = [] } else { self.tab = new }
+            }
+        )
+    }
 
     // MARK: 栈操作
 
     func go(_ route: UmbraRoute) {
-        goingBack = false
-        withAnimation(UmbraMotion.push) { stack.append(route) }
+        paths[tab, default: []].append(route)
     }
 
     func back() {
-        goingBack = true
-        withAnimation(UmbraMotion.push) {
-            if stack.count > 1 {
-                stack.removeLast()
-            } else if current.isDemo {
-                // 演示态在栈底：退回「我」，不要把栈退空卡死在这一页。
-                stack = [.meHome]
-                tab = .me
-            }
-        }
+        if !(paths[tab] ?? []).isEmpty { paths[tab]?.removeLast() }
     }
 
-    /// 切 Tab：重置栈到该 Tab 的根。再点一次当前 Tab 也回根 —— 和系统 Tab 的习惯一致。
+    /// 切到某个 Tab 的根（清掉该 Tab 的深栈）。深链与「回到主页」用。
     func root(_ tab: UmbraTab) {
-        goingBack = false
-        withAnimation(UmbraMotion.push) {
-            self.tab = tab
-            stack = [tab.root]
-        }
-    }
-
-    /// 演示态开关：再点一次退出（自查清单要求「可再点一次退出的开关」）。
-    func toggleDemo(_ route: UmbraRoute) {
-        if current == route {
-            back()
-        } else {
-            goingBack = false
-            withAnimation(UmbraMotion.push) { stack = [route] }
-        }
+        self.tab = tab
+        paths[tab] = []
     }
 
     // MARK: 瞬时 UI

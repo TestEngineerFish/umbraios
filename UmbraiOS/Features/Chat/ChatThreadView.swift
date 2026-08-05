@@ -23,8 +23,9 @@ struct UmbraChatThreadView: View {
 
     /// 输入栏形态：打字 / 按住说话。右侧那个按钮在两者之间切。
     @State private var voiceMode = false
-    /// 整页尺寸，按住说话时用来判断手指落在哪个区。
-    @State private var pageSize: CGSize = .zero
+    /// 快捷语音：长按空输入框直接开录的那一次按压是否还在进行中。
+    /// 单独记一个开关，松手时才知道这轮录音是「长按快捷入口」发起的，要走收尾。
+    @State private var quickVoiceActive = false
     /// 输入框焦点。点消息区、往下拖、切到语音态都靠它收键盘。
     @FocusState private var inputFocused: Bool
 
@@ -34,19 +35,75 @@ struct UmbraChatThreadView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            navBar
             if let d = device, !d.online { offlineBanner }
             messages
             inputBar
         }
         .background(UmbraColor.bg)
-        .background(
-            GeometryReader { g in
-                Color.clear
-                    .onAppear { pageSize = g.size }
-                    .onChange(of: g.size) { pageSize = $0 }
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+        .toolbar {
+            // 标题带 26px 头像（v2 原型：秘书=橙色圆 + 机器人，设备=圆角方块 + 显示器），
+            // 和会话列表同一套形状语言。
+            ToolbarItem(placement: .principal) {
+                HStack(spacing: 7) {
+                    RoundedRectangle(cornerRadius: isAssistant ? 13 : 8, style: .continuous)
+                        .fill(isAssistant ? UmbraColor.orange : UmbraColor.chip)
+                        .frame(width: 26, height: 26)
+                        .overlay(
+                            UmbraIcon(d: isAssistant ? UmbraIconPath.robot : UmbraIconPath.monitor,
+                                      size: 14, strokeWidth: 1.9)
+                                .foregroundColor(isAssistant ? .white : UmbraColor.muted)
+                        )
+                    Text(title)
+                        .font(UmbraFont.sans(17, .w600))
+                        .foregroundColor(UmbraColor.text)
+                        .lineLimit(1)
+                }
             }
-        )
+            if isAssistant {
+                ToolbarItem(placement: .topBarTrailing) {
+                    // 「⋯」：系统 Menu 锚定弹出。清空是破坏性入口，红字 + 必进确认弹窗。
+                    Menu {
+                        Button {
+                            chat.newSession()
+                            router.showToast("已开始新会话")
+                        } label: {
+                            Label("新会话", systemImage: "plus.bubble")
+                        }
+                        Button {
+                            UIPasteboard.general.string = transcript()
+                            router.showToast("已复制")
+                        } label: {
+                            Label("复制聊天", systemImage: "doc.on.doc")
+                        }
+                        Button(role: .destructive) {
+                            router.confirm(UmbraAlert(
+                                title: "确认清空与秘书的聊天历史？",
+                                body: "此操作不可撤销（设备会话不受影响）。",
+                                confirmLabel: "清空",
+                                confirmDestructive: true,
+                                onConfirm: {
+                                    chat.clearActiveHistory()
+                                    router.showToast("聊天历史已清空")
+                                }))
+                        } label: {
+                            Label("清空聊天", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .tint(UmbraColor.orange)
+                }
+            } else if let d = device {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("设备详情") {
+                        router.go(.deviceDetail(id: d.device_id))
+                    }
+                    .tint(UmbraColor.orange)
+                }
+            }
+        }
         .overlay { if rec.active { UmbraVoiceHoldOverlay(rec: rec) } }
         // 切后台 / 被系统打断 → 丢弃这次录音。三条兜底之一。
         .onChange(of: scenePhase) { phase in if phase != .active { rec.abort() } }
@@ -58,18 +115,6 @@ struct UmbraChatThreadView: View {
     }
 
     // MARK: - 顶部
-
-    private var navBar: some View {
-        UmbraNavBar(backLabel: "聊天", title: title, onBack: { router.back() }) {
-            if isAssistant {
-                UmbraNavDots(action: openMenu)
-            } else if let d = device {
-                UmbraNavAction(title: "设备详情", weight: .w400) {
-                    router.go(.deviceDetail(id: d.device_id))
-                }
-            }
-        }
-    }
 
     /// 设备离线横幅。warning-soft 底 + warning 字 + 三角图标 —— 状态不只靠颜色。
     private var offlineBanner: some View {
@@ -117,14 +162,19 @@ struct UmbraChatThreadView: View {
                 .padding(.top, UmbraMetric.sp5)
                 .padding(.bottom, UmbraMetric.sp6)
             }
+            // ⚠️ 不用 .defaultScrollAnchor(.bottom)：它和 LazyVStack 撞 ——
+            // 懒加载行高在首帧只是估值，按估值锚到底会**滚过头**，
+            // 进来一屏空白、要往下拉才见到历史（实机复现，已回退）。
+            // 「键盘收起消息跟着回落」改由下面的焦点 onChange 双向 scrollToEnd 承担。
             // 往下拖收键盘。IM 里这是肌肉记忆，不给的话只能去够那个「完成」键。
             .scrollDismissesKeyboard(.interactively)
             // 点消息区的空白处收键盘。用 simultaneousGesture 而不是 onTapGesture：
             // onTapGesture 会把气泡上的按钮（展开轨迹、批准、填答案）一起吃掉。
             .simultaneousGesture(TapGesture().onEnded { inputFocused = false })
             .onChange(of: chat.blocks.count) { _ in scrollToEnd(proxy) }
-            // 键盘弹起来会把可视区压掉一半，不跟着滚的话正在看的那条就被顶到键盘后面了。
-            .onChange(of: inputFocused) { on in if on { scrollToEnd(proxy) } }
+            // 键盘**弹起**要跟滚（正在看的那条会被顶到键盘后面），
+            // 键盘**收起**也要跟滚（不然列表停在上移后的位置，底下空一截）——两个方向都回底。
+            .onChange(of: inputFocused) { _ in scrollToEnd(proxy) }
             .onAppear { scrollToEnd(proxy) }
         }
     }
@@ -218,12 +268,27 @@ struct UmbraChatThreadView: View {
     }
 
     /// 长按气泡复制。IM 的通行做法，textSelection 只能选不能一键复制整条。
+    /// 气泡长按菜单（系统 contextMenu）。设计稿还有「引用回复」和「删除」——
+    /// 服务端既没有引用消息的字段也没有删单条消息的接口，不摆点了没用的按钮。
+    @ViewBuilder
     private func copyMenu(_ text: String) -> some View {
         Button {
             UIPasteboard.general.string = text
             router.showToast("已复制")
         } label: {
             Label("复制", systemImage: "doc.on.doc")
+        }
+        Button {
+            // 把这句话变成一条一小时后的本机提醒 —— 提醒本来就是本机功能，这是真的。
+            let r = UmbraReminder(id: UUID().uuidString,
+                                  text: String(text.prefix(80)),
+                                  at: Date().addingTimeInterval(3600),
+                                  source: "聊天")
+            ReminderStore.shared.save(r)
+            ReminderStore.shared.requestAuthorizationIfNeeded()
+            router.showToast("已加到提醒 · 1 小时后")
+        } label: {
+            Label("添加提醒", systemImage: "bell")
         }
     }
 
@@ -587,17 +652,28 @@ struct UmbraChatThreadView: View {
         VStack(spacing: 0) {
             HStack(alignment: .bottom, spacing: 8) {
                 modeChip
-                if voiceMode { holdBar } else { textField }
+                ZStack {
+                    if voiceMode { holdBar } else { textField }
+                }
+                // 快捷语音的手势不直接压在 TextField 上（SwiftUI 手势叠在 UIKit 输入框上
+                // 会把「点一下弹键盘」吃掉 —— 实机复现：点输入框不出键盘）。
+                // 改成**只在「没焦点、没内容」时**盖一层透明层：点一下 = 我们自己给焦点弹键盘，
+                // 长按 = 进语音；一旦有焦点/有内容，这层就撤掉，输入框恢复系统原生行为。
+                // quickVoiceActive 期间这层必须留着 —— 手势挂在它身上，中途拆了录音就停不下来。
+                .overlay {
+                    if quickVoiceActive ||
+                        (!voiceMode && !inputFocused &&
+                         chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
+                        Color.clear
+                            .contentShape(Rectangle())
+                            .onTapGesture { inputFocused = true }
+                            .gesture(quickVoiceGesture)
+                    }
+                }
                 rightButton
             }
-            Text(voiceMode
-                 ? "按住说话，上滑到左边取消、右边转文字 · 点键盘图标回到打字"
-                 : "点右侧麦克风切到语音输入")
-                .font(UmbraFont.sans(11, .w400))
-                .foregroundColor(UmbraColor.faint)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: .infinity)
-                .padding(.top, 6)
+            // 输入栏下不放任何提示文字（用户点名两轮删干净）——
+            // 落区怎么用的说明在按住后的浮层里，那里才是需要它的时刻。
         }
         .padding(.horizontal, UmbraMetric.sp4)
         .padding(.top, 8)
@@ -608,8 +684,18 @@ struct UmbraChatThreadView: View {
         }
     }
 
+    /// 模式切换：系统 Menu 锚定在 chip 上（v2 原型的 modeMenu 就是个小弹框，
+    /// 不是全宽底部弹层 —— ≤6 项纯选择用锚定弹框，交接清单第 4 条）。
     private var modeChip: some View {
-        Button(action: openMode) {
+        Menu {
+            ForEach(ChatMode.allCases, id: \.self) { m in
+                Button {
+                    chat.mode = m
+                } label: {
+                    if chat.mode == m { Label(m.label, systemImage: "checkmark") } else { Text(m.label) }
+                }
+            }
+        } label: {
             HStack(spacing: 5) {
                 Text(chat.mode.label).font(UmbraFont.sans(13, .w560))
                 UmbraIcon(d: UmbraIconPath.chevronDown, size: 12, strokeWidth: 2.4)
@@ -620,7 +706,6 @@ struct UmbraChatThreadView: View {
             .background(Capsule().fill(UmbraColor.chip))
             .overlay(Capsule().strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
         }
-        .buttonStyle(.plain)
     }
 
     private var textField: some View {
@@ -635,15 +720,6 @@ struct UmbraChatThreadView: View {
                 // **没有** submitLabel(.send)：axis:.vertical 的输入框里回车是换行，
                 // 系统不会触发 onSubmit。把键盘上那个键标成「发送」却按了只换行，
                 // 比标着「换行」更糟。发送统一走右边那个按钮。
-            Button {
-                router.showToast("这一版还不支持发图片")
-            } label: {
-                UmbraIcon(d: UmbraIconPath.paperclip, size: 19, strokeWidth: 1.9)
-                    .foregroundColor(UmbraColor.faint)
-                    .frame(width: 28, height: 28)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
         }
         .padding(.leading, UmbraMetric.sp4)
         .padding(.trailing, 6)
@@ -654,6 +730,48 @@ struct UmbraChatThreadView: View {
             RoundedRectangle(cornerRadius: 18, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
         )
+    }
+
+    /// 快捷语音（设计稿 areaDown）：输入框**没焦点、没内容**时长按它 0.48s，
+    /// 直接切语音态并开录 —— 按住不放接着说、松手就发，省掉「先点麦克风再按住」两步。
+    /// 挂在 composer 里那层**条件透明层**上（有焦点/有内容时该层不存在）：
+    /// 手势压在 UIKit 输入框上会吃掉「点一下弹键盘」，所以点按也由那层自己转发成焦点。
+    private var quickVoiceGesture: some Gesture {
+        LongPressGesture(minimumDuration: 0.48)
+            .sequenced(before: DragGesture(minimumDistance: 0, coordinateSpace: .global))
+            .onChanged { value in
+                switch value {
+                case .first:
+                    // ⚠️ 这里**不能**开录：LongPressGesture 的 value 手指一按下就是 true
+                    //（它表示「正在按着」，不是「长按已成立」）。之前在 .first(true) 里开录，
+                    // 结果点一下输入框就直接进语音（实机复现）。真正的「0.48s 长按成立」
+                    // 是序列推进到 .second 的那一刻。
+                    break
+                case .second(true, let drag):
+                    // 长按成立。第一次进来启动录音，之后每次带坐标就更新落区。
+                    if !quickVoiceActive {
+                        guard !voiceMode else { return }
+                        quickVoiceActive = true
+                        UIImpactFeedbackGenerator(style: .medium).impactOccurred()
+                        voiceMode = true
+                        rec.start()
+                    }
+                    // 按住期间照常做落区判定：上滑左取消、右转文字，和按「按住 说话」一致。
+                    if let g = drag { rec.zone = zone(at: g.location) }
+                default:
+                    break
+                }
+            }
+            .onEnded { value in
+                guard quickVoiceActive else { return }
+                quickVoiceActive = false
+                if case .second(true, let drag) = value, let g = drag {
+                    finishRecording(rec.stop(zone: zone(at: g.location)))
+                } else {
+                    // 长按刚认定就松手（没产生拖拽事件）：手指还在输入栏上，按「发送」区收尾。
+                    finishRecording(rec.stop(zone: .send))
+                }
+            }
     }
 
     /// 「按住 说话」。用 minimumDistance 0 的拖拽手势来同时拿到「按下」和「手指位置」——
@@ -687,13 +805,28 @@ struct UmbraChatThreadView: View {
         )
     }
 
-    /// 落区判定，比例照设计稿：整屏 393×852 里 y>740 = 发送，x<150 = 取消，x>243 = 转文字。
+    /// 落区判定。以浮层里两个圆钮的**实测全局 frame** 为准（外扩 14pt 容差）——
+    /// 一开始按屏幕比例算 y 阈值，量的是内容区高度、比的却是全局坐标，
+    /// 阈值整体偏高，手指压在按钮上反而落进「发送」区（用户实测：要划到按钮上方才触发）。
     private func zone(at p: CGPoint) -> UmbraHoldRecorder.Zone {
-        let w = pageSize.width > 0 ? pageSize.width : UIScreen.main.bounds.width
-        let h = pageSize.height > 0 ? pageSize.height : UIScreen.main.bounds.height
-        if p.y > h * 0.868 { return .send }       // 手指还在输入栏一带
-        if p.x < w * 0.382 { return .cancel }
-        if p.x > w * 0.618 { return .text }
+        let cancelF = rec.cancelZoneFrame
+        let textF = rec.textZoneFrame
+        if !cancelF.isEmpty, !textF.isEmpty {
+            if cancelF.insetBy(dx: -14, dy: -14).contains(p) { return .cancel }
+            if textF.insetBy(dx: -14, dy: -14).contains(p) { return .text }
+            // 按钮圈再往上仍按左右分半判：上滑本来就不要求精确压到圈上。
+            if p.y < cancelF.minY {
+                let w = UIScreen.main.bounds.width
+                if p.x < w * 0.382 { return .cancel }
+                if p.x > w * 0.618 { return .text }
+            }
+            return .send
+        }
+        // 浮层第一帧还没量到 frame 时的兜底：整屏比例（设计稿 393×852 的取值）。
+        let b = UIScreen.main.bounds
+        if p.y > b.height * 0.868 { return .send }
+        if p.x < b.width * 0.382 { return .cancel }
+        if p.x > b.width * 0.618 { return .text }
         return .send
     }
 
@@ -703,11 +836,12 @@ struct UmbraChatThreadView: View {
             chat.draft = t
             chat.send()
         case .toText(let t):
+            // 文字已经出现在输入框里，结果一目了然 —— 不再弹 toast 挡视线（用户点名）。
             chat.draft = t
             voiceMode = false
-            router.showToast("转成文字了，改完再发")
         case .cancel:
-            router.showToast("已取消")
+            // 取消就是取消，浮层收掉即是反馈，不弹 toast。
+            break
         case .tooShort:
             router.showToast("说话时间太短，没听清")
         case .unavailable:
@@ -739,7 +873,9 @@ struct UmbraChatThreadView: View {
                 .background(Circle().fill(bg))
                 .overlay(Circle().strokeBorder(bc, lineWidth: UmbraMetric.borderW))
                 // 36 够不到 44：靠透明外框撑触达区，不把按钮画大。
-                .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)
+                // 外框对齐到底：HStack 按 .bottom 对齐的是这个 44 外框，
+                // 圆钮居中的话会比输入框底高出 4pt（实机看得出来）。
+                .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin, alignment: .bottom)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -748,38 +884,7 @@ struct UmbraChatThreadView: View {
 
     // MARK: - 浮层
 
-    private func openMode() {
-        router.present(UmbraSheet(
-            title: "模式",
-            subtitle: "自动模式下秘书自己判断该聊还是该干活。",
-            items: ChatMode.allCases.map { m in
-                UmbraSheetItem(label: m.label, checked: chat.mode == m) { chat.mode = m }
-            }))
-    }
 
-    private func openMenu() {
-        router.present(UmbraSheet(title: "与秘书的会话", items: [
-            UmbraSheetItem(label: "新会话") {
-                chat.newSession()
-                router.showToast("已开始新会话")
-            },
-            UmbraSheetItem(label: "复制聊天") {
-                UIPasteboard.general.string = transcript()
-                router.showToast("已复制")
-            },
-            UmbraSheetItem(label: "清空聊天", destructive: true) {
-                router.confirm(UmbraAlert(
-                    title: "确认清空与秘书的聊天历史？",
-                    body: "此操作不可撤销（设备会话不受影响）。",
-                    confirmLabel: "清空",
-                    confirmDestructive: true,
-                    onConfirm: {
-                        chat.clearActiveHistory()
-                        router.showToast("聊天历史已清空")
-                    }))
-            }
-        ]))
-    }
 
     /// 「复制聊天」的内容。只导出有文字的块 —— 卡片（确认、问答、任务）复制成文本没有意义，
     /// 拼一堆「[任务进度卡]」占位反而让粘出来的东西没法用。

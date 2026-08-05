@@ -1,7 +1,11 @@
-// 应用外壳：把 Router 的栈渲染成页面，挂底部 Tab 栏与三种浮层。
+// 应用外壳：系统 TabView（五个 Tab）+ 每个 Tab 一条系统 NavigationStack。
 //
-// 转场：push 时新页从右滑入、back 时从左滑入（对应设计稿的 umpushA / umbackA，
-// 都是 .22s 横向位移 26px）。**没有**缩放和弹跳 —— 规范写的是「无弹跳、无缩放」。
+// v2 起转场、边缘返回、tab bar 全部交给系统 —— iOS 26 上系统自动给出
+// Liquid Glass 的浮动胶囊 tab bar 与玻璃返回钮，老系统上是各版本的原生形态。
+// 一期的自绘转场 / 自绘边缘手势 / UmbraTabBar 已删。
+//
+// 全部页面已在系统导航栏上（UmbraScreen + .navigationTitle/.toolbar），
+// 迁移期的旧 UmbraPage 骨架与自绘导航件已删。
 import SwiftUI
 
 struct UmbraShell: View {
@@ -11,7 +15,7 @@ struct UmbraShell: View {
     @StateObject private var tasks = TasksViewModel()
     @StateObject private var inspirations = InspirationsViewModel()
     /// 保险箱的数据源与会话（软锁 / 自动锁定 / Face ID）也挂在外壳上：
-    /// 首页、详情、编辑、体检是四个独立路由，各建各的 store 会各解各的锁。
+    /// 首页、详情、编辑、体检是独立路由，各建各的 store 会各解各的锁。
     @StateObject private var vault = VaultStore()
     @StateObject private var vaultSession = UmbraVaultSession()
     @EnvironmentObject private var chat: ChatViewModel
@@ -19,64 +23,54 @@ struct UmbraShell: View {
     @ObservedObject private var reminders = ReminderStore.shared
     @ObservedObject private var deepLink = UmbraDeepLink.shared
     @Environment(\.scenePhase) private var scenePhase
+    /// 外观偏好（浅色/深色/跟随系统）。只用来给 TabView 换 id —— 见 body 里的注释。
+    @AppStorage("umbra.appearance") private var appearance = UmbraAppearance.system.rawValue
 
     /// 底栏角标，两个都是真实数据：
-    ///   聊天 = 有新消息的**会话数**（ChatViewModel.unread 是会话集合，服务端没给条数，不编）；
+    ///   聊天 = 有新消息的**会话数**（服务端没给条数，不编）；
     ///   提醒 = 已过期 + 今天到点的待办数（「更远」的不该顶个红点催人）。
-    private var badges: [UmbraTab: Int] {
-        var out: [UmbraTab: Int] = [:]
-        if !chat.unread.isEmpty { out[.chat] = chat.unread.count }
-        let due = reminders.items.filter { !$0.done && ($0.group == "已过期" || $0.group == "今天") }.count
-        if due > 0 { out[.reminder] = due }
-        return out
+    private func badge(_ tab: UmbraTab) -> Int {
+        switch tab {
+        case .chat:
+            return chat.unread.count
+        case .reminder:
+            return reminders.items.filter { !$0.done && ($0.group == "已过期" || $0.group == "今天") }.count
+        default:
+            return 0
+        }
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ZStack {
-                // 用 id 让路由变化触发转场；栈深度参与 id，是为了让同一路由的
-                // push / pop 也能各自播一次动画。
-                UmbraRouteView(route: router.current)
-                    .environmentObject(router)
-                    .environmentObject(tasks)
-                    .environmentObject(inspirations)
-                    .environmentObject(vault)
-                    .environmentObject(vaultSession)
-                    .id("\(router.stack.count)-\(String(describing: router.current))")
-                    .transition(.asymmetric(
-                        insertion: .move(edge: router.goingBack ? .leading : .trailing).combined(with: .opacity),
-                        removal: .opacity
-                    ))
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .clipped()
-
-            // 底栏只在**每个 Tab 的根页**显示。进了任何子页面（对话、详情、编辑、
-            // 保险箱子树…）都收起来 —— 这是 iOS 的通行做法，设计稿的
-            // `showTabBar: stack.length===1` 写的也是这个，之前是我实现漏了。
-            if router.stack.count == 1 && router.current.showsTabBar {
-                UmbraTabBar(
-                    selection: .constant(router.tab),
-                    badges: badges,
-                    onSelect: { router.root($0) }
-                )
+        TabView(selection: router.tabSelection) {
+            ForEach(UmbraTab.allCases, id: \.self) { tab in
+                NavigationStack(path: router.pathBinding(tab)) {
+                    UmbraRouteView(route: tab.root)
+                        .navigationDestination(for: UmbraRoute.self) { route in
+                            UmbraRouteView(route: route)
+                        }
+                }
+                // 底栏只在 Tab 根页显示（设计稿的 showTabBar: stack.length===1）。
+                // 挂在**栈外**、由 path 是否为空驱动，而不是在每个 destination 上
+                // .toolbar(.hidden)：那种写法返回根页时 tab bar 要等转场完全结束
+                // 才回来（实机 0.5~1s 的空档）。path 一清空这里立即翻回 .visible。
+                // tab bar 背景不再强行 .hidden：内容能穿到 bar 底下之后，
+                // 系统材质是「玻璃下透出内容」的正确形态，抹掉反而露馅。
+                .toolbar((router.paths[tab] ?? []).isEmpty ? .visible : .hidden, for: .tabBar)
+                .tabItem { Label(tab.label, systemImage: tab.sfSymbol) }
+                .badge(badge(tab))
+                .tag(tab)
             }
         }
+        // 外观切换时整棵 TabView 换 id 重建：**正在显示**的导航栏标题/返回钮的配色，
+        // 是 SwiftUI 配置栏的时候解析成静态值塞给 UIKit 的，之后改 trait 不会重解析，
+        // 要等下一次 push/pop 才换色（实机复现：改 window 的 style + 整窗重画都救不回来）。
+        // 重建 = 全部栏重新配置，颜色当场对。各 Tab 的深栈存在 router.paths 里，
+        // 重建后按 path 原地恢复，不丢页面位置；数据 store 都挂在外壳上，也都不动。
+        // 重建那一帧由 App 层的交叉淡入（0.25s）盖住，看起来就是一次主题过渡。
+        .id("shell-\(appearance)")
+        // 选中态用品牌橙。角标颜色是系统红，不另调 —— 那是系统层的东西。
+        .tint(UmbraColor.orange)
         .background(UmbraColor.bg)
-        // 从左边缘右划返回。自绘导航栈没有系统 NavigationStack 自带的这个手势，
-        // 而它在 iOS 上是肌肉记忆级的操作 —— 没有的话用户只能去够左上角那个按钮。
-        // 起点限制在左边缘 24pt 内：再往右就会和聊天里「按住说话」、
-        // 提醒的左滑行、指位卡的拖拽抢手势。
-        .simultaneousGesture(
-            DragGesture(minimumDistance: 24, coordinateSpace: .local)
-                .onEnded { g in
-                    guard router.canGoBack,
-                          g.startLocation.x < 24,
-                          g.translation.width > 80,
-                          abs(g.translation.height) < 60 else { return }
-                    router.back()
-                }
-        )
         .umbraOverlays(router)
         // 后台遮盖是**真功能**不是演示：切后台时系统会给当前屏幕截一张图放进多任务卡片，
         // 保险箱页面被截进去等于密码泄漏。只在保险箱子树里盖 —— 别的页面盖了纯属打扰。
@@ -86,6 +80,10 @@ struct UmbraShell: View {
             }
         }
         .environmentObject(router)
+        .environmentObject(tasks)
+        .environmentObject(inspirations)
+        .environmentObject(vault)
+        .environmentObject(vaultSession)
         // 通知里点开的那条提醒：切到提醒 Tab 再推详情，这样返回是回提醒列表而不是空栈。
         .onChange(of: deepLink.route) { route in
             guard let route else { return }
@@ -98,21 +96,21 @@ struct UmbraShell: View {
 
 // MARK: - 路由分发
 //
-// 一个 switch 把 route 映射到页面。已建好的页面直接接上；还没建的走
-// UmbraPlaceholderPage —— 它是一个**真实承接页**，有返回、有说明，
-// 不是弹个 toast 了事（自查清单：「每个『点了会怎样』的入口都有真实承接页」）。
+// 一个 switch 把 route 映射到页面。根页与推入页共用这一份 ——
+// NavigationStack 的 navigationDestination 也从这里取。
 struct UmbraRouteView: View {
     let route: UmbraRoute
 
     var body: some View {
         switch route {
 
-        // ── Tab 根页（第 3–5 步逐个替换成真实实现）
+        // ── 聊天
         case .chatContacts:
             UmbraChatContactsView()
         case .chatThread(let conv):
             UmbraChatThreadView(conv: conv)
 
+        // ── 提醒
         case .remList:
             UmbraReminderListView()
         case .remDetail(let id):
@@ -120,11 +118,13 @@ struct UmbraRouteView: View {
         case .remEdit(let id):
             UmbraReminderEditView(id: id)
 
+        // ── 任务
         case .taskList:
             UmbraTaskListView()
         case .taskDetail(let id):
             UmbraTaskDetailView(id: id)
 
+        // ── 灵感
         case .inspList:
             UmbraInspirationListView()
         case .inspDetail(let id):
@@ -132,10 +132,13 @@ struct UmbraRouteView: View {
         case .inspEdit(let id):
             UmbraInspirationEditView(id: id)
 
+        // ── 我
         case .meHome:
             UmbraMeHomeView()
         case .mePhrases:
             UmbraPhrasesView()
+        case .mePhraseEdit(let id):
+            UmbraPhraseEditView(id: id)
         case .meDevices:
             UmbraDevicesView()
         case .deviceDetail(let id):
@@ -155,7 +158,7 @@ struct UmbraRouteView: View {
         case .setAbout:
             UmbraAboutView()
 
-        // ── 保险箱子树（第 5 步）
+        // ── 保险箱子树
         case .vaultHome:
             UmbraVaultHomeView()
         case .vaultCreate:
@@ -184,89 +187,25 @@ struct UmbraRouteView: View {
             UmbraVaultSettingsView()
         case .vaultPwd:
             UmbraVaultPasswordView()
-
-        // ── 系统形态演示（第 6 步）
-        case .lockScreen:
-            UmbraLockScreenDemo()
         case .vaultAutofill:
             UmbraAutoFillDemoView()
-        case .vaultMask:
-            UmbraMaskScreen()
         }
-    }
-
-    private func placeholder(_ title: String, _ what: String, step: Int) -> some View {
-        UmbraPlaceholderPage(title: title, what: what, step: step)
     }
 }
 
-// MARK: - 未建成页面的承接页
+
+// MARK: - 编辑页也要能边缘右划返回
 //
-// 刻意做成一个**能看懂、能退出**的页面，而不是空白或 toast：
-// 骨架阶段最容易留下的坑就是「点进去什么都没有，也退不出来」。
-struct UmbraPlaceholderPage: View {
-    let title: String
-    let what: String
-    let step: Int
-    @EnvironmentObject private var router: UmbraRouter
-
-    var body: some View {
-        UmbraPage(navBar: {
-            if router.canGoBack {
-                UmbraNavBar(backLabel: "返回", title: title, onBack: { router.back() })
-            } else {
-                UmbraNavBar(title: title)
-            }
-        }, content: {
-            VStack(alignment: .leading, spacing: UmbraMetric.sp4) {
-                UmbraCard {
-                    VStack(alignment: .leading, spacing: UmbraMetric.sp2) {
-                        UmbraSectionLabel(text: "这一页还没建")
-                        Text(what)
-                            .font(UmbraFont.body)
-                            .foregroundColor(UmbraColor.text)
-                            .lineSpacing(UmbraFont.bodyLineSpacing)
-                        Text("导航骨架已通，页面内容在第 \(step) 步实现。")
-                            .font(UmbraFont.rowSub)
-                            .foregroundColor(UmbraColor.muted)
-                    }
-                }
-                .padding(.horizontal, UmbraMetric.pagePadX)
-
-                // 骨架自检：这几个入口用来验证栈、浮层、toast 真的通了。
-                UmbraGroupCard {
-                    UmbraListRow(title: "试一次底部选择器", showsChevron: true) {
-                        router.present(UmbraSheet(
-                            title: "选一个", subtitle: "验证多层选择器与返回箭头",
-                            items: [
-                                UmbraSheetItem(label: "第一项", checked: true, action: {}),
-                                UmbraSheetItem(label: "进到下一层", note: "多层", action: {
-                                    router.present(UmbraSheet(title: "第二层", items: [
-                                        UmbraSheetItem(label: "回上一层试试")
-                                    ]))
-                                }),
-                                UmbraSheetItem(label: "删除这一项", destructive: true, action: {
-                                    router.showToast("已删除", undo: {})
-                                })
-                            ]))
-                    }
-                    UmbraRowDivider()
-                    UmbraListRow(title: "试一次确认弹窗", showsChevron: true) {
-                        router.confirm(UmbraAlert(
-                            title: "删除这条记录？",
-                            body: "删除后进回收站，30 天内还能恢复。",
-                            confirmLabel: "删除",
-                            confirmDestructive: true,
-                            onConfirm: { router.showToast("已移到回收站") }))
-                    }
-                    UmbraRowDivider()
-                    UmbraListRow(title: "试一次 toast", showsChevron: true) {
-                        router.showToast("已复制，60 秒后自动清剪贴板")
-                    }
-                }
-                .padding(.horizontal, UmbraMetric.pagePadX)
-            }
-            .padding(.top, UmbraMetric.sp5)
-        })
+// SwiftUI 的 NavigationStack 在 .navigationBarBackButtonHidden(true) 时会连
+// interactivePopGestureRecognizer 一起禁掉 —— 而编辑页只是想把左上角换成「取消」，
+// 不是想没收右划。把手势的 delegate 接回来，栈深 > 1 时始终允许。
+// 这是社区通行的补法；系统哪天原生放开了，删掉这段即可。
+extension UINavigationController: UIGestureRecognizerDelegate {
+    override open func viewDidLoad() {
+        super.viewDidLoad()
+        interactivePopGestureRecognizer?.delegate = self
+    }
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        viewControllers.count > 1
     }
 }
