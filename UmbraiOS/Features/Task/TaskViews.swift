@@ -42,6 +42,9 @@ struct UmbraTaskListView: View {
             if seg == .history { history } else { plan }
         }
         .navigationTitle("任务")
+        // 列表页不参与键盘避让：搜索框在页面上方用不着避让，
+        // 反而搜索键盘收起后底部 inset 可能留着不走，让页面短一截（同保险箱首页的坑）。
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         // 点内容区任意空白收键盘。simultaneousGesture 不吞行内按钮的点击；
         // 只在真有焦点时动手，避免和「点图标展开搜索」抢同一下点击。
         .simultaneousGesture(TapGesture().onEnded { if searchFocused { searchFocused = false } })

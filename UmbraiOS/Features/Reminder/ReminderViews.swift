@@ -138,6 +138,8 @@ final class ReminderStore: ObservableObject {
     func reload() {
         load()
         refreshAuthorization()
+        // 冷启动后小组件快照可能还是上次会话的 —— 重读时顺手刷一份。
+        UmbraWidgetBridge.syncReminders(items)
     }
 
     private func load() {
@@ -151,6 +153,8 @@ final class ReminderStore: ObservableObject {
         if let d = try? JSONEncoder().encode(items) {
             UserDefaults.standard.set(d, forKey: key)
         }
+        // 提醒一变就同步中号小组件的「今天」快照 —— 小组件只读这份，不自己算。
+        UmbraWidgetBridge.syncReminders(items)
     }
 
     func item(_ id: String) -> UmbraReminder? { items.first { $0.id == id } }

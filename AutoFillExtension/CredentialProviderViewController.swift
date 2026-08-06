@@ -7,11 +7,13 @@
 // 系统在别的 App / Safari 的密码输入框上唤起它，用户挑一条，系统把账号密码填进去。
 // 扩展是**独立进程**，和主 App 不共享内存，只共享代码 —— 所以它自己拉密文、自己解密。
 //
-// 需要一起加进这个 target 的文件（在 Xcode 右侧 Target Membership 里勾上）：
-//   UmbraiOS/Views/VaultFeature.swift        加密内核 + 数据模型 + VaultStore
-//   UmbraiOS/Network/NetworkConfig.swift     服务端地址与 Token
-//   UmbraiOS/DesignSystem/UmbraTokens.swift  颜色 / 字号 / 间距
+// 需要一起加进这个 target 的文件（在 Xcode 右侧 Target Membership 里勾上；
+// 路径按 2026-08 重组后的 Features 目录，旧注释里的 Views/ 路径已作废）：
+//   UmbraiOS/Features/Vault/VaultCore.swift   加密内核 + 数据模型 + VaultStore + VaultKeychain
+//   UmbraiOS/Networking/NetworkConfig.swift   服务端地址与 Token
+//   UmbraiOS/DesignSystem/UmbraTokens.swift   颜色 / 字号 / 间距
 // 别的设计系统文件不要勾 —— 扩展的内存上限很紧（约 120MB），能少带就少带。
+// 编译若再报缺某个类型，把报错指向的那**一个**文件补勾进来即可，不要整包勾。
 //
 // 与主 App 的两点不同，都是扩展的硬约束：
 //   1. **不共享 Keychain**。扩展和主 App 的默认 Keychain 访问组不一样，所以第一次用

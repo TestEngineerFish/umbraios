@@ -466,6 +466,10 @@ struct UmbraVaultHomeView: View {
         .scrollContentBackground(.hidden)
         .background(UmbraColor.bg)
         .scrollDismissesKeyboard(.interactively)
+        // 不参与键盘避让：解锁页输主密码时键盘开着，一解锁切到这个 List，
+        // 键盘的底部 inset 会被带进来且收键盘后**留着不走**（iOS 17 List 的老毛病），
+        // 列表就短一截、贴不到页面底。搜索框在页面上方，本来也用不着避让。
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
     }
 

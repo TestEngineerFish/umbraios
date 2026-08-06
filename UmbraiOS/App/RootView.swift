@@ -13,5 +13,7 @@ struct RootView: View {
     var body: some View {
         UmbraShell()
             .environmentObject(viewModel)
+            // 小组件 / 灵动岛点进来的 umbra:// 深链，走通知同一条 UmbraDeepLink 管道。
+            .onOpenURL { UmbraDeepLink.shared.handle($0) }
     }
 }

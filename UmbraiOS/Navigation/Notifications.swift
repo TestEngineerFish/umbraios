@@ -21,6 +21,24 @@ final class UmbraDeepLink: ObservableObject {
     /// 外壳消费一次就置回 nil。
     @Published var route: UmbraRoute?
     private init() {}
+
+    /// 小组件 / 灵动岛点进来的 umbra:// 深链。目前三条：
+    ///   umbra://tasks（任务列表）、umbra://task/<id>（任务详情）、umbra://reminders（提醒列表）。
+    /// 认不出的链接什么都不做 —— 宁可没反应也别跳到猜的页面。
+    func handle(_ url: URL) {
+        guard url.scheme == "umbra" else { return }
+        switch url.host {
+        case "tasks":
+            route = .taskList
+        case "task":
+            let id = url.pathComponents.count > 1 ? url.pathComponents[1] : nil
+            route = id.map { UmbraRoute.taskDetail(id: $0) } ?? .taskList
+        case "reminders":
+            route = .remList
+        default:
+            break
+        }
+    }
 }
 
 // MARK: - 通知代理

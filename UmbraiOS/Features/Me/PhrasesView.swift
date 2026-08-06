@@ -172,6 +172,9 @@ struct UmbraPhrasesView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(UmbraColor.bg)
+        // 这页没有输入框，键盘避让纯属多余；从编辑页收着键盘弹回来时
+        // List 可能带着键盘 inset 布局又不还（同保险箱首页的坑），干脆不参与。
+        .ignoresSafeArea(.keyboard, edges: .bottom)
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
     }
 

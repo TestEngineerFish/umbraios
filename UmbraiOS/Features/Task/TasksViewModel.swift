@@ -16,7 +16,12 @@ class TasksViewModel: ObservableObject {
         let fetched = await HTTPService.shared.fetchJobs(limit: 30)
         await MainActor.run {
             // 拉失败（nil）就保留旧列表 —— 刷新失败不该把已经在屏幕上的东西抹掉。
-            if let fetched { self.jobs = fetched }
+            if let fetched {
+                self.jobs = fetched
+                // 每次拉到新列表就同步小组件快照 + 灵动岛/锁屏实况 ——
+                // 三处显示的任务和这里是同一份数据、同一个 tick（规范 4.3）。
+                UmbraWidgetBridge.syncTasks(fetched)
+            }
             self.loading = false
             // If detail is open, refresh it too
             if let selectedJobId = self.selectedJobId {
