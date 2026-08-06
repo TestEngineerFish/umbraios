@@ -28,6 +28,7 @@ enum UmbraWidgetBridge {
             stepsTotal: running?.steps_total ?? 0,
             todayDone: todayDone,
             savedAt: Date()))
+        print("[UmbraWidget] 任务快照已写：appGroup生效=\(UmbraShared.appGroupReady) 执行中=\(running?.id ?? "无") 今天完成=\(todayDone)")
         WidgetCenter.shared.reloadTimelines(ofKind: UmbraShared.taskWidgetKind)
         UmbraLiveActivityController.shared.sync(with: jobs)
     }
@@ -48,6 +49,9 @@ enum UmbraWidgetBridge {
                                              time: df.string(from: $0.at),
                                              overdue: $0.overdue) }
         UmbraShared.save(UmbraReminderSnapshot(rows: Array(rows), savedAt: Date()))
+        // appGroup生效=false 就是两个 target 的 App Groups 没配对上（entitlement 缺失），
+        // 主 App 和小组件各写各的沙盒，小组件永远读不到 —— 去 Xcode 两边核对同一个组。
+        print("[UmbraWidget] 提醒快照已写：appGroup生效=\(UmbraShared.appGroupReady) 今天/过期条数=\(rows.count)（提醒总数 \(items.count)）")
         WidgetCenter.shared.reloadTimelines(ofKind: UmbraShared.reminderWidgetKind)
     }
 }

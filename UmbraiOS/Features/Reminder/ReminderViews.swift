@@ -130,7 +130,12 @@ final class ReminderStore: ObservableObject {
 
     private let key = "umbra.reminders.local"
 
-    private init() { load() }
+    private init() {
+        load()
+        // 启动就同步一次小组件快照 —— 原来只在「有改动 / 下拉刷新」时写，
+        // 刚装上 App 没碰过提醒的话小组件永远拿不到数据（实机踩过）。
+        UmbraWidgetBridge.syncReminders(items)
+    }
 
     /// 下拉刷新入口：重读本机存储 + 重查通知权限。
     /// 规范 2026-08-05 修订：五个根屏一律做下拉刷新，纯本机数据也做（重读本机最新）——

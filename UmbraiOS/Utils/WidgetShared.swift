@@ -26,6 +26,13 @@ enum UmbraShared {
     /// App Group 还没在 Xcode 里配好时返回 nil —— 所有读写都静默跳过，不崩、不写错地方。
     static var defaults: UserDefaults? { UserDefaults(suiteName: appGroup) }
 
+    /// App Group **真的生效了吗**。UserDefaults(suiteName:) 在没配 entitlement 时
+    /// 也会给一个能用的实例（只是落在自己沙盒里，扩展看不见）—— 用它判断会误判成正常。
+    /// containerURL 才是实话：拿不到共享容器 = entitlement 没配对上。
+    static var appGroupReady: Bool {
+        FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) != nil
+    }
+
     // MARK: 快照读写（主 App 写，扩展读）
 
     static func save(_ snap: UmbraTaskSnapshot) {

@@ -44,7 +44,9 @@ struct ReminderProvider: TimelineProvider {
 struct ReminderWidgetView: View {
     let entry: ReminderEntry
 
-    private var rows: [UmbraReminderSnapshot.Row] { Array((entry.snap?.rows ?? []).prefix(3)) }
+    /// 设计稿原型标的是 ×3，实机中号组件竖向还有一行余量 —— 放 4 行（用户实测点名）。
+    /// 超过 4 条时右上角的「N 条」负责说明还有没露出来的。
+    private var rows: [UmbraReminderSnapshot.Row] { Array((entry.snap?.rows ?? []).prefix(4)) }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 9) {
