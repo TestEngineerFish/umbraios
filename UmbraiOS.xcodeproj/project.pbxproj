@@ -10,6 +10,8 @@
 		22230C6430240A0B00FE7E60 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22230C6330240A0B00FE7E60 /* WidgetKit.framework */; };
 		22230C6630240A0B00FE7E60 /* SwiftUI.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22230C6530240A0B00FE7E60 /* SwiftUI.framework */; };
 		22230C7330240A0D00FE7E60 /* UmbraWidgetsExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 22230C6130240A0B00FE7E60 /* UmbraWidgetsExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		22230CB73024368800FE7E60 /* AuthenticationServices.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 22230C9D3024351500FE7E60 /* AuthenticationServices.framework */; };
+		22230CC23024368800FE7E60 /* AutoFillExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 22230CB63024368800FE7E60 /* AutoFillExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -20,6 +22,13 @@
 			remoteGlobalIDString = 22230C6030240A0B00FE7E60;
 			remoteInfo = UmbraWidgetsExtension;
 		};
+		22230CC03024368800FE7E60 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = A1000001266A000000000005 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 22230CB53024368800FE7E60;
+			remoteInfo = AutoFillExtension;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -29,6 +38,7 @@
 			dstPath = "";
 			dstSubfolderSpec = 13;
 			files = (
+				22230CC23024368800FE7E60 /* AutoFillExtension.appex in Embed Foundation Extensions */,
 				22230C7330240A0D00FE7E60 /* UmbraWidgetsExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
@@ -41,6 +51,8 @@
 		22230C6330240A0B00FE7E60 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		22230C6530240A0B00FE7E60 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 		22230C9130240B9B00FE7E60 /* UmbraWidgetsExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = UmbraWidgetsExtension.entitlements; sourceTree = "<group>"; };
+		22230C9D3024351500FE7E60 /* AuthenticationServices.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AuthenticationServices.framework; path = System/Library/Frameworks/AuthenticationServices.framework; sourceTree = SDKROOT; };
+		22230CB63024368800FE7E60 /* AutoFillExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AutoFillExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		A1000001266A000000000001 /* UmbraiOS.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = UmbraiOS.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -59,6 +71,24 @@
 			);
 			target = 22230C6030240A0B00FE7E60 /* UmbraWidgetsExtension */;
 		};
+		22230CC63024368800FE7E60 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = 22230CB53024368800FE7E60 /* AutoFillExtension */;
+		};
+		22230CCC3024398000FE7E60 /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				DesignSystem/UmbraTokens.swift,
+				Features/Vault/VaultBiometrics.swift,
+				Features/Vault/VaultCore.swift,
+				Features/Vault/VaultSharing.swift,
+				Networking/NetworkConfig.swift,
+			);
+			target = 22230CB53024368800FE7E60 /* AutoFillExtension */;
+		};
 		22EE0ED430207EED004C64FD /* PBXFileSystemSynchronizedBuildFileExceptionSet */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -70,7 +100,8 @@
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		22230C6730240A0B00FE7E60 /* UmbraWidgets */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (22230C7830240A0D00FE7E60 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = UmbraWidgets; sourceTree = "<group>"; };
-		22EE0EA930207EED004C64FD /* UmbraiOS */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (22EE0ED430207EED004C64FD /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 22230C9030240B2900FE7E60 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = UmbraiOS; sourceTree = "<group>"; };
+		22230CB83024368800FE7E60 /* AutoFillExtension */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (22230CC63024368800FE7E60 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = AutoFillExtension; sourceTree = "<group>"; };
+		22EE0EA930207EED004C64FD /* UmbraiOS */ = {isa = PBXFileSystemSynchronizedRootGroup; exceptions = (22EE0ED430207EED004C64FD /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 22230C9030240B2900FE7E60 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, 22230CCC3024398000FE7E60 /* PBXFileSystemSynchronizedBuildFileExceptionSet */, ); explicitFileTypes = {}; explicitFolders = (); path = UmbraiOS; sourceTree = "<group>"; };
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -83,6 +114,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		22230CB33024368800FE7E60 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				22230CB73024368800FE7E60 /* AuthenticationServices.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -91,6 +130,7 @@
 			children = (
 				22230C6330240A0B00FE7E60 /* WidgetKit.framework */,
 				22230C6530240A0B00FE7E60 /* SwiftUI.framework */,
+				22230C9D3024351500FE7E60 /* AuthenticationServices.framework */,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
@@ -101,6 +141,7 @@
 				22230C9130240B9B00FE7E60 /* UmbraWidgetsExtension.entitlements */,
 				22EE0EA930207EED004C64FD /* UmbraiOS */,
 				22230C6730240A0B00FE7E60 /* UmbraWidgets */,
+				22230CB83024368800FE7E60 /* AutoFillExtension */,
 				22230C6230240A0B00FE7E60 /* Frameworks */,
 				A1000001266A000000000003 /* Products */,
 			);
@@ -111,6 +152,7 @@
 			children = (
 				A1000001266A000000000001 /* UmbraiOS.app */,
 				22230C6130240A0B00FE7E60 /* UmbraWidgetsExtension.appex */,
+				22230CB63024368800FE7E60 /* AutoFillExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -140,6 +182,28 @@
 			productReference = 22230C6130240A0B00FE7E60 /* UmbraWidgetsExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		22230CB53024368800FE7E60 /* AutoFillExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 22230CC33024368800FE7E60 /* Build configuration list for PBXNativeTarget "AutoFillExtension" */;
+			buildPhases = (
+				22230CB23024368800FE7E60 /* Sources */,
+				22230CB33024368800FE7E60 /* Frameworks */,
+				22230CB43024368800FE7E60 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				22230CB83024368800FE7E60 /* AutoFillExtension */,
+			);
+			name = AutoFillExtension;
+			packageProductDependencies = (
+			);
+			productName = AutoFillExtension;
+			productReference = 22230CB63024368800FE7E60 /* AutoFillExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		A1000001266A000000000004 /* UmbraiOS */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = A1000001266A000000000020 /* Build configuration list for PBXNativeTarget "UmbraiOS" */;
@@ -152,6 +216,7 @@
 			);
 			dependencies = (
 				22230C7230240A0D00FE7E60 /* PBXTargetDependency */,
+				22230CC13024368800FE7E60 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				22EE0EA930207EED004C64FD /* UmbraiOS */,
@@ -174,6 +239,9 @@
 					22230C6030240A0B00FE7E60 = {
 						CreatedOnToolsVersion = 26.2;
 					};
+					22230CB53024368800FE7E60 = {
+						CreatedOnToolsVersion = 26.2;
+					};
 				};
 			};
 			buildConfigurationList = A1000001266A000000000021 /* Build configuration list for PBXProject "UmbraiOS" */;
@@ -193,12 +261,20 @@
 			targets = (
 				A1000001266A000000000004 /* UmbraiOS */,
 				22230C6030240A0B00FE7E60 /* UmbraWidgetsExtension */,
+				22230CB53024368800FE7E60 /* AutoFillExtension */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		22230C5F30240A0B00FE7E60 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		22230CB43024368800FE7E60 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -222,6 +298,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		22230CB23024368800FE7E60 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A1000001266A000000000080 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -236,6 +319,11 @@
 			isa = PBXTargetDependency;
 			target = 22230C6030240A0B00FE7E60 /* UmbraWidgetsExtension */;
 			targetProxy = 22230C7130240A0D00FE7E60 /* PBXContainerItemProxy */;
+		};
+		22230CC13024368800FE7E60 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 22230CB53024368800FE7E60 /* AutoFillExtension */;
+			targetProxy = 22230CC03024368800FE7E60 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -294,6 +382,69 @@
 				);
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = xyz.tingyusha.umbra.ios.UmbraWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		22230CC43024368800FE7E60 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = AutoFillExtension/AutoFillExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7M4S44CE7D;
+				ENABLE_DEBUG_DYLIB = NO;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AutoFillExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Umbra;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.4.2;
+				PRODUCT_BUNDLE_IDENTIFIER = xyz.tingyusha.umbra.ios.AutoFillExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		22230CC53024368800FE7E60 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = AutoFillExtension/AutoFillExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7M4S44CE7D;
+				ENABLE_DEBUG_DYLIB = NO;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = AutoFillExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Umbra;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 17.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 0.4.2;
+				PRODUCT_BUNDLE_IDENTIFIER = xyz.tingyusha.umbra.ios.AutoFillExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -498,6 +649,15 @@
 			buildConfigurations = (
 				22230C7530240A0D00FE7E60 /* Debug */,
 				22230C7630240A0D00FE7E60 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		22230CC33024368800FE7E60 /* Build configuration list for PBXNativeTarget "AutoFillExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				22230CC43024368800FE7E60 /* Debug */,
+				22230CC53024368800FE7E60 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

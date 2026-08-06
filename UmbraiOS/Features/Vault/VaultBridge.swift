@@ -3,6 +3,7 @@
 // 保险箱本体的界面在 UmbraVaultViews.swift / UmbraVaultToolViews.swift（第 5 步已重建），
 // 这个文件只留下不属于保险箱、但和它相关的两块。
 import SwiftUI
+import AuthenticationServices
 
 // MARK: - 后台遮盖（MaskScreen）
 //
@@ -33,6 +34,9 @@ struct UmbraAutoFillDemoView: View {
     @EnvironmentObject private var router: UmbraRouter
     @State private var unlocked = false
     @State private var query = ""
+    /// 系统里我们的填充扩展当前启没启用。nil = 还没查到。
+    /// 这是真数据（ASCredentialIdentityStore 的状态），不是演示。
+    @State private var providerEnabled: Bool? = nil
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -49,7 +53,37 @@ struct UmbraAutoFillDemoView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, UmbraMetric.sp5)
 
+                // 真实启用状态 + 直达系统启用页。ASSettingsHelper 会打开
+                // 「自动填充与密码」里**我们这个扩展**的启用面板，绕过列表 ——
+                // 也是最好的注册诊断：跳得开 = 系统认识我们，跳不开 = 没注册上。
+                HStack(spacing: 10) {
+                    Text(providerEnabled == nil ? "启用状态查询中…"
+                         : (providerEnabled == true ? "系统里已启用 Umbra 填充" : "还没在系统里启用"))
+                        .font(UmbraFont.sans(12.5, .w560))
+                        .foregroundColor(Color.white.opacity(0.85))
+                    Spacer(minLength: 0)
+                    Button {
+                        Task { try? await ASSettingsHelper.openCredentialProviderAppSettings() }
+                    } label: {
+                        Text("去系统设置启用")
+                            .font(UmbraFont.sans(12.5, .w600))
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 13)
+                            .frame(height: 32)
+                            .background(Capsule().fill(UmbraColor.orange))
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 20)
+                .padding(.bottom, UmbraMetric.sp4)
+
                 panel
+            }
+        }
+        .onAppear {
+            ASCredentialIdentityStore.shared.getState { state in
+                Task { @MainActor in providerEnabled = state.isEnabled }
             }
         }
     }

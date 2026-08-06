@@ -2,6 +2,7 @@ import SwiftUI
 import CryptoKit
 import CommonCrypto
 import Security
+import Combine
 
 // MARK: - 密码保险箱（iOS）
 // 零知识端到端加密：与 PC 端同一套派生（PBKDF2-SHA256 600k → HKDF ∥ SecretKey → AUK；AES-256-GCM）。
@@ -137,6 +138,11 @@ struct VSnapshot: Codable { var v: Int; var vaults: [VVaultInfo]; var data: [Str
 struct VRecord: Codable { var v: Int; var kdf: String?; var salt: String; var verifier: String; var enc: String }
 
 // MARK: Keychain（存 Secret Key，免每次输入）
+//
+// 条目落**共享访问组**（见 VaultSharing.swift），主 App 存一次，填充扩展直接能用 ——
+// 否则在填充面板里还要把 Secret Key 再输一遍（用户实测点名）。
+// 读取一律不指定访问组：不指定时系统搜遍本 App 能访问的所有组，
+// 老版本存在私有组里的条目照样读得到，读到之后顺手搬进共享组。
 enum VaultKeychain {
     static let account = "umbra.vault.secretKey"
     static func save(_ value: String) {
@@ -145,16 +151,23 @@ enum VaultKeychain {
         SecItemDelete(q as CFDictionary)
         var add = q; add[kSecValueData as String] = data
         add[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
-        SecItemAdd(add as CFDictionary, nil)
+        SecItemAdd(UmbraKeychainShare.stamp(add) as CFDictionary, nil)
+        UmbraKeychainShare.markMigrated(account)
     }
     static func load() -> String? {
         let q: [String: Any] = [kSecClass as String: kSecClassGenericPassword, kSecAttrAccount as String: account,
                                 kSecReturnData as String: true, kSecMatchLimit as String: kSecMatchLimitOne]
         var out: AnyObject?
-        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data else { return nil }
-        return String(data: d, encoding: .utf8)
+        guard SecItemCopyMatching(q as CFDictionary, &out) == errSecSuccess, let d = out as? Data,
+              let value = String(data: d, encoding: .utf8) else { return nil }
+        // 老条目搬进共享组（拿得到明文，重存一次就行）。搬没搬过看标记，不查条目属性。
+        if !UmbraKeychainShare.migrated(account) { save(value) }
+        return value
     }
-    static func clear() { SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrAccount as String: account] as CFDictionary) }
+    static func clear() {
+        SecItemDelete([kSecClass as String: kSecClassGenericPassword, kSecAttrAccount as String: account] as CFDictionary)
+        UmbraKeychainShare.clearMigrated(account)
+    }
 }
 
 // MARK: Store（同步客户端 + 内存明文）
