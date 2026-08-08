@@ -1075,9 +1075,15 @@ struct UmbraReminderForm: View {
     }
 
     /// 点击弹滚轮的行。
+    ///
+    /// **先收键盘再弹面板**：不收的话，滚轮面板关掉时系统会把焦点还给刚才那个输入框，
+    /// 键盘又自己蹦出来 —— 表现就是「选完日期还得再关一次键盘」（用户点名）。
     private func pickerRow(label: String, value: String, sub: Bool = false,
                            action: @escaping () -> Void) -> some View {
-        Button(action: action) {
+        Button {
+            UmbraKeyboard.dismiss()
+            action()
+        } label: {
             HStack {
                 Text(label)
                     .font(UmbraFont.sans(sub ? 15 : 16, .w400))

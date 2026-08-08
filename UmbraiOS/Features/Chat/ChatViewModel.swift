@@ -45,13 +45,26 @@ class ChatViewModel: ObservableObject {
     // 回复超时兜底：发出后一段时间没有任何回复/流式内容，就把「思考中」气泡收尾为错误，
     // 避免连接中途断开时界面永远 loading。
     private var replyTimeout: Task<Void, Never>?
+    /// **静默**多久算这一轮没戏了。注意是「一点动静都没有」的时长，不是整轮耗时 ——
+    /// 带工具的一轮跑几分钟很正常（服务端日志里单次请求就要 20 秒往上），
+    /// 按总耗时判会把正常的长任务全判成超时。
+    private static let idleTimeoutNs: UInt64 = 120_000_000_000   // 120s
+
     private func armReplyTimeout() {
         replyTimeout?.cancel()
         replyTimeout = Task { @MainActor [weak self] in
-            try? await Task.sleep(nanoseconds: 60_000_000_000)  // 60s 无响应
+            try? await Task.sleep(nanoseconds: Self.idleTimeoutNs)
             guard let self, !Task.isCancelled else { return }
             self.failPendingTurn()
         }
+    }
+
+    /// 这一轮收尾（拿到 reply / 出错）→ 停表并置空。
+    /// 置 nil 而不只是 cancel：handleMessage 靠它判断「还在等这一轮吗」，
+    /// 不置空的话闲置期间收到别的推送也会白白重起一个计时器。
+    private func stopReplyTimeout() {
+        replyTimeout?.cancel()
+        replyTimeout = nil
     }
     private func failPendingTurn() {
         let conv = pendingConv
@@ -63,6 +76,7 @@ class ChatViewModel: ObservableObject {
             s.blocks[idx] = .assistant(a)
         }
         s.assistantIdx = nil
+        replyTimeout = nil
         s.blocks.append(.error(id: UUID(), text: L("chat.status.timeout")))
         reflect(conv)
     }
@@ -156,7 +170,7 @@ class ChatViewModel: ObservableObject {
             // 连接掉线且此时有「思考中」的回合在等 → 立即收尾为错误，不用干等超时。
             guard let self else { return }
             if status == .offline, self.store(self.pendingConv).assistantIdx != nil {
-                self.replyTimeout?.cancel()
+                self.stopReplyTimeout()
                 self.failPendingTurn()
             }
         }
@@ -464,10 +478,15 @@ class ChatViewModel: ObservableObject {
     private func handleMessage(_ msg: ChatMessage) {
         // 流式一类事件归属「服务端标注的会话」，缺省回落到正在等回复的会话。
         let streamConv = msg.conversation ?? pendingConv
+        // **收到任何一条服务端消息都重置静默计时**。
+        // 原来只有 delta 会重置，可一轮里很可能一个 delta 都没有 ——
+        // 模型直接吐工具调用时只有 tool_call / tool_result / node，
+        // 问答卡那一轮更是只有 question_card，于是 60 秒一到就误报「连接中断」，
+        // 而连接其实好好的（所以点「重新连接」也没用）。用户实测点名。
+        if replyTimeout != nil { armReplyTimeout() }
         switch msg.type {
         case "delta":
             if var a = currentAssistant(streamConv) { a.text += msg.deltaText ?? ""; a.thinking = false; updateAssistant(a, streamConv) }
-            armReplyTimeout()  // 有流式内容 → 重置超时（避免长回复被误判超时）
 
         case "tool_call":
             if var a = currentAssistant(streamConv) {
@@ -490,7 +509,7 @@ class ChatViewModel: ObservableObject {
             }
 
         case "reply":
-            replyTimeout?.cancel()
+            stopReplyTimeout()
             if var a = currentAssistant(streamConv) { a.text = msg.text ?? a.text; a.thinking = false; a.streaming = false; updateAssistant(a, streamConv) }
             store(streamConv).assistantIdx = nil
             setPreview(streamConv, msg.text ?? "", ISO8601DateFormatter().string(from: Date()))
@@ -600,7 +619,7 @@ class ChatViewModel: ObservableObject {
             reflect(conv)
 
         case "error":
-            replyTimeout?.cancel()
+            stopReplyTimeout()
             let s = store(streamConv)
             if s.assistantIdx != nil {
                 if var a = currentAssistant(streamConv) { a.thinking = false; a.streaming = false; updateAssistant(a, streamConv) }

@@ -64,7 +64,7 @@ struct UmbraTaskListView: View {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return tasks.jobs.filter { j in
             if let f = filter, UmbraStatus(jobStatus: j.status) != f { return false }
-            if !q.isEmpty && !(j.goal + (j.result_summary ?? "")).localizedCaseInsensitiveContains(q) { return false }
+            if !q.isEmpty && !(j.title + j.goal + (j.result_summary ?? "")).localizedCaseInsensitiveContains(q) { return false }
             return true
         }
     }
@@ -133,13 +133,27 @@ struct UmbraTaskListView: View {
             // 不再单画一个状态图标方块：标题下面那行 UmbraStatusBadge 已经是
             // 图标 + 文字的完整状态表达，再来一个就是同一信息说两遍（用户点名去掉）。
             VStack(alignment: .leading, spacing: 7) {
-                Text(job.goal)
+                // 标题位放**短标题**，描述降为副行 —— 与 PC 端一致。
+                // 原来这里直接写 goal，整段需求描述占着标题位，两端看着像两个东西。
+                Text(job.title)
                     .font(UmbraFont.sans(16, .w400))
                     .foregroundColor(UmbraColor.text)
                     .lineSpacing(16 * 0.4)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
+
+                // 有短标题时才补一行描述；旧 Job 没有 name，title 已经是 goal，
+                // 再画一遍就是同一句话说两遍。
+                if job.name?.isEmpty == false {
+                    Text(job.goal)
+                        .font(UmbraFont.sans(13.5, .w400))
+                        .foregroundColor(UmbraColor.muted)
+                        .lineSpacing(13.5 * 0.4)
+                        .lineLimit(2)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
 
                 HStack(spacing: 7) {
                     UmbraStatusBadge(status: st)
@@ -231,14 +245,19 @@ struct UmbraTaskDetailView: View {
         }, bottom: {
             if let d = detail { bottomBar(d) }
         })
-        .navigationTitle(shortId)
+        .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
         .onAppear { Task { await tasks.loadJobDetail(id: id) } }
         .onDisappear { tasks.closeJobDetail() }
     }
 
-    /// 顶栏显示短 ID（等宽）。完整 ID 太长，顶栏放不下也没人读得完。
-    private var shortId: String { String(id.prefix(8)) }
+    /// 顶栏标题：优先用任务短标题，拿不到详情时退回短 ID。
+    /// 原来固定显示短 ID —— 一串 06731c54 谁也读不出这是哪个任务，
+    /// 而完整 ID 在下面的详情表里本来就有一行（不会丢）。
+    private var navTitle: String {
+        if let t = detail?.job.title, !t.isEmpty { return t }
+        return String(id.prefix(8))
+    }
 
     @ViewBuilder
     private func content(_ d: JobDetail) -> some View {
@@ -246,11 +265,20 @@ struct UmbraTaskDetailView: View {
 
         // 目标 + 状态
         VStack(alignment: .leading, spacing: 11) {
-            Text(d.job.goal)
+            // 同列表：标题位是短标题，整段描述放下面一行。
+            Text(d.job.title)
                 .font(UmbraFont.sans(19, .w560))
                 .foregroundColor(UmbraColor.text)
                 .lineSpacing(19 * 0.45)
                 .frame(maxWidth: .infinity, alignment: .leading)
+            if d.job.name?.isEmpty == false {
+                Text(d.job.goal)
+                    .font(UmbraFont.sans(15, .w400))
+                    .foregroundColor(UmbraColor.muted)
+                    .lineSpacing(15 * 0.5)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             HStack(spacing: 8) {
                 UmbraStatusBadge(status: st, compact: false)
                 if let ch = d.job.channel, !ch.isEmpty {
@@ -519,7 +547,7 @@ struct UmbraTaskDetailView: View {
     }
 
     private func plainText(_ d: JobDetail) -> String {
-        var lines = ["任务 \(d.job.id)", d.job.goal,
+        var lines = ["任务 \(d.job.id)", d.job.title, d.job.goal,
                      "状态：\(UmbraStatus(jobStatus: d.job.status).label)"]
         if let ch = d.job.channel { lines.append("来源：\(ch)") }
         lines.append("创建：\(UmbraTime.absolute(d.job.created_at))")

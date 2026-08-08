@@ -92,7 +92,14 @@ enum UmbraColor {
     static let dangerSoft  = dynColor(light: Color(hex: "FBE9E7"), dark: Color(hex: "B42318").opacity(0.22))
 
     /// 用户气泡。这一条不在 colors.css 里，来自主设计稿对话页的取值。
-    static let userBubble = dyn(light: "EAF1F7", dark: "2B2620")
+    // 我方气泡。浅色是交接包给的冷调蓝灰（衬白卡片）；
+    // ⚠️ 深色原值 2B2620 与 card 的 26231F 只差几个色阶，**实机上根本分不出你我**
+    //（用户点名：浅色正常、深色下两边一样）。深色沿用同一套逻辑 ——
+    // 卡片是暖棕黑，我方气泡就走冷调，冷暖对比在暗背景下最容易辨认。
+    static let userBubble = dyn(light: "EAF1F7", dark: "1E2A35")
+    // 设备（非秘书）发来的气泡。在设备会话里，秘书用 card、设备用这一档，
+    // 两边都在左侧但颜色不同，一眼分得出是谁说的。
+    static let deviceBubble = dyn(light: "F4F1EA", dark: "302A22")
 
     /// toast 上的字色。toast 底板是 --nav（两个主题都是深色），所以字色不跟主题变。
     /// 这两个值也不在 colors.css 里，是主设计稿 toast 的实测值。
@@ -175,6 +182,11 @@ enum UmbraFont {
 
 // MARK: - 间距 / 圆角 / 尺寸
 enum UmbraMetric {
+    /// 聊天气泡对侧留出的最小空白。气泡宽度**随内容自适应**，
+    /// 靠这个 Spacer 的下限保证长消息不会一路顶到屏幕另一边
+    /// （不能用 frame(maxWidth:) 限宽 —— 那会让短消息也撑满，见 ChatThreadView 的注释）。
+    static let bubbleGutter: CGFloat = 56
+
     // 间距
     static let sp1: CGFloat = 4
     static let sp2: CGFloat = 7

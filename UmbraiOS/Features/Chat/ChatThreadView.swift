@@ -217,19 +217,21 @@ struct UmbraChatThreadView: View {
             userBubble(text)
 
         case .assistant(let a):
-            VStack(alignment: .leading, spacing: 8) {
-                if !a.trace.isEmpty { traceCard(a, index: index) }
-                if !a.text.isEmpty || a.streaming { aiBubble(a) }
+            VStack(alignment: .leading, spacing: 5) {
+                // 设备会话里左侧会同时出现秘书和设备两方的话，秘书这边也要标明身份。
+                if !isAssistant, !a.text.isEmpty || a.streaming {
+                    senderHeader(icon: UmbraIconPath.robot, name: "秘书", tint: UmbraColor.orange)
+                }
+                VStack(alignment: .leading, spacing: 8) {
+                    if !a.trace.isEmpty { traceCard(a, index: index) }
+                    if !a.text.isEmpty || a.streaming { aiBubble(a) }
+                }
             }
 
         case .device(_, let text, _):
             VStack(alignment: .leading, spacing: 5) {
-                HStack(spacing: 5) {
-                    UmbraIcon(d: UmbraIconPath.monitor, size: 12, strokeWidth: 1.9)
-                    Text(title).font(UmbraFont.sans(11.5, .w560))
-                }
-                .foregroundColor(UmbraColor.faint)
-                plainLeftBubble(text)
+                senderHeader(icon: UmbraIconPath.monitor, name: title, tint: UmbraColor.faint)
+                plainLeftBubble(text, fill: UmbraColor.deviceBubble)
             }
 
         case .job(let j):
@@ -293,39 +295,69 @@ struct UmbraChatThreadView: View {
     }
 
     private func userBubble(_ text: String) -> some View {
-        Text(text)
-            .font(UmbraFont.sans(15.5, .w400))
-            .foregroundColor(UmbraColor.text)
-            .lineSpacing(15.5 * 0.5)
-            .textSelection(.enabled)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 9)
-            .frame(maxWidth: 270, alignment: .leading)
-            .background(UmbraBubbleShape(mine: true).fill(UmbraColor.userBubble))
-            .contextMenu { copyMenu(text) }
+        // ⚠️ 别用 `.frame(maxWidth: 270)` 给气泡限宽：SwiftUI 的 maxWidth 会让这个 frame
+        // **撑满父级给的宽度直到上限**，于是「好的」两个字也画成 270 宽的一大块，
+        // 看起来就是「消息永远一样长、文字缩在左边」（用户点名）。
+        // 正确做法是让气泡取自身理想宽度，靠外层 HStack 的 Spacer 把它推到一侧、
+        // 同时用 Spacer 的 minLength 留出对侧留白 —— 长文自然换行，短文自然收窄。
+        HStack(spacing: 0) {
+            Spacer(minLength: UmbraMetric.bubbleGutter)
+            Text(text)
+                .font(UmbraFont.sans(15.5, .w400))
+                .foregroundColor(UmbraColor.text)
+                .lineSpacing(15.5 * 0.5)
+                .multilineTextAlignment(.leading)
+                .textSelection(.enabled)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 9)
+                .background(UmbraBubbleShape(mine: true).fill(UmbraColor.userBubble))
+                .contextMenu { copyMenu(text) }
+        }
     }
 
-    private func plainLeftBubble(_ text: String) -> some View {
-        Text(text)
-            .font(UmbraFont.sans(15.5, .w400))
-            .foregroundColor(UmbraColor.text)
-            .lineSpacing(15.5 * 0.55)
-            .textSelection(.enabled)
-            .padding(.horizontal, 13)
-            .padding(.vertical, 10)
-            .frame(maxWidth: 300, alignment: .leading)
-            .background(UmbraBubbleShape(mine: false).fill(UmbraColor.card))
-            .overlay(UmbraBubbleShape(mine: false).stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-            .contextMenu { copyMenu(text) }
+    /// 左侧气泡。fill 用来区分说话人：秘书用 card、设备用 deviceBubble ——
+    /// 两边都在左侧，不换色的话在设备会话里根本分不出哪句是秘书说的（用户点名）。
+    private func plainLeftBubble(_ text: String, fill: Color = UmbraColor.card) -> some View {
+        // 同 userBubble：宽度随内容，靠右侧 Spacer 留白，不用 maxWidth 撑满。
+        HStack(spacing: 0) {
+            UmbraMarkdownText(raw: text)
+                .foregroundColor(UmbraColor.text)
+                .textSelection(.enabled)
+                .padding(.horizontal, 13)
+                .padding(.vertical, 10)
+                .background(UmbraBubbleShape(mine: false).fill(fill))
+                .overlay(UmbraBubbleShape(mine: false).stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+                .contextMenu { copyMenu(text) }
+            Spacer(minLength: UmbraMetric.bubbleGutter)
+        }
+    }
+
+    /// 发言人抬头（小图标 + 名字）。只在**设备会话**里出现 ——
+    /// 主会话整屏都是秘书，每条都标一遍纯属噪音。
+    private func senderHeader(icon: String, name: String, tint: Color) -> some View {
+        HStack(spacing: 5) {
+            UmbraIcon(d: icon, size: 12, strokeWidth: 1.9)
+                .foregroundColor(tint)
+            Text(name).font(UmbraFont.sans(11.5, .w560))
+                .foregroundColor(UmbraColor.faint)
+        }
     }
 
     private func aiBubble(_ a: ChatBlock.AssistantBlock) -> some View {
+        // 外层再包一层 HStack + 右侧 Spacer：同 userBubble 的理由，宽度随内容。
+        HStack(spacing: 0) {
+            aiBubbleBody(a)
+            Spacer(minLength: UmbraMetric.bubbleGutter)
+        }
+    }
+
+    private func aiBubbleBody(_ a: ChatBlock.AssistantBlock) -> some View {
         HStack(alignment: .bottom, spacing: 2) {
             if !a.text.isEmpty {
-                Text(a.text)
-                    .font(UmbraFont.sans(15.5, .w400))
+                // 秘书的回复里全是「**开发步骤**：」「1. 需求分析」这类 Markdown，
+                // 直接当纯文本画出来满屏星号井号（用户点名）——走块级渲染。
+                UmbraMarkdownText(raw: a.text)
                     .foregroundColor(UmbraColor.text)
-                    .lineSpacing(15.5 * 0.55)
                     .textSelection(.enabled)
             }
             // 流式光标：7×16 橙块，1 秒硬闪一次（steps(1)，不是渐隐）。
@@ -333,7 +365,6 @@ struct UmbraChatThreadView: View {
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 10)
-        .frame(maxWidth: 300, alignment: .leading)
         .background(UmbraBubbleShape(mine: false).fill(UmbraColor.card))
         .overlay(UmbraBubbleShape(mine: false).stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
         .contextMenu { if !a.text.isEmpty { copyMenu(a.text) } }

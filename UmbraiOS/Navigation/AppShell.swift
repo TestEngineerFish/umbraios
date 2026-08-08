@@ -23,8 +23,6 @@ struct UmbraShell: View {
     @ObservedObject private var reminders = ReminderStore.shared
     @ObservedObject private var deepLink = UmbraDeepLink.shared
     @Environment(\.scenePhase) private var scenePhase
-    /// 外观偏好（浅色/深色/跟随系统）。只用来给 TabView 换 id —— 见 body 里的注释。
-    @AppStorage("umbra.appearance") private var appearance = UmbraAppearance.system.rawValue
 
     /// 底栏角标，两个都是真实数据：
     ///   聊天 = 有新消息的**会话数**（服务端没给条数，不编）；
@@ -61,13 +59,13 @@ struct UmbraShell: View {
                 .tag(tab)
             }
         }
-        // 外观切换时整棵 TabView 换 id 重建：**正在显示**的导航栏标题/返回钮的配色，
-        // 是 SwiftUI 配置栏的时候解析成静态值塞给 UIKit 的，之后改 trait 不会重解析，
-        // 要等下一次 push/pop 才换色（实机复现：改 window 的 style + 整窗重画都救不回来）。
-        // 重建 = 全部栏重新配置，颜色当场对。各 Tab 的深栈存在 router.paths 里，
-        // 重建后按 path 原地恢复，不丢页面位置；数据 store 都挂在外壳上，也都不动。
-        // 重建那一帧由 App 层的交叉淡入（0.25s）盖住，看起来就是一次主题过渡。
-        .id("shell-\(appearance)")
+        // ⚠️ 这里原来挂了 `.id("shell-<外观>")`，外观一变就把整棵 TabView 重建。
+        // 但 UmbraiOSApp 已经在窗口级做了同一件事（overrideUserInterfaceStyle +
+        // UIView.transition 交叉淡入，整棵 trait 树一起换，导航栏和 tab bar 都跟上）。
+        // 两个修法叠在一起就会打架：SwiftUI 正在重建 tab bar 的同时，UIKit 那边
+        // 盖着一张 0.25s 的旧快照在淡出 —— 于是 tab bar 时而慢半拍、时而画花，
+        // 而且因为是时序竞争所以**非必现**（用户实测，深色下更容易撞上）。
+        // 窗口级那条是完整的解法，这条重建是它之前的遗留，去掉。
         // 选中态用品牌橙。角标颜色是系统红，不另调 —— 那是系统层的东西。
         .tint(UmbraColor.orange)
         .background(UmbraColor.bg)

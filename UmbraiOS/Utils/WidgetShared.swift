@@ -60,7 +60,12 @@ enum UmbraShared {
 struct UmbraTaskSnapshot: Codable {
     /// 执行中任务（没有则为 nil —— 小组件转而显示今天完成数，不画假任务）。
     var runningId: String?
-    var runningGoal: String?
+    /// 执行中任务的**短标题**。原来这里存的是 goal（整段需求描述），
+    /// 小组件那一小块地方放不下，显示出来是一段被截断的需求文——
+    /// 而 PC 上同一个任务显示的是「连连看网页游戏」（用户点名）。
+    /// 旧快照没有这个键 → 解出 nil → 小组件退回「今天完成数」那一屏，
+    /// 下一次同步（打开 App 即触发）就补上，不用迁移。
+    var runningTitle: String?
     var stepsDone: Int
     var stepsTotal: Int
     var todayDone: Int

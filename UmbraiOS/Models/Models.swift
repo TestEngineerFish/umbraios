@@ -20,6 +20,12 @@ struct ConversationRow: Codable {
 
 struct Job: Codable, Identifiable {
     let id: String
+    /// 短标题（服务端 tasks.name，≤15 字，列表主展示）。
+    /// **一期漏了这个字段**，于是列表、详情、小组件一律拿 goal 顶替标题位 ——
+    /// PC 端显示的是「连连看网页游戏」，iOS 上却是整段需求描述（用户点名）。
+    /// 旧 Job（operate 流水线）没有 name，所以是可选，用 title 统一兜底。
+    let name: String?
+    /// 详细描述（执行/验收/汇报都以它为准）。标题位不该放它。
     let goal: String
     let status: String
     let result_summary: String?
@@ -29,6 +35,13 @@ struct Job: Codable, Identifiable {
     // 步骤统计（列表接口附带）：用于任务列表按真实完成步数显示进度。
     var steps_total: Int? = nil
     var steps_done: Int? = nil
+
+    /// 显示用标题：有短标题就用短标题，没有（旧 Job）才退回描述。
+    /// **凡是「标题位」一律用它**，别再直接写 goal。
+    var title: String {
+        let n = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        return n.isEmpty ? goal : n
+    }
 }
 
 struct Subtask: Codable, Identifiable {

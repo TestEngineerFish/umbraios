@@ -23,7 +23,8 @@ enum UmbraWidgetBridge {
         let todayDone = jobs.filter { $0.status == "done" && UmbraShared.isToday($0.updated_at) }.count
         UmbraShared.save(UmbraTaskSnapshot(
             runningId: running?.id,
-            runningGoal: running?.goal,
+            // 存短标题：小组件那块地方放不下整段描述（Job.title 会在没有短标题时退回 goal）。
+            runningTitle: running?.title,
             stepsDone: running?.steps_done ?? 0,
             stepsTotal: running?.steps_total ?? 0,
             todayDone: todayDone,

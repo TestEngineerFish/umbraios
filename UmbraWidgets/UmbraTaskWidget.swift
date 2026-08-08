@@ -29,7 +29,7 @@ struct TaskProvider: TimelineProvider {
     func placeholder(in context: Context) -> TaskEntry {
         // 占位帧只给系统的模糊预览用（redacted），不会当真数据显示。
         TaskEntry(date: Date(),
-                  snap: UmbraTaskSnapshot(runningId: "x", runningGoal: "整理季度汇报的图表",
+                  snap: UmbraTaskSnapshot(runningId: "x", runningTitle: "季度汇报图表",
                                           stepsDone: 2, stepsTotal: 5, todayDone: 3, savedAt: Date()))
     }
     func getSnapshot(in context: Context, completion: @escaping (TaskEntry) -> Void) {
@@ -50,7 +50,7 @@ struct TaskWidgetView: View {
     var body: some View {
         Group {
             if let s = entry.snap {
-                if let goal = s.runningGoal {
+                if let goal = s.runningTitle {
                     running(s, goal: goal)
                         .widgetURL(URL(string: "umbra://task/\(s.runningId ?? "")"))
                 } else {
