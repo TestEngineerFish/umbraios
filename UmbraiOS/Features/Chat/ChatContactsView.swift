@@ -167,13 +167,14 @@ struct UmbraChatContactsView: View {
         return isSecretary ? "你的 AI 秘书" : "还没有对话"
     }
 
-    /// ISO8601 → 「09:41」/「昨天」/「7月28日」。解析不了就原样返回，不要给个假时间。
+    /// 服务端时间 → 「09:41」/「昨天」/「7月28日」。解析不了就原样返回，不要给个假时间。
+    ///
+    /// 走 UmbraShared 那一份统一解析：这里原本自己又挂了一遍 ISO8601（全 App 第三份），
+    /// 而 /history 回的 created_at 是 SQLite 的「2026-08-08 14:15:09」——
+    /// 两个 ISO 解析器都吃不下，于是会话列表右上角直接显示一串原始时间戳。
     private func timeLabel(_ iso: String?) -> String {
         guard let iso, !iso.isEmpty else { return "" }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let date = f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
-        guard let d = date else { return iso }
+        guard let d = UmbraShared.parseServerDate(iso) else { return iso }
         let cal = Calendar.current
         let df = DateFormatter()
         df.locale = Locale(identifier: "zh_CN")

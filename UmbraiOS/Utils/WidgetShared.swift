@@ -121,12 +121,43 @@ struct UmbraTaskActivityAttributes: ActivityAttributes {
 
 extension UmbraShared {
     /// 服务端 ISO 时间串是不是今天。带不带毫秒都认；解析不了一律按「不是今天」。
-    static func isToday(_ iso: String?) -> Bool {
-        guard let iso else { return false }
-        let f1 = ISO8601DateFormatter()
-        f1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        let f2 = ISO8601DateFormatter()
-        guard let d = f1.date(from: iso) ?? f2.date(from: iso) else { return false }
+    /// 解析服务端给的时间字符串。**全 App 只此一份**，别再各写各的。
+    ///
+    /// 服务端有两种格式，只认其中一种就会静默失效：
+    ///   1. `"2026-08-08T14:15:09.123456+00:00"` —— Python 的 `datetime.isoformat()`
+    ///      （设备表 last_seen、保险箱 updated_at 走这个）；
+    ///   2. `"2026-08-08 14:15:09"` —— SQLite 的 `CURRENT_TIMESTAMP`
+    ///      （tasks / inspirations 的 created_at、updated_at 全是这个）。
+    ///      **空格分隔、没有 T、没有时区后缀，而它是 UTC。**
+    ///
+    /// 原来只挂了两个 ISO8601 解析器，格式 2 一律解不出来 —— 于是
+    /// 小组件的「今天完成」永远是 0，任务列表的时间直接把原始字符串
+    /// 「2026-08-08 14:15:09」打在界面上（两处都是用户点名的现象）。
+    ///
+    /// ⚠️ 格式 2 必须**按 UTC 解**：本地是 +08:00 的话，UTC 16:00 之后的记录
+    /// 按本地时间解会算到前一天去，「今天完成」又会少数。
+    /// `locale` 固定 en_US_POSIX：定长格式解析不这么写，会被用户的日历/地区设置带歪。
+    static func parseServerDate(_ raw: String?) -> Date? {
+        guard let raw, !raw.isEmpty else { return nil }
+        let iso1 = ISO8601DateFormatter()
+        iso1.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = iso1.date(from: raw) { return d }
+        if let d = ISO8601DateFormatter().date(from: raw) { return d }
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone(secondsFromGMT: 0)
+        for fmt in ["yyyy-MM-dd HH:mm:ss.SSSSSS", "yyyy-MM-dd HH:mm:ss",
+                    "yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss"] {
+            df.dateFormat = fmt
+            if let d = df.date(from: raw) { return d }
+        }
+        return nil
+    }
+
+    /// 这个时刻是不是「今天」——按**本机时区**判断日界（服务端存的是 UTC）。
+    static func isToday(_ raw: String?) -> Bool {
+        guard let d = parseServerDate(raw) else { return false }
         return Calendar.current.isDateInToday(d)
     }
 }

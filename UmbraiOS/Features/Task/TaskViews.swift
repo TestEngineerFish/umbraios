@@ -584,11 +584,12 @@ extension View {
 /// 时间显示。服务端给的都是 ISO8601 字符串，解析不了就原样返回 ——
 /// 编一个「刚刚」出来会让人以为任务刚跑过。
 enum UmbraTime {
+    /// 走 UmbraShared 那一份统一解析（主 App 与小组件共用）。
+    /// 这里原本自己挂了两个 ISO8601 解析器，解不了 SQLite 的
+    /// 「2026-08-08 14:15:09」，于是 relative()/absolute() 双双走进
+    /// 「解不出就原样返回」的兜底 —— 界面上直接显示一串原始时间戳（用户点名）。
     private static func parse(_ iso: String?) -> Date? {
-        guard let iso, !iso.isEmpty else { return nil }
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f.date(from: iso) ?? ISO8601DateFormatter().date(from: iso)
+        UmbraShared.parseServerDate(iso)
     }
 
     /// 「09:41」/「昨天」/「7月28日」。
