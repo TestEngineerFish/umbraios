@@ -10,7 +10,6 @@
 //   · 通知页的分类开关 —— 服务端没有推送订阅接口，这一页做成**本机通知权限**的真实入口。
 import SwiftUI
 import UIKit
-import UserNotifications
 
 // MARK: - 我 · 首页
 
@@ -511,7 +510,10 @@ struct UmbraConnSettingsView: View {
 
 struct UmbraNotifySettingsView: View {
     @EnvironmentObject private var router: UmbraRouter
-    @State private var authorized: Bool? = nil
+    /// 权限状态直接观察 ReminderStore，不再自己查一遍 ——
+    /// 原来这一页和 ReminderStore.refreshAuthorization 是两份一模一样的实现，
+    /// 改了一处忘另一处就会出现「提醒页说没授权、通知页说已授权」。
+    @ObservedObject private var reminders = ReminderStore.shared
 
     var body: some View {
         UmbraSettingsPage(
@@ -528,22 +530,14 @@ struct UmbraNotifySettingsView: View {
                     ])
             ],
             footnote: "分类开关（提醒到点 / 任务完成 / 任务失败 / 待确认）要等服务端有推送订阅接口才能做。现在还没有，所以这里不摆一排点了不生效的开关。")
-            .onAppear { refresh() }
+            .onAppear { reminders.refreshAuthorization() }
     }
 
     private var authLabel: String {
-        switch authorized {
+        switch reminders.notifyAuthorized {
         case .some(true): return "已授权"
         case .some(false): return "未授权"
         case .none: return "读取中…"
-        }
-    }
-
-    private func refresh() {
-        UNUserNotificationCenter.current().getNotificationSettings { s in
-            Task { @MainActor in
-                authorized = (s.authorizationStatus == .authorized || s.authorizationStatus == .provisional)
-            }
         }
     }
 

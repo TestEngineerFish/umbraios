@@ -22,8 +22,9 @@ final class UmbraDeepLink: ObservableObject {
     @Published var route: UmbraRoute?
     private init() {}
 
-    /// 小组件 / 灵动岛点进来的 umbra:// 深链。目前三条：
-    ///   umbra://tasks（任务列表）、umbra://task/<id>（任务详情）、umbra://reminders（提醒列表）。
+    /// 小组件 / 灵动岛 / 别的端点进来的 umbra:// 深链。目前四条：
+    ///   umbra://tasks（任务列表）、umbra://task/<id>（任务详情）、
+    ///   umbra://reminders（提醒列表）、umbra://reminder/<id>（单条提醒详情）。
     /// 认不出的链接什么都不做 —— 宁可没反应也别跳到猜的页面。
     func handle(_ url: URL) {
         guard url.scheme == "umbra" else { return }
@@ -35,6 +36,11 @@ final class UmbraDeepLink: ObservableObject {
             route = id.map { UmbraRoute.taskDetail(id: $0) } ?? .taskList
         case "reminders":
             route = .remList
+        case "reminder":
+            // 一期漏了这条：.remDetail 只有「点通知本体」能到达，
+            // 从小组件或别的端发链接过来只能落到列表。补上，与 PC 端的深链契约对齐。
+            let id = url.pathComponents.count > 1 ? url.pathComponents[1] : nil
+            route = id.map { UmbraRoute.remDetail(id: $0) } ?? .remList
         default:
             break
         }
@@ -69,10 +75,12 @@ final class UmbraNotificationDelegate: NSObject, UNUserNotificationCenterDelegat
     }
 
     // App 在前台时也要显示。系统默认是静默的，那样用户会以为提醒压根没响。
+    // 带上 .badge：角标数由 ReminderStore.refreshBadge 维护，前台响一条时也要跟着走。
     func userNotificationCenter(_ center: UNUserNotificationCenter,
                                 willPresent notification: UNNotification,
                                 withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        completionHandler([.banner, .list, .sound])
+        Task { @MainActor in ReminderStore.shared.refreshBadge() }
+        completionHandler([.banner, .list, .sound, .badge])
     }
 
     func userNotificationCenter(_ center: UNUserNotificationCenter,

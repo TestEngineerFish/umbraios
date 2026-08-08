@@ -76,6 +76,56 @@ class HTTPService {
         }
     }
 
+    // MARK: - Reminders（提醒跨端同步）
+
+    /// 拉提醒增量。since=0 是全量。
+    /// 失败返回 nil（同 fetchJobs 的取向）—— 「拉失败了」和「服务端真的没有提醒」
+    /// 是两回事，混成一个值的话断网时会把本地缓存合并成空的。
+    func fetchReminders(since: Int64) async -> ReminderListDTO? {
+        var components = URLComponents(string: "\(baseUrl)/reminders")
+        components?.queryItems = [URLQueryItem(name: "since", value: String(since))]
+        return await request(components?.url)
+    }
+
+    /// 上推一条提醒（新增或修改）。服务端逐条 last-write-wins：
+    /// 返回体里的 applied=false 表示「你这版更旧、没采纳」，调用方要用回来的那份覆盖本地。
+    func putReminder(_ dto: ReminderDTO) async -> ReminderPutDTO? {
+        guard let url = URL(string: "\(baseUrl)/reminders/\(dto.id)") else { return nil }
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        req.httpBody = try? JSONEncoder().encode(dto)
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+                // 400 基本只有一个原因：枚举没走 ReminderWire 映射，中文漏出去了。
+                print("[HTTPService] PUT /reminders/\(dto.id) 返回 HTTP \(http.statusCode)")
+                return nil
+            }
+            return try JSONDecoder().decode(ReminderPutDTO.self, from: data)
+        } catch {
+            print("[HTTPService] PUT /reminders/\(dto.id) 失败：\(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// 软删一条提醒（服务端置墓碑）。at 是本地记下的删除时刻，用于跨端判胜负。
+    /// 返回是否真的送达 —— 没送达时调用方要把墓碑留着下次重推。
+    func deleteReminder(id: String, at ms: Int64) async -> Bool {
+        var components = URLComponents(string: "\(baseUrl)/reminders/\(id)")
+        components?.queryItems = [URLQueryItem(name: "at_ms", value: String(ms))]
+        guard let url = components?.url else { return false }
+        var req = URLRequest(url: url)
+        req.httpMethod = "DELETE"
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        do {
+            let (_, resp) = try await URLSession.shared.data(for: req)
+            return (resp as? HTTPURLResponse).map { $0.statusCode < 400 } ?? false
+        } catch {
+            return false
+        }
+    }
+
     // MARK: - Inspirations（灵感速记）
     /// 同 fetchJobs：失败返回 nil，别把列表清空。
     func fetchInspirations(status: String? = nil) async -> [Inspiration]? {

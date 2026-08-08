@@ -1,9 +1,11 @@
 // 提醒 · 列表 / 详情（就地编辑）/ 新建。
 //
-// **重要：这一版提醒是「本机提醒」。** 服务端目前没有提醒接口，
-// 所以数据存本机（UserDefaults JSON）、到点用 iOS 本地通知真的响。
-// 服务端有了接口之后，把 ReminderStore 的读写换成 HTTP 即可，界面不用动。
-// 下拉刷新按修订后的规范**照做**（重读本机最新数据），服务端有接口后改成补拉。
+// **数据是跨端同步的**（服务端 /reminders）。本机那份降级成**离线缓存**：
+// 断网时照常读写并排队，联网后按 updated_at_ms 逐条合并（规则见 ReminderSync.swift）。
+// 提醒是离线属性最强的功能，不能因为拉不到服务端就整个用不了。
+//
+// **到点触发仍然全靠本机**：服务端只存不调度 —— 没有 APNs 时它算出「到点了」也
+// 推不到不在前台的 App。所以每次拿到新数据都要把本地通知整体重排一遍（rescheduleAll）。
 //
 // v2 变化：
 //   列表 = 系统 List + 系统 .swipeActions（老系统方块、iOS 26 自动浮动胶囊）；
@@ -37,6 +39,12 @@ struct UmbraReminder: Codable, Identifiable, Equatable {
     /// 来源与创建时间（详情页字段）。目前只有手动添加；聊天建提醒等服务端接口。
     var source: String
     var createdAt: Date
+    /// 跨端合并的依据（epoch 毫秒）。任何本地改动都要把它推到「现在」，
+    /// 服务端与各端按它比大小判胜负 —— 详见 ReminderSync.swift。
+    var updatedAtMs: Int64
+    /// 本地改过、还没成功推给服务端。联网后补推；拉取合并时「本地 dirty 且更新」则本地赢，
+    /// 否则断网期间的修改会被服务端旧值覆盖掉。
+    var dirty: Bool
 
     static let repeatOptions = ["不重复", "每天", "每周", "每月", "工作日", "自定义"]
     static let customFreqOptions = ["小时", "天", "周", "月", "年"]
@@ -47,11 +55,14 @@ struct UmbraReminder: Codable, Identifiable, Equatable {
     init(id: String, text: String, at: Date, repeatRule: String = "不重复",
          customFreq: String = "天", customN: Int = 1, repeatEnd: Date? = nil,
          aheadMinutes: Int = 0, note: String = "", done: Bool = false,
-         source: String = "手动添加", createdAt: Date = Date()) {
+         source: String = "手动添加", createdAt: Date = Date(),
+         updatedAtMs: Int64 = 0, dirty: Bool = true) {
         self.id = id; self.text = text; self.at = at; self.repeatRule = repeatRule
         self.customFreq = customFreq; self.customN = customN; self.repeatEnd = repeatEnd
         self.aheadMinutes = aheadMinutes; self.note = note; self.done = done
         self.source = source; self.createdAt = createdAt
+        self.updatedAtMs = updatedAtMs == 0 ? Date.umbraNowMs : updatedAtMs
+        self.dirty = dirty
     }
 
     /// 手写解码：v1 存量数据没有 customFreq / repeatEnd / source 这些键，
@@ -73,6 +84,11 @@ struct UmbraReminder: Codable, Identifiable, Equatable {
         done = try c.decodeIfPresent(Bool.self, forKey: .done) ?? false
         source = try c.decodeIfPresent(String.self, forKey: .source) ?? "手动添加"
         createdAt = try c.decodeIfPresent(Date.self, forKey: .createdAt) ?? at
+        // 上收之前的存量数据没有这两个键：它们从没推给过服务端，
+        // 所以标成 dirty 等着补推。戳用 createdAt 而不是「现在」——
+        // 每次读缓存都盖新戳的话，它会永远比服务端新，服务端的修改就再也进不来了。
+        updatedAtMs = try c.decodeIfPresent(Int64.self, forKey: .updatedAtMs) ?? createdAt.umbraMs
+        dirty = try c.decodeIfPresent(Bool.self, forKey: .dirty) ?? true
     }
 
     var aheadLabel: String {
@@ -128,81 +144,170 @@ final class ReminderStore: ObservableObject {
     /// 通知权限。nil = 还没查。
     @Published private(set) var notifyAuthorized: Bool? = nil
 
-    private let key = "umbra.reminders.local"
-
     private init() {
-        load()
+        items = ReminderCache.load()
+        // **冷启动就整体重排一遍**。预排式规则（工作日 / 自定义间隔 / 带结束日期）系统
+        // 表达不了，只能预排 maxPrescheduled 次；scheduleSeries 的注释一直承诺
+        // 「每次打开 App 都会重排一遍」，但一期 init/reload 谁都没真的调 schedule——
+        // 于是这类提醒用满 12 次之后就**静默不响了**。这里把承诺补上。
+        rescheduleAll()
+        refreshBadge()
         // 启动就同步一次小组件快照 —— 原来只在「有改动 / 下拉刷新」时写，
         // 刚装上 App 没碰过提醒的话小组件永远拿不到数据（实机踩过）。
         UmbraWidgetBridge.syncReminders(items)
+        Task { await self.sync() }
     }
 
-    /// 下拉刷新入口：重读本机存储 + 重查通知权限。
-    /// 规范 2026-08-05 修订：五个根屏一律做下拉刷新，纯本机数据也做（重读本机最新）——
-    /// 「拉一下看看最新」是肌肉记忆，不按数据来源区别对待。服务端有接口后这里改成补拉。
+    /// 下拉刷新入口（非 async 调用点用这个，比如别处主动触发一次同步）。
     func reload() {
-        load()
         refreshAuthorization()
-        // 冷启动后小组件快照可能还是上次会话的 —— 重读时顺手刷一份。
+        Task { await self.sync() }
+    }
+
+    /// 下拉刷新的 async 版：`.refreshable` 要 await 到真的拉完，
+    /// 否则转圈立刻消失，用户以为没刷新。
+    func reloadAsync() async {
+        refreshAuthorization()
+        await sync()
+    }
+
+    // MARK: 服务端同步
+
+    /// 正在同步。只用来防并发重入（下拉刷新连点、启动与首次进页面撞一起）。
+    private var syncing = false
+
+    /// 拉增量 → 合并 → 补推本地未推送的改动与删除。
+    ///
+    /// **任何一步失败都不动本地数据**：断网时提醒必须照常能用，
+    /// 把列表清空或回滚成服务端旧值都是不可接受的（比不同步更糟）。
+    func sync() async {
+        guard !syncing else { return }
+        syncing = true
+        defer { syncing = false }
+
+        // ① 先补推：本地的改动要先上去，免得紧接着拉下来的服务端旧值把它盖了。
+        await pushPending()
+
+        // ② 拉增量并合并。
+        let since = ReminderCache.lastSyncMs
+        guard let page = await HTTPService.shared.fetchReminders(since: since) else { return }
+        let merged = ReminderMerge.apply(local: items,
+                                         serverItems: page.items,
+                                         serverTombs: page.deleted)
+        ReminderCache.lastSyncMs = page.synced_at_ms
+        applyMerged(merged)
+    }
+
+    /// 合并结果落地：存缓存 + 整体重排通知 + 刷角标与小组件。
+    /// 单独一个方法是因为「拿到新数据之后要做的四件事」谁都不能漏，漏一件就是个隐蔽 bug。
+    private func applyMerged(_ merged: [UmbraReminder]) {
+        items = merged.sorted { $0.at < $1.at }
+        ReminderCache.save(items)
+        rescheduleAll()
+        refreshBadge()
         UmbraWidgetBridge.syncReminders(items)
     }
 
-    private func load() {
-        guard let d = UserDefaults.standard.data(forKey: key),
-              let list = try? JSONDecoder().decode([UmbraReminder].self, from: d) else { return }
-        items = list.sorted { $0.at < $1.at }
-    }
-
-    private func persist() {
-        items.sort { $0.at < $1.at }
-        if let d = try? JSONEncoder().encode(items) {
-            UserDefaults.standard.set(d, forKey: key)
+    /// 把本地攒下的改动与删除推上去。推成功才清 dirty / 清墓碑 ——
+    /// 推失败就留着，下次同步继续试（断网期间改的东西不能丢）。
+    private func pushPending() async {
+        for (id, ms) in ReminderCache.pendingTombs() {
+            if await HTTPService.shared.deleteReminder(id: id, at: ms) {
+                ReminderCache.removeTomb(id: id)
+            }
         }
-        // 提醒一变就同步中号小组件的「今天」快照 —— 小组件只读这份，不自己算。
+        for r in items where r.dirty {
+            guard let resp = await HTTPService.shared.putReminder(r.dto) else { continue }
+            guard let i = items.firstIndex(where: { $0.id == r.id }) else { continue }
+            if resp.applied {
+                items[i].dirty = false
+            } else {
+                // 服务端那份更新（别的端刚改过）→ 用它覆盖本地，别再反复推一个必输的版本。
+                items[i] = UmbraReminder(dto: resp.reminder)
+            }
+        }
+        ReminderCache.save(items)
+    }
+
+    /// 本地写操作的统一收尾：盖时间戳、标 dirty、落缓存、重排、刷角标，最后异步推。
+    /// 所有 save/delete/toggle/snooze 都走它 —— 少做一步就会出现「改了没同步」这类幽灵问题。
+    private func commit(_ r: UmbraReminder) {
+        var v = r
+        v.updatedAtMs = Date.umbraNowMs
+        v.dirty = true
+        if let i = items.firstIndex(where: { $0.id == v.id }) { items[i] = v } else { items.append(v) }
+        items.sort { $0.at < $1.at }
+        ReminderCache.save(items)
+        if v.done { cancel(id: v.id) } else { schedule(v) }
+        refreshBadge()
         UmbraWidgetBridge.syncReminders(items)
+        Task { await self.pushPending() }
     }
 
     func item(_ id: String) -> UmbraReminder? { items.first { $0.id == id } }
 
     func save(_ r: UmbraReminder) {
-        if let i = items.firstIndex(where: { $0.id == r.id }) { items[i] = r } else { items.append(r) }
-        persist()
-        schedule(r)
+        commit(r)
     }
 
     func delete(id: String) {
         items.removeAll { $0.id == id }
-        persist()
+        ReminderCache.save(items)
+        // 删除也要留墓碑并推上去：只删本地的话，下次拉取又会把它同步回来。
+        ReminderCache.addTomb(id: id, at: Date.umbraNowMs)
         cancel(id: id)
+        refreshBadge()
+        UmbraWidgetBridge.syncReminders(items)
+        Task { await self.pushPending() }
     }
 
     func toggleDone(id: String) {
-        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
-        items[i].done.toggle()
-        persist()
-        if items[i].done { cancel(id: items[i].id) } else { schedule(items[i]) }
+        guard var r = item(id) else { return }
+        r.done.toggle()
+        commit(r)
     }
 
     /// 「再等 10 分钟」。从**现在**往后推 10 分钟，不是从原时间推 ——
     /// 原时间可能已经过去两小时了，那样推完还是过期的。
     func snooze(id: String, minutes: Int = 10) {
-        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
-        items[i].at = Date().addingTimeInterval(TimeInterval(minutes * 60))
-        items[i].done = false
-        persist()
-        schedule(items[i])
+        guard var r = item(id) else { return }
+        r.at = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        r.done = false
+        commit(r)
     }
 
     /// 「稍后提醒」到指定时刻（长按菜单里的「明早 9 点」这类），其余语义同上。
     func snooze(id: String, until date: Date) {
-        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
-        items[i].at = date
-        items[i].done = false
-        persist()
-        schedule(items[i])
+        guard var r = item(id) else { return }
+        r.at = date
+        r.done = false
+        commit(r)
     }
 
     // MARK: 本地通知
+
+    /// 未完成且已过期/今天到点的条数 —— 与底栏角标、中号小组件同一口径。
+    var pendingCount: Int {
+        items.filter { !$0.done && ($0.group == "已过期" || $0.group == "今天") }.count
+    }
+
+    /// 刷 App 图标角标。
+    ///
+    /// 一期申请了 `.badge` 权限却从没设过角标，图标上永远是干净的。
+    /// 这里在每次数据变化时设一次真实值。
+    /// **已知局限**：App 被系统回收后到点响的那条通知不会顺手把角标加一
+    /// （那要么给每条通知硬编一个数字、要么上 APNs，前者会在用户中途完成几条后变成错的）。
+    /// 下次打开 App 会立刻校正。
+    func refreshBadge() {
+        let n = pendingCount
+        UNUserNotificationCenter.current().setBadgeCount(n) { _ in }
+    }
+
+    /// 把当前所有提醒重排一遍本地通知。
+    /// 见 init 里的注释：预排式规则用完 maxPrescheduled 次就不响了，靠这个续上。
+    func rescheduleAll() {
+        for r in items { schedule(r) }
+    }
 
     func refreshAuthorization() {
         UNUserNotificationCenter.current().getNotificationSettings { s in
@@ -260,7 +365,8 @@ final class ReminderStore: ObservableObject {
     /// 按规则排通知。能用系统重复触发器就用（每天/每周/每月且永不结束），
     /// 其余（工作日、自定义间隔、带结束日期）系统表达不了 —— 预排接下来的
     /// maxPrescheduled 次。代价是很远的将来不响，但 12 次对「每天」也够一轮半月，
-    /// 而且每次打开 App 都会重排一遍，实际用不掉这个上限。
+    /// 而且**每次冷启动和每次同步到新数据都会整体重排**（rescheduleAll），实际用不掉这个上限。
+    /// ⚠️ 这句话一期是假的（谁都没调 schedule），排满 12 次后就静默不响了；靠 rescheduleAll 补上。
     private func scheduleSeries(baseId: String, content: UNMutableNotificationContent,
                                 r: UmbraReminder, shiftMinutes: Int) {
         let cal = Calendar.current
@@ -414,7 +520,7 @@ struct UmbraReminderListView: View {
             }
         }
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .refreshable { store.reload() }
+        .refreshable { await store.reloadAsync() }
         .onAppear { store.refreshAuthorization() }
     }
 
