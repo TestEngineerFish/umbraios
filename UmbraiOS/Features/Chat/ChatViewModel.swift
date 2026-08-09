@@ -521,6 +521,13 @@ class ChatViewModel: ObservableObject {
             // 灵感变更（可能来自任意端）→ 通知灵感页刷新。
             NotificationCenter.default.post(name: .inspirationChanged, object: nil)
 
+        case "reminder_updated", "reminder_deleted":
+            // 提醒变更（秘书在聊天里建/改/撤，或别的端改的）→ **立刻拉一次**。
+            // 不能等下一轮定时同步：用户说「5 分钟后提醒我」，秘书答应了，
+            // 这台手机却还不知道有这条，到点什么也不会响。
+            // 拉完 ReminderStore 会顺手重排本机的本地通知（applyMerged 里做）。
+            ReminderStore.shared.syncNow()
+
         case "job_update":
             handleJobUpdate(msg)
 

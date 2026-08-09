@@ -175,16 +175,35 @@ final class ReminderStore: ObservableObject {
 
     /// 正在同步。只用来防并发重入（下拉刷新连点、启动与首次进页面撞一起）。
     private var syncing = false
+    /// 同步进行中又来了新的同步请求。**不能直接丢掉**：秘书在聊天里建提醒时，
+    /// 广播往往紧跟在别的同步后面到达，直接丢就等于这条提醒要等下一轮定时同步
+    /// ——而「5 分钟后提醒我」根本等不到。这里记一笔，跑完再补一轮。
+    private var resyncRequested = false
 
     /// 拉增量 → 合并 → 补推本地未推送的改动与删除。
     ///
-    /// **任何一步失败都不动本地数据**：断网时提醒必须照常能用，
-    /// 把列表清空或回滚成服务端旧值都是不可接受的（比不同步更糟）。
+    /// 同步中再调只会记一笔待办并立刻返回，等当前这轮跑完自动补跑（不丢请求）。
     func sync() async {
-        guard !syncing else { return }
+        guard !syncing else { resyncRequested = true; return }
         syncing = true
         defer { syncing = false }
+        repeat {
+            resyncRequested = false
+            await syncOnce()
+        } while resyncRequested
+    }
 
+    /// 秘书或别的端改了提醒 → 立刻拉一次，别等下一轮定时同步。
+    /// 非 async 的调用点（WS 事件回调）用这个。
+    func syncNow() {
+        Task { await self.sync() }
+    }
+
+    /// 一轮实际的同步。
+    ///
+    /// **任何一步失败都不动本地数据**：断网时提醒必须照常能用，
+    /// 把列表清空或回滚成服务端旧值都是不可接受的（比不同步更糟）。
+    private func syncOnce() async {
         // ① 先补推：本地的改动要先上去，免得紧接着拉下来的服务端旧值把它盖了。
         await pushPending()
 
