@@ -131,6 +131,34 @@ struct Inspiration: Codable, Identifiable {
     let source_channel: String?
     let created_at: String?
     let updated_at: String?
+
+    // 下面四个都是 **optional**：服务端现在一定会给，但连到旧版服务端时字段是缺的，
+    // 非 optional 会让 JSONDecoder 整条解码失败 —— 整个灵感列表变空白，
+    // 而用户只会看到「没有灵感」，完全看不出是版本不匹配。宁可这几栏不显示。
+    /// pending 待补整理 / done 已整理 / failed 整理失败
+    let organize_status: String?
+    /// 轻调研纪要（Markdown）。没查过是空串。
+    let research: String?
+    /// idle / queued / running / done / failed
+    let research_status: String?
+    let research_at: String?
+
+    var organizeState: String { organize_status ?? "done" }
+    var researchState: String { research_status ?? "idle" }
+    var researchText: String { research ?? "" }
+    /// 排队中或正在跑 —— 详情页据此决定要不要开轮询盯进度。
+    var researchInFlight: Bool { researchState == "queued" || researchState == "running" }
+
+    /// 列表/详情显示用的标题。秘书的整理是异步补的，补上之前 title 是空的，
+    /// 这时候拿原文前 20 字顶着，比显示「（还没有标题）」有用得多 ——
+    /// 用户刚记完就看到自己写的东西，才知道确实记下了。
+    var displayTitle: String {
+        let t = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !t.isEmpty { return t }
+        let body = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "\n", with: " ")
+        return body.count <= 20 ? body : String(body.prefix(20)) + "…"
+    }
 }
 
 // 工作区：AI 写文件的落地目录。手机上**只读**（新增/删除/打开位置都在电脑上做）。

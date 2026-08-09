@@ -147,8 +147,14 @@ extension UmbraShared {
         let df = DateFormatter()
         df.locale = Locale(identifier: "en_US_POSIX")
         df.timeZone = TimeZone(secondsFromGMT: 0)
+        // 带**时区偏移**的那两条是给 Python `datetime.isoformat()` 用的：
+        // 它吐 6 位小数秒 +「+00:00」（如 2026-08-08T15:32:42.123456+00:00），
+        // 而 ISO8601DateFormatter 的 .withFractionalSeconds 只保证认 3 位——
+        // 上面两行会双双落空，掉到这里。没有带偏移的格式的话就彻底解不出，
+        // 界面上会原样显示一串时间戳（灵感的 research_at 踩过）。
         for fmt in ["yyyy-MM-dd HH:mm:ss.SSSSSS", "yyyy-MM-dd HH:mm:ss",
-                    "yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss"] {
+                    "yyyy-MM-dd'T'HH:mm:ss.SSSSSS", "yyyy-MM-dd'T'HH:mm:ss",
+                    "yyyy-MM-dd'T'HH:mm:ss.SSSSSSXXXXX", "yyyy-MM-dd'T'HH:mm:ssXXXXX"] {
             df.dateFormat = fmt
             if let d = df.date(from: raw) { return d }
         }

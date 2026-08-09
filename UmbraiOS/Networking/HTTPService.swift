@@ -144,11 +144,23 @@ class HTTPService {
         }
     }
 
+    /// 新增一条灵感。`research: true` = 顺便让秘书查一查（默认不查）。
+    /// 服务端**立刻返回**，标题/标签由后台补 —— 这里不用等，也别加 loading 遮罩。
     @discardableResult
-    func createInspiration(raw: String, title: String, summary: String, tags: [String]) async -> Bool {
+    func createInspiration(raw: String, title: String, summary: String,
+                           tags: [String], research: Bool = false) async -> Bool {
         guard let url = URL(string: "\(baseUrl)/inspirations") else { return false }
-        let body: [String: Any] = ["raw": raw, "title": title, "summary": summary, "tags": tags]
+        let body: [String: Any] = ["raw": raw, "title": title, "summary": summary,
+                                   "tags": tags, "research": research]
         return await sendJSON(url, method: "POST", body: body)
+    }
+
+    /// 「帮我查查」：把这条排进调研队列。只排队不等结果 —— 一轮调研几十秒，
+    /// HTTP 上干等必然超时。进度靠列表轮询把 research_status 拉回来。
+    @discardableResult
+    func requestInspirationResearch(id: Int) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/inspirations/\(id)/research") else { return false }
+        return await sendJSON(url, method: "POST", body: nil)
     }
 
     @discardableResult

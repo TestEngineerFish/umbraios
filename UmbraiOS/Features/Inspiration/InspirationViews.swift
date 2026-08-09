@@ -160,7 +160,10 @@ struct UmbraInspirationListView: View {
         } label: {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .top, spacing: UmbraMetric.sp3) {
-                    Text(i.title.isEmpty ? "（还没有标题）" : i.title)
+                    // 标题空着时用原文前 20 字顶着（displayTitle）——
+                    // 手动记的条目要等后台补整理，这几秒里显示「（还没有标题）」
+                    // 会让人以为没记上。
+                    Text(i.displayTitle)
                         .font(UmbraFont.sans(16, .w560))
                         .foregroundColor(UmbraColor.text)
                         .lineSpacing(16 * 0.4)
@@ -178,6 +181,9 @@ struct UmbraInspirationListView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
 
                 HStack(spacing: 6) {
+                    // 后台正在补标题/标签时给一个轻提示，免得用户以为标签功能坏了。
+                    if i.organizeState == "pending" { softChip("整理中") }
+                    if i.researchInFlight { softChip("调研中") }
                     ForEach(i.tags, id: \.self) { t in
                         Text(t)
                             .font(UmbraFont.sans(11.5, .w400))
@@ -233,6 +239,17 @@ struct UmbraInspirationListView: View {
                 Label("删除", systemImage: "trash")
             }
         }
+    }
+
+    /// 「整理中 / 调研中」这类进行时提示。刻意用 faint 字 + chip 底：
+    /// 它是状态说明，不是标签，不该和用户自己打的标签抢注意力。
+    private func softChip(_ text: String) -> some View {
+        Text(text)
+            .font(UmbraFont.sans(11.5, .w400))
+            .foregroundColor(UmbraColor.faint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 2)
+            .background(Capsule().fill(UmbraColor.chip))
     }
 
     private func statusBadge(_ s: String) -> some View {
@@ -357,7 +374,28 @@ struct UmbraInspirationDetailView: View {
                 }
             }
         }
-        .onAppear { Task { await insp.load() } }
+        // 只在「有活儿在跑」时开轮询。主渠道其实是 WS 的 inspiration_updated
+        // （ChatViewModel 收到后发 .inspirationChanged，VM 就地重载），
+        // 轮询是**兜底** —— socket 断了或恰好在重连时，用户会干等一个几十秒的调研
+        // 却什么都不动。没活儿在跑的时候常开轮询纯属浪费电，所以按需开关。
+        .onAppear {
+            Task { await insp.load() }
+            if item?.researchInFlight == true || item?.organizeState == "pending" {
+                insp.startPolling()
+            }
+        }
+        // 两参数版是 iOS 17 起的写法（工程 target 17.0），别照着老文件改回单参数版——
+        // 那个在 17 上是 deprecated。
+        .onChange(of: watching) { _, now in
+            if now { insp.startPolling() } else { insp.stopPolling() }
+        }
+        .onDisappear { insp.stopPolling() }
+    }
+
+    /// 有没有后台活儿在跑（调研排队/进行中，或标题还没补上）。
+    private var watching: Bool {
+        guard let i = item else { return false }
+        return i.researchInFlight || i.organizeState == "pending"
     }
 
     private var allTags: [String] {
@@ -402,7 +440,7 @@ struct UmbraInspirationDetailView: View {
         let (label, bg, fg) = UmbraInspStatus.chrome(i.status)
 
         VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
-            Text(i.title.isEmpty ? "（还没有标题）" : i.title)
+            Text(i.displayTitle)
                 .font(UmbraFont.sans(23, .w600))
                 .foregroundColor(UmbraColor.text)
                 .lineSpacing(23 * 0.4)
@@ -437,8 +475,19 @@ struct UmbraInspirationDetailView: View {
                 )
         }
 
-        // 秘书整理是异步补的，没补上就不画这一节。
-        if !i.summary.isEmpty {
+        // 秘书整理是异步补的。**正在补的时候要说一句**：手动记完立刻进详情，
+        // 这一节空着会让人以为没在整理，转头就手动去填标题了。
+        if i.summary.isEmpty && i.organizeState == "pending" {
+            section("秘书整理") {
+                HStack(spacing: 9) {
+                    ProgressView().scaleEffect(0.8).tint(UmbraColor.orange)
+                    Text("秘书正在补标题和标签…")
+                        .font(UmbraFont.sans(14, .w400))
+                        .foregroundColor(UmbraColor.muted)
+                    Spacer(minLength: 0)
+                }
+            }
+        } else if !i.summary.isEmpty {
             section("秘书整理") {
                 Text(i.summary)
                     .font(UmbraFont.sans(15, .w400))
@@ -450,6 +499,8 @@ struct UmbraInspirationDetailView: View {
                     .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.orangeSoft))
             }
         }
+
+        researchSection(i)
 
         section("标签") {
             if i.tags.isEmpty {
@@ -472,6 +523,84 @@ struct UmbraInspirationDetailView: View {
                 }
             }
         }
+    }
+
+    // MARK: 调研
+    //
+    // 四个状态各画各的，**不合并成一个「有内容就显示」**：
+    // 「还没查过」和「查了但失败了」对用户是完全不同的两件事，前者该给按钮，
+    // 后者该说清楚为什么、再给重试。合成一个的话失败会静默成「没查过」。
+    @ViewBuilder
+    private func researchSection(_ i: Inspiration) -> some View {
+        section("秘书调研") {
+            switch i.researchState {
+            case "queued", "running":
+                HStack(spacing: 9) {
+                    ProgressView().scaleEffect(0.8).tint(UmbraColor.orange)
+                    Text(i.researchState == "queued" ? "排队中，马上开始…" : "正在查，通常几十秒。可以先去别处，回来再看。")
+                        .font(UmbraFont.sans(14, .w400))
+                        .foregroundColor(UmbraColor.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .padding(13)
+                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+
+            case "done" where !i.researchText.isEmpty:
+                VStack(alignment: .leading, spacing: 10) {
+                    // 服务端产出的是 Markdown（要点 + 链接），直接复用聊天那套渲染器。
+                    UmbraMarkdownText(raw: i.researchText, size: 15)
+                        .textSelection(.enabled)
+                    HStack(spacing: 8) {
+                        Text(i.research_at.map { "查于 " + UmbraTime.relative($0) } ?? "")
+                            .font(UmbraFont.sans(11.5, .w400))
+                            .foregroundColor(UmbraColor.faint)
+                        Spacer(minLength: 0)
+                        Button("重新查一次") { research(i) }
+                            .font(UmbraFont.sans(12.5, .w560))
+                            .tint(UmbraColor.orange)
+                    }
+                }
+                .padding(13)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+                .overlay(
+                    RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                        .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
+                )
+
+            case "failed":
+                VStack(alignment: .leading, spacing: 9) {
+                    // 失败原因是服务端写进 research 字段的（没配搜索 key？模型限流？）——
+                    // 原样显示，别翻译成「出错了」这种等于没说的话。
+                    Text(i.researchText.isEmpty ? "调研没能完成。" : i.researchText)
+                        .font(UmbraFont.sans(14, .w400))
+                        .foregroundColor(UmbraColor.muted)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    UmbraButton(title: "再试一次", kind: .secondary, height: 40) { research(i) }
+                }
+                .padding(13)
+                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+                .overlay(
+                    RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                        .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
+                )
+
+            default:
+                VStack(alignment: .leading, spacing: 9) {
+                    Text("让秘书上网摸个底：已经有什么现成的、坑在哪、值不值得做。几条要点加参考链接，不写长报告。")
+                        .font(UmbraFont.sans(13.5, .w400))
+                        .foregroundColor(UmbraColor.muted)
+                        .lineSpacing(13.5 * 0.5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    UmbraButton(title: "帮我查查", kind: .secondary, height: 40) { research(i) }
+                }
+            }
+        }
+    }
+
+    private func research(_ i: Inspiration) {
+        Task { await insp.requestResearch(id: i.id) }
+        router.showToast("已交给秘书，查完会更新到这里")
     }
 
     @ViewBuilder
@@ -531,6 +660,7 @@ struct UmbraInspirationEditView: View {
     @State private var title = ""
     @State private var tagsText = ""
     @State private var loaded = false
+    @State private var research = false
 
     private var existing: Inspiration? {
         guard let id else { return nil }
@@ -550,7 +680,7 @@ struct UmbraInspirationEditView: View {
     var body: some View {
         UmbraScreen {
             UmbraInspForm(raw: $raw, title: $title, tagsText: $tagsText,
-                          allTags: allTags, isNew: id == nil)
+                          allTags: allTags, isNew: id == nil, research: $research)
         }
         .navigationTitle(id == nil ? "记一条灵感" : "编辑灵感")
         .navigationBarTitleDisplayMode(.inline)
@@ -588,10 +718,12 @@ struct UmbraInspirationEditView: View {
         if let e = existing {
             Task { await insp.update(id: e.id, raw: body, title: name, tags: tags, note: e.summary) }
         } else {
-            Task { await insp.create(raw: body, title: name, tags: tags, note: "") }
+            Task { await insp.create(raw: body, title: name, tags: tags, note: "", research: research) }
         }
         router.back()
-        router.showToast("已保存")
+        // 没填标题的话，后台会补 —— 明说一句，免得用户回到列表看见原文当标题以为存错了。
+        router.showToast(research ? "已记下，秘书这就去查"
+                                  : (name.isEmpty ? "已记下，秘书稍后补标题" : "已保存"))
     }
 }
 
@@ -604,6 +736,9 @@ struct UmbraInspForm: View {
     /// 现有全部标签，供 chips 点选（交接清单：标签输入框上方列已有标签）。
     let allTags: [String]
     let isNew: Bool
+    /// 「顺便查一查」。只在新建时出现——改一条已有灵感时想查，
+    /// 详情页有「帮我查查」按钮，在这儿再放一个只会让人搞不清点了会不会重查。
+    var research: Binding<Bool>? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
@@ -654,8 +789,34 @@ struct UmbraInspForm: View {
                 }
             }
 
+            if isNew, let research { researchToggle(research) }
         }
         .padding(UmbraMetric.pagePadX)
+    }
+
+    /// **默认关**（2026-08-08 与用户确认）：每条都自动查会烧 token，还会把灵感列表
+    /// 变成一堆没人读的半成品报告。所以这里是「想查再勾」，不是「不想查再取消」。
+    private func researchToggle(_ on: Binding<Bool>) -> some View {
+        HStack(alignment: .top, spacing: UmbraMetric.sp3) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("顺便查一查")
+                    .font(UmbraFont.sans(15.5, .w560))
+                    .foregroundColor(UmbraColor.text)
+                Text("记完之后让秘书上网摸个底，几条要点加参考链接。也可以之后在详情里随时点。")
+                    .font(UmbraFont.sans(12.5, .w400))
+                    .foregroundColor(UmbraColor.muted)
+                    .lineSpacing(12.5 * 0.5)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Spacer(minLength: 0)
+            UmbraSwitch(on: on.wrappedValue) { on.wrappedValue.toggle() }
+        }
+        .padding(13)
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .overlay(
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
+        )
     }
 
     @ViewBuilder

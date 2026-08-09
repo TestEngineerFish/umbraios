@@ -49,9 +49,36 @@ class InspirationsViewModel: ObservableObject {
         Task { await load() }
     }
 
-    func create(raw: String, title: String, tags: [String], note: String) async {
-        await HTTPService.shared.createInspiration(raw: raw, title: title, summary: note, tags: tags)
+    func create(raw: String, title: String, tags: [String], note: String,
+                research: Bool = false) async {
+        await HTTPService.shared.createInspiration(raw: raw, title: title, summary: note,
+                                                   tags: tags, research: research)
         await load()
+    }
+
+    /// 让秘书去查一查这条灵感。**乐观地先把本地状态推到 queued**：
+    /// 接口返回和下一次轮询之间有几秒空窗，不先动的话用户点完按钮什么反应都没有，
+    /// 只会再点一次。真实状态下一轮轮询就会覆盖回来。
+    func requestResearch(id: Int) async {
+        markResearch(id: id, status: "queued")
+        let ok = await HTTPService.shared.requestInspirationResearch(id: id)
+        if !ok {
+            // 没送达就把乐观状态收回去，别让界面一直显示「排队中」骗人。
+            markResearch(id: id, status: "idle")
+            return
+        }
+        await load()
+    }
+
+    private func markResearch(id: Int, status: String) {
+        guard let idx = list.firstIndex(where: { $0.id == id }) else { return }
+        let o = list[idx]
+        list[idx] = Inspiration(
+            id: o.id, raw: o.raw, title: o.title, summary: o.summary, tags: o.tags,
+            status: o.status, source_channel: o.source_channel,
+            created_at: o.created_at, updated_at: o.updated_at,
+            organize_status: o.organize_status, research: o.research,
+            research_status: status, research_at: o.research_at)
     }
 
     func update(id: Int, raw: String, title: String, tags: [String], note: String) async {
