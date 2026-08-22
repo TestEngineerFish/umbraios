@@ -375,7 +375,7 @@ struct UmbraVaultHomeView: View {
             }
         }
         .padding(13)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.warningSoft))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.warningSoft))
     }
 
     /// 主密码错误 / 连接问题（砖红）。第三段按问题类型给不同按钮。
@@ -406,7 +406,7 @@ struct UmbraVaultHomeView: View {
             }
         }
         .padding(13)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.dangerSoft))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.dangerSoft))
     }
 
     private func clearPasswordError() {

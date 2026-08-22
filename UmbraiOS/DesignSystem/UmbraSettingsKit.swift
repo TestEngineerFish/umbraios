@@ -108,9 +108,9 @@ struct UmbraHeroCard: View {
             Spacer(minLength: 0)
         }
         .padding(14)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
         .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
         )
     }
@@ -133,9 +133,9 @@ struct UmbraSettingSectionView: View {
                     rowView(row)
                 }
             }
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
             .overlay(
-                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                     .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
             )
             .padding(.horizontal, UmbraMetric.pagePadX)

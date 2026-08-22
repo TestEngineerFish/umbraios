@@ -176,9 +176,9 @@ struct UmbraTaskListView: View {
             }
             .padding(.horizontal, 13)
             .padding(.vertical, UmbraMetric.sp4)
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
             .overlay(
-                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                     .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
             )
             .contentShape(Rectangle())
@@ -515,7 +515,7 @@ struct UmbraTaskDetailView: View {
             }
         }
         .padding(13)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.dangerSoft))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.dangerSoft))
         .padding(UmbraMetric.pagePadX)
     }
 

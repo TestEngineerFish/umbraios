@@ -199,9 +199,9 @@ struct UmbraInspirationListView: View {
                 }
             }
             .padding(13)
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
             .overlay(
-                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                     .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
             )
             .contentShape(Rectangle())
@@ -468,9 +468,9 @@ struct UmbraInspirationDetailView: View {
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(13)
-                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
                 .overlay(
-                    RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                    RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                         .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
                 )
         }
@@ -496,7 +496,7 @@ struct UmbraInspirationDetailView: View {
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(13)
-                    .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.orangeSoft))
+                    .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.orangeSoft))
             }
         }
 
@@ -543,7 +543,7 @@ struct UmbraInspirationDetailView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .padding(13)
-                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
 
             case "done" where !i.researchText.isEmpty:
                 VStack(alignment: .leading, spacing: 10) {
@@ -562,9 +562,9 @@ struct UmbraInspirationDetailView: View {
                 }
                 .padding(13)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
                 .overlay(
-                    RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                    RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                         .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
                 )
 
@@ -579,9 +579,9 @@ struct UmbraInspirationDetailView: View {
                     UmbraButton(title: "再试一次", kind: .secondary, height: 40) { research(i) }
                 }
                 .padding(13)
-                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+                .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
                 .overlay(
-                    RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                    RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                         .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
                 )
 
@@ -812,9 +812,9 @@ struct UmbraInspForm: View {
             UmbraSwitch(on: on.wrappedValue) { on.wrappedValue.toggle() }
         }
         .padding(13)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
         .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
         )
     }

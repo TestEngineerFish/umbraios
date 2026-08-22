@@ -173,9 +173,9 @@ struct UmbraAutoFillDemoView: View {
                     .frame(minHeight: 52)
                 }
             }
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
             .overlay(
-                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                     .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
             )
         }

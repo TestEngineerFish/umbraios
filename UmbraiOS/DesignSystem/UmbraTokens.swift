@@ -201,9 +201,15 @@ enum UmbraMetric {
     // 规则：**胶囊只给按钮、分段控件、tab bar**；输入框统一 12、不用胶囊；
     // 卡片 18 且描边转 borderSoft；操作表/弹窗 26–28。
     static let radiusControl: CGFloat = 10    // 小控件（图标块、行内徽标）
-    static let radiusCard: CGFloat = 18       // 卡片 / 分组列表（一期 14）
+    // 卡片 18。一期是 14，v2 液态玻璃改版提到 18。
+    // ⚠️ 这个值曾经名存实亡：token 写着 18，但 41 个调用点全都写的是 `radiusCard - 2`，
+    // 实际渲染出来是 16 —— 谁也没在这个文件里看出问题。已经全部改回直接用 radiusCard。
+    // 以后要调卡片圆角改这一行就够了，别再在调用点上做减法。
+    static let radiusCard: CGFloat = 18
     static let radiusInput: CGFloat = 12      // 单行 / 多行 / 搜索输入框
-    static let radiusSwipeRow: CGFloat = 16   // 左滑操作行
+    // 左滑操作行 16。注意：目前 UmbraSwipeRow 组件本身是零引用的（各页一律走系统
+    // .swipeActions），所以这个 token 暂时只在那个组件里生效。
+    static let radiusSwipeRow: CGFloat = 16
     static let radiusSheet: CGFloat = 26      // 操作表 / 底部面板（弹窗 28）
     static let radiusPill: CGFloat = 999
     /// 过程截图专用，交接文档点名 8px。

@@ -419,9 +419,9 @@ struct UmbraChatThreadView: View {
             }
         }
         .frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
         .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
         )
     }
@@ -480,9 +480,9 @@ struct UmbraChatThreadView: View {
         .padding(.horizontal, 13)
         .padding(.vertical, UmbraMetric.sp4)
         .frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
         .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
         )
     }
@@ -532,9 +532,9 @@ struct UmbraChatThreadView: View {
         .padding(.horizontal, 13)
         .padding(.vertical, UmbraMetric.sp4)
         .frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
         .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
         )
     }
@@ -580,11 +580,11 @@ struct UmbraChatThreadView: View {
             .padding(.vertical, UmbraMetric.sp4)
         }
         .frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
         // 先裁剪（头部是整块实底，不裁会盖住圆角）再描边。
-        .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(head.1, lineWidth: UmbraMetric.borderW)
         )
     }
@@ -630,9 +630,9 @@ struct UmbraChatThreadView: View {
         .padding(.horizontal, 13)
         .padding(.vertical, UmbraMetric.sp4)
         .frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
         .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(UmbraColor.dangerSoft, lineWidth: UmbraMetric.borderW)
         )
     }

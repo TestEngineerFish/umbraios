@@ -4,7 +4,7 @@
 // 作答状态存在 ChatBlock.QuestionBlock 里而不是这个 View 里：卡片会随消息列表复用，
 // 状态放 @State 的话滚出屏幕再滚回来就丢了。
 //
-// 取值照设计稿：卡宽 300、圆角 12、头部 11/13 内边距、选项行最小高 44 / 内边距 9-12 /
+// 取值照设计稿：卡宽 300、圆角走 radiusCard（18）、头部 11/13 内边距、选项行最小高 44 / 内边距 9-12 /
 // 圆角 10 / 描边 1.5、选中标记 20 且多选是 6 圆角、单选是全圆。
 //
 // 「必答未答时提交键置灰并给一行原因，不弹 alert」—— 这条是设计稿明写的，别改成弹窗。
@@ -39,11 +39,11 @@ struct UmbraQuestionCard: View {
             .padding(13)
         }
         .frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
         // 先裁剪再描边：反过来的话描边会被自己裁掉一半，圆角处看起来比直边细。
-        .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous))
+        .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(block.done ? UmbraColor.successSoft : UmbraColor.orangeSoft, lineWidth: UmbraMetric.borderW)
         )
     }

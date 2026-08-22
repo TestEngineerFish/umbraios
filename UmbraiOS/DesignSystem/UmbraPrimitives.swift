@@ -268,7 +268,10 @@ struct UmbraSegmentedControl<T: Hashable>: View {
                     withAnimation(UmbraMotion.slider) { selection = item.value }
                 } label: {
                     HStack(spacing: 6) {
-                        Text(item.label).font(UmbraFont.sans(13.5, .w560))
+                        // 选中 600 / 未选中 560 —— 设计移交包 SegmentedControl.dc.html 的
+                        // `weight: s.active ? '600' : '560'`。之前两态都是 560，只靠颜色区分，
+                        // 而「状态永不只靠颜色表意」是项目硬规则，字重这一档不能省。
+                        Text(item.label).font(UmbraFont.sans(13.5, on ? .w600 : .w560))
                         if let c = item.count {
                             Text("\(c)").font(UmbraFont.mono(12)).opacity(0.7)
                         }
@@ -736,7 +739,8 @@ struct UmbraSwipeRow<Content: View>: View {
                         }
                 )
         }
-        .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusControl, style: .continuous))
+        // 左滑行有自己的圆角档（16），不是小控件的 10。之前这里取错了 token。
+        .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusSwipeRow, style: .continuous))
     }
 
     private func close() {

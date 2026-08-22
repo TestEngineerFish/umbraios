@@ -84,9 +84,9 @@ struct UmbraMeHomeView: View {
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 16)
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
             .overlay(
-                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                     .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
             )
             .contentShape(Rectangle())
@@ -355,9 +355,9 @@ struct UmbraProfileView: View {
                         .scrollContentBackground(.hidden)
                         .padding(9)
                         .frame(minHeight: 230)
-                        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous).fill(UmbraColor.card))
+                        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
                         .overlay(
-                            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard - 2, style: .continuous)
+                            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
                         )
 
