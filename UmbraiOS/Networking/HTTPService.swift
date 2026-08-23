@@ -34,13 +34,20 @@ class HTTPService {
     }
 
     // 清空指定会话历史（默认主会话；传 device:<id> 清某设备房间）。
+    //
+    // 带上 client_id：服务端会把它原样放进 history_cleared 广播的 by 字段。
+    // 广播是发给所有在线端的，本端也会收到自己这一条 —— 不带 id 的话本端分不出
+    // 「别人清的」还是「我自己清的」，就会给自己插一行「别的端清空了这段历史」。
     func clearHistory(conversation: String = "assistant") async {
         guard let url = URL(string: "\(baseUrl)/history/clear") else { return }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
-        req.httpBody = try? JSONSerialization.data(withJSONObject: ["conversation": conversation])
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "conversation": conversation,
+            "client_id": NetworkConfig.shared.clientId,
+        ])
         _ = try? await URLSession.shared.data(for: req)
     }
 

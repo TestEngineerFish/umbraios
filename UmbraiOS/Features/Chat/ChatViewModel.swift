@@ -606,7 +606,15 @@ class ChatViewModel: ObservableObject {
             s.hasMoreHistory = false
             s.loaded = true
             previews[conv] = nil
-            s.blocks.append(.note(id: UUID(), text: "电脑端清空了这段聊天历史"))
+            // 这一行以前有两个毛病，一起修了：
+            //   1. 无条件插。广播发给所有在线端，本端自己点「清空」也会收到，
+            //      结果是自己刚清完，聊天里立刻冒出一句「别的端清空了」——自己骗自己。
+            //      现在拿广播里的 by 跟本端 clientId 比（服务端回填，见 app.py /history/clear）。
+            //   2. 文案写死「电脑端」。清空的可能是另一台手机、也可能是网页端，
+            //      服务端只告诉我们「不是你」，说不出是谁，所以不再瞎猜具体是哪一端。
+            if msg.clearedBy != NetworkConfig.shared.clientId {
+                s.blocks.append(.note(id: UUID(), text: "其它端清空了这段聊天历史"))
+            }
             reflect(conv)
 
         case "confirm_resolved":

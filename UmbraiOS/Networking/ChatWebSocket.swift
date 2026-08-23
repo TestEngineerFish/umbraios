@@ -268,6 +268,12 @@ struct ChatMessage {
     // 会话归属（job_update 带 'device:<id>'；无则视为主会话 'assistant'）
     var conversation: String? { json["conversation"] as? String }
 
+    /// history_cleared：发起这次清空的客户端 id（服务端把 /history/clear 收到的
+    /// client_id 原样回填）。广播是发给**所有**在线端的，本端也会收到自己那一条 ——
+    /// 拿它跟 NetworkConfig.shared.clientId 比一下，才知道该不该插「别的端清空了」那行提示。
+    /// 老服务端不带这个字段，取到 nil，此时一律当成别人清的（宁可多一行提示）。
+    var clearedBy: String? { json["by"] as? String }
+
     // error
     var errorMessage: String? { json["message"] as? String }
 }
