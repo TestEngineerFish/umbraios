@@ -99,11 +99,17 @@ enum UmbraColor {
     static let userBubble = dyn(light: "EAF1F7", dark: "1E2A35")
     // 设备（非秘书）发来的气泡。在设备会话里，秘书用 card、设备用这一档，
     // 两边都在左侧但颜色不同，一眼分得出是谁说的。
-    static let deviceBubble = dyn(light: "F4F1EA", dark: "302A22")
+    //
+    // 取值改自 F4F1EA / 302A22 → 跟 2026-08-22 那版设计包的 `ios.deviceBubble`。
+    // 这个 token 原本是实现侧自己加的（我们在批次 001 里报过「不在 colors.css 也不在 ios.css」），
+    // 这轮 ClaudeDesign 把它正式收进了稿，并且定了自己的值。既然有正本了就跟正本。
+    static let deviceBubble = dyn(light: "EDEAE4", dark: "2E2A25")
 
     /// toast 上的字色。toast 底板是 --nav（两个主题都是深色），所以字色不跟主题变。
-    /// 这两个值也不在 colors.css 里，是主设计稿 toast 的实测值。
-    static let onNavText = Color(hex: "F5F2EC")
+    /// 原来是从主设计稿 toast 上取的实测值 F5F2EC；2026-08-22 那版稿把它定成了
+    /// `rgba(255,255,255,.92)`，改用半透明白 —— 好处是叠在任何深色底上都自洽，
+    /// 不像固定色号那样换个底就偏色。
+    static let onNavText = Color.white.opacity(0.92)
     /// toast 里「撤销」的字色。深色底上的提亮橙，和 --orange-text 的深色值同源。
     static let onNavAccent = Color(hex: "F0A878")
 
@@ -120,7 +126,9 @@ enum UmbraColor {
     static let glassShadow = dynColor(light: Color(hex: "1F1B16").opacity(0.12),
                                       dark: Color.black.opacity(0.38))
     /// toast 底：深色玻璃胶囊（两个主题都是深色，配 .ultraThinMaterial 使用）。
-    static let toastGlass = Color(hex: "15110E").opacity(0.72)
+    /// 取值改自 15110E@.72 → 稿的 `rgba(28,25,21,.88)`。更不透明是有道理的：
+    /// 吐司要压在任意内容之上，.72 在花哨背景上会透出底下的东西，字就糊了。
+    static let toastGlass = Color(hex: "1C1915").opacity(0.88)
 
     // MARK: 动态色构造
     private static func dyn(light: String, dark: String) -> Color {
@@ -232,8 +240,12 @@ enum UmbraMetric {
     static let radiusSwipeRow: CGFloat = 16
     static let radiusSheet: CGFloat = 26      // 操作表 / 底部面板（弹窗 28）
     static let radiusPill: CGFloat = 999
-    /// 过程截图专用，交接文档点名 8px。
-    static let radiusShot: CGFloat = 8
+    /// 过程截图专用。**8 是桌面的值，iOS 是 12。**
+    /// 设计系统 readme 第 59 行写的是「圆角 8px」，但那句话在桌面语境里；
+    /// `ios.css` 与 `umbra-tokens.json` 的 `ios.radiusShot` 都给的 12（注释：「比卡片小一档」，
+    /// iOS 卡片是 18）。这里是 iOS，取 12。
+    /// （readme 那句没写明是桌面，容易被当成全局规则，已记进台账让 ClaudeDesign 补一句限定。）
+    static let radiusShot: CGFloat = 12
 
     // 边距与行高
     static let pagePadX: CGFloat = 16

@@ -463,6 +463,13 @@ struct UmbraVaultHomeView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // 下拉刷新（2026-08-22 稿的新规则：**iOS 端所有列表都给下拉刷新**，
+        // 包括纯本地的 —— 移动端下拉是肌肉记忆，「这个列表拉不动」本身就是个意外）。
+        //
+        // 保险箱这条下拉做的是**真同步**，不是重读本地：稿里说本地列表下拉即重读本地数据，
+        // 但保险箱的本地数据是 @Published 的，改完界面自己就更新了，重读一遍等于什么都没发生 ——
+        // 用户拉完看不到任何变化，只会觉得坏了。syncNow 才是这里唯一有意义的「刷新」。
+        .refreshable { await store.syncNow() }
         .scrollContentBackground(.hidden)
         .background(UmbraColor.bg)
         .scrollDismissesKeyboard(.interactively)

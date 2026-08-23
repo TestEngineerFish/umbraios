@@ -170,6 +170,10 @@ struct UmbraPhrasesView: View {
             }
         }
         .listStyle(.insetGrouped)
+        // 下拉刷新（2026-08-22 稿：iOS 端所有列表都给）。这里也是拉**真同步**而不是重读本地 ——
+        // 本地数据是 @Published 的，改完界面自己就更新了，重读一遍等于什么都没发生。
+        // 页面上那颗同步按钮保留：下拉是手势入口，按钮是能看见状态（转圈）的那个入口，两者不冲突。
+        .refreshable { await store.sync() }
         .scrollContentBackground(.hidden)
         .background(UmbraColor.bg)
         // 这页没有输入框，键盘避让纯属多余；从编辑页收着键盘弹回来时

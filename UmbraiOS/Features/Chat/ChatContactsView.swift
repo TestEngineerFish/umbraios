@@ -99,10 +99,15 @@ struct UmbraChatContactsView: View {
                         Spacer(minLength: 0)
 
                         if unread {
-                            // 未读用橙色圆点而不是数字：ChatViewModel 只记「有没有未读」
+                            // 未读用圆点而不是数字：ChatViewModel 只记「有没有未读」
                             // （unread 是 Set<String>），编不出一个真实的条数。
                             // 摆一个假数字比不摆更糟。
-                            Circle().fill(UmbraColor.orange).frame(width: 8, height: 8)
+                            //
+                            // 颜色从**橙**改成了**红**（2026-08-22 稿的新硬规则）：
+                            // 「角标一律 --danger 实底 + 白字，橙色只留给主操作 / 当前选中 / 进度三处」。
+                            // 这一条在会话行上尤其成立 —— 秘书那一行的头像本来就是橙的，
+                            // 再顶一颗橙点，两团橙糊在一起，反而看不出「这行有未读」。
+                            Circle().fill(UmbraColor.danger).frame(width: 8, height: 8)
                         } else if let d = dev, !d.online, let seen = d.last_seen {
                             Text("最后在线 \(timeLabel(seen))")
                                 .font(UmbraFont.sans(12, .w400))
