@@ -47,7 +47,12 @@ struct UmbraShell: View {
                 NavigationStack(path: router.pathBinding(tab)) {
                     UmbraRouteView(route: tab.root)
                         .navigationDestination(for: UmbraRoute.self) { route in
+                            // 二级页自己也声明隐藏 tab bar（验收：二级页底部留了一条
+                            // tab bar 高度的空带）。下面栈外那条负责「回到根页立刻显示」，
+                            // 这条负责「推入时连占位一起让出来」—— 两层缺一不可：
+                            // 只留外层，部分系统版本会藏了 bar 却留着它的安全区占位。
                             UmbraRouteView(route: route)
+                                .toolbar(.hidden, for: .tabBar)
                         }
                 }
                 // 底栏只在 Tab 根页显示（设计稿的 showTabBar: stack.length===1）。

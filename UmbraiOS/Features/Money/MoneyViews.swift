@@ -139,7 +139,7 @@ struct UmbraMoneyHomeView: View {
             if let prev = st.prev_expense, prev > 0 {
                 let up = st.expense > prev
                 let pct = Int((Double(abs(st.expense - prev)) / Double(prev) * 100).rounded())
-                UmbraIcon(d: up ? "M12 19V5M6 11l6-6 6 6" : "M12 5v14M6 13l6 6 6-6", size: 14, strokeWidth: 2.2)
+                UmbraIcon(d: up ? "M12,19L12,5M6,11L12,5L18,11" : "M12,5L12,19M6,13L12,19L18,13", size: 14, strokeWidth: 2.2)
                     .foregroundColor(up ? UmbraColor.danger : UmbraColor.success)
                 Text("比上月\(up ? "多" : "少") \(pct)%")
                     .font(UmbraFont.sans(13, .w560))

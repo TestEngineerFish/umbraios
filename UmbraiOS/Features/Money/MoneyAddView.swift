@@ -29,6 +29,7 @@ struct UmbraMoneyAddView: View {
     /// 不挡住的话 onAppear 再跑会把用户正在改的草稿冲掉。
     @State private var seeded = false
     @FocusState private var amountFocused: Bool
+    @FocusState private var noteFocused: Bool
 
     /// 编辑的原条目（身份字段 src / rule_id / batch_id / order_no 要原样带回去）。
     private var editing: MoneyEntryDTO? {
@@ -66,6 +67,23 @@ struct UmbraMoneyAddView: View {
                 }
                 .tint(UmbraColor.muted)
             }
+            // 键盘工具条：decimalPad 打不出运算符，算式的 ＋－×÷ 从这里补。
+            // 只在金额框聚焦时出现 —— 备注框的键盘上挂四个运算符只会让人困惑。
+            ToolbarItemGroup(placement: .keyboard) {
+                if amountFocused {
+                    ForEach(["+", "-", "×", "÷"], id: \.self) { op in
+                        Button(op) { expr += op }
+                            .font(UmbraFont.mono(17, .w560))
+                            .tint(UmbraColor.orangeText)
+                    }
+                }
+                Spacer()
+                Button("完成") {
+                    amountFocused = false
+                    noteFocused = false
+                }
+                .tint(UmbraColor.orange)
+            }
         }
         .onAppear { seed() }
         .umbraWheelPicker(isPresented: $showDatePick, title: "日期", mode: .date, date: $atDate)
@@ -97,9 +115,11 @@ struct UmbraMoneyAddView: View {
                 .font(UmbraFont.sans(12, .w600)).foregroundColor(UmbraColor.faint)
             HStack(alignment: .lastTextBaseline, spacing: 8) {
                 Text("¥").font(UmbraFont.sans(22)).foregroundColor(UmbraColor.muted)
-                // decimalPad 没有运算符，「敲算式」就没法敲 —— 用数字标点键盘。
+                // 纯数字键盘（验收点名：金额不该弹出符号和拼音）。
+                // 算式要用的 ＋－×÷ 放在键盘上方的工具条里（见下面的 keyboard toolbar），
+                // 数字键盘 + 一排运算符，两头都保住。
                 TextField("0.00", text: $expr)
-                    .keyboardType(.numbersAndPunctuation)
+                    .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
                     .font(UmbraFont.mono(38, .w650))
                     .foregroundColor(cents != nil ? UmbraColor.text : UmbraColor.faint)
@@ -118,7 +138,7 @@ struct UmbraMoneyAddView: View {
 
     private var failBanner: some View {
         HStack(alignment: .top, spacing: 9) {
-            UmbraIcon(d: "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M12 8v5M12 16.5v.01", size: 15, strokeWidth: 2)
+            UmbraIcon(d: "M12,3C10.1,3 8.25,3.6 6.71,4.72C5.17,5.84 4.03,7.41 3.44,9.22C2.85,11.03 2.85,12.97 3.44,14.78C4.03,16.59 5.17,18.16 6.71,19.28C8.25,20.4 10.1,21 12,21C13.9,21 15.75,20.4 17.29,19.28C18.83,18.16 19.97,16.59 20.56,14.78C21.15,12.97 21.15,11.03 20.56,9.22C19.97,7.41 18.83,5.84 17.29,4.72C15.75,3.6 13.9,3 12,3M12,8L12,13M12,16.5L12,16.51", size: 15, strokeWidth: 2)
                 .foregroundColor(UmbraColor.danger)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 8) {
@@ -239,7 +259,7 @@ struct UmbraMoneyAddView: View {
             HStack(spacing: 10) {
                 Text("时间").font(UmbraFont.sans(15)).foregroundColor(UmbraColor.text)
                 Spacer()
-                timeChip(icon: "M3.5 5h17v15.5h-17zM3.5 10h17M8 3.5v3M16 3.5v3", label: dateLabel) { showDatePick = true }
+                timeChip(icon: "M3.5,5L20.5,5L20.5,20.5L3.5,20.5ZM3.5,10L20.5,10M8,3.5L8,6.5M16,3.5L16,6.5", label: dateLabel) { showDatePick = true }
                 timeChip(icon: UmbraIconPath.clock, label: clockLabel, mono: true) { showTimePick = true }
             }
             .padding(.horizontal, 14).frame(minHeight: 48)
@@ -251,6 +271,7 @@ struct UmbraMoneyAddView: View {
                     .multilineTextAlignment(.trailing)
                     .font(UmbraFont.sans(14.5))
                     .foregroundColor(UmbraColor.text)
+                    .focused($noteFocused)
             }
             .padding(.horizontal, 14).frame(minHeight: 48)
         }

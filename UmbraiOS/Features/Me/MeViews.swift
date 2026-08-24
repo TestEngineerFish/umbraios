@@ -117,6 +117,9 @@ struct UmbraMeHomeView: View {
                                 chevron: true) { router.go(.setConn) },
                 UmbraSettingRow(label: "通知", chevron: true) { router.go(.setNotify) },
                 UmbraSettingRow(label: "通用", chevron: true) { router.go(.setGeneral) },
+                // 回收站原来只能从保险箱里进（验收点名找不到）。页面本身两区齐全，
+                // 这里给一条正门 —— 通用区（灵感/任务/提醒/记账）不解锁保险箱也能用。
+                UmbraSettingRow(label: "回收站", chevron: true) { router.go(.vaultTrash) },
                 UmbraSettingRow(label: "关于", chevron: true) { router.go(.setAbout) }
             ])
         ]
