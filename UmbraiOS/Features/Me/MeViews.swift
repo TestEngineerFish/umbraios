@@ -97,6 +97,9 @@ struct UmbraMeHomeView: View {
     private var groups: [UmbraSettingSection] {
         [
             UmbraSettingSection(header: "常用", rows: [
+                // 稿 5259 的记账行还带「本月 ¥」和「N 笔待确认」——前者要一次统计请求、
+                // 后者是四期的功能。进「我」就发一次网络请求不值当，先只做干净的入口。
+                UmbraSettingRow(label: "记账", chevron: true) { router.go(.moneyHome) },
                 UmbraSettingRow(label: "常用语", chevron: true) { router.go(.mePhrases) },
                 UmbraSettingRow(label: "工作区", chevron: true) { router.go(.meWorkspace) }
             ]),

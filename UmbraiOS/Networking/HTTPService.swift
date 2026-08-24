@@ -227,6 +227,81 @@ class HTTPService {
         return await sendJSON(url, method: "POST", body: ["all": true])
     }
 
+    // MARK: - Money（记账）
+    //
+    // 字段名照抄服务端 JSON（拍板 D2），DTO 在 Features/Money/MoneySync.swift。
+    // 取数失败一律回 nil 而不是空值 —— 「拉失败了」和「这个月真的没记账」是两回事，
+    // 混成一个值的话断网会被渲染成「这个月还没有记账」（fetchJobs 的同一条教训）。
+
+    /// 分类列表。includeDisabled 只给分类管理页用：停用的要能看见、能开回来。
+    func fetchMoneyCats(includeDisabled: Bool = false) async -> [MoneyCatDTO]? {
+        var components = URLComponents(string: "\(baseUrl)/money/categories")
+        if includeDisabled {
+            components?.queryItems = [URLQueryItem(name: "include_disabled", value: "true")]
+        }
+        return await request(components?.url)
+    }
+
+    /// 改分类（改名 / 停用启用；iOS 一期不管色槽，色槽在 PC 的设置里改）。
+    /// slug 不可改 —— 它是流水指过来的稳定标识。
+    func updateMoneyCat(slug: String, name: String? = nil, enabled: Bool? = nil) async -> MoneyCatDTO? {
+        guard let url = URL(string: "\(baseUrl)/money/categories/\(slug)") else { return nil }
+        var body: [String: Any] = [:]
+        if let name { body["name"] = name }
+        if let enabled { body["enabled"] = enabled }
+        return await sendJSONReturning(url, method: "PATCH", body: body, as: MoneyCatDTO.self)
+    }
+
+    /// 某个月的全部流水（一期界面只看本月，筛选在客户端做 —— 一个月几百条，
+    /// 全量拉回本地过滤，点一下立刻变；服务端的筛选参数留给将来分页用，拍板 D4）。
+    func fetchMoneyEntries(ym: String) async -> MoneyEntriesDTO? {
+        var components = URLComponents(string: "\(baseUrl)/money/entries")
+        components?.queryItems = [
+            URLQueryItem(name: "ym", value: ym),
+            URLQueryItem(name: "limit", value: "1000"),
+        ]
+        return await request(components?.url)
+    }
+
+    /// 记一笔 / 改一笔。服务端逐条 last-write-wins：written=false 表示库里那份更新，
+    /// 调用方要用回来的 entry 对齐本地（同 putReminder 的约定）。
+    func putMoneyEntry(_ dto: MoneyEntryDTO) async -> MoneyPutDTO? {
+        guard let url = URL(string: "\(baseUrl)/money/entries/\(dto.id)") else { return nil }
+        var req = URLRequest(url: url)
+        req.httpMethod = "PUT"
+        for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
+        req.httpBody = try? JSONEncoder().encode(dto)
+        do {
+            let (data, resp) = try await URLSession.shared.data(for: req)
+            if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
+                // 400 基本只有一个原因：金额闸门在客户端被绕过了（cents ≤ 0 之类）。
+                print("[HTTPService] PUT /money/entries/\(dto.id) 返回 HTTP \(http.statusCode)")
+                return nil
+            }
+            return try JSONDecoder().decode(MoneyPutDTO.self, from: data)
+        } catch {
+            print("[HTTPService] PUT /money/entries/\(dto.id) 失败：\(error.localizedDescription)")
+            return nil
+        }
+    }
+
+    /// 删流水 = 移进回收站（保留 30 天，能在回收站页恢复）。
+    @discardableResult
+    func deleteMoneyEntries(_ ids: [String]) async -> Bool {
+        guard !ids.isEmpty, let url = URL(string: "\(baseUrl)/money/entries/delete") else { return false }
+        return await sendJSON(url, method: "POST", body: ["ids": ids])
+    }
+
+    /// 某个月的统计。服务端全部从流水现算 —— 没有汇总表，不存在「大数和明细对不上」。
+    func fetchMoneyStats(ym: String, trendMonths: Int = 6) async -> MoneyStatsDTO? {
+        var components = URLComponents(string: "\(baseUrl)/money/stats")
+        components?.queryItems = [
+            URLQueryItem(name: "ym", value: ym),
+            URLQueryItem(name: "trend_months", value: String(trendMonths)),
+        ]
+        return await request(components?.url)
+    }
+
     // MARK: - Capabilities
     func fetchCapabilities() async -> [Capability] {
         guard let url = URL(string: "\(baseUrl)/capabilities") else { return [] }

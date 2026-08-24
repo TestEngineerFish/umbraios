@@ -545,6 +545,7 @@ struct UmbraVaultTrashView: View {
         switch kind {
         case "idea": return UmbraIconPath.bulb
         case "reminder": return UmbraIconPath.bell
+        case "money": return UmbraIconPath.wallet
         default: return UmbraIconPath.task
         }
     }
@@ -553,6 +554,8 @@ struct UmbraVaultTrashView: View {
         switch kind {
         case "idea": return "灵感"
         case "reminder": return "提醒"
+        // 记账一期加的：流水删除也进统一回收站（2026-08-24 拍板保留）。
+        case "money": return "记账"
         default: return "任务"
         }
     }

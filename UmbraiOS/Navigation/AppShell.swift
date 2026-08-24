@@ -18,6 +18,9 @@ struct UmbraShell: View {
     /// 首页、详情、编辑、体检是独立路由，各建各的 store 会各解各的锁。
     @StateObject private var vault = VaultStore()
     @StateObject private var vaultSession = UmbraVaultSession()
+    /// 记账的数据源也挂外壳：统计 / 流水 / 记一笔 / 分类管理是独立路由，
+    /// 各建各的会各拉各的数据，统计页点分类跳流水也要靠它带筛选。
+    @StateObject private var money = MoneyStore()
     @EnvironmentObject private var chat: ChatViewModel
 
     @ObservedObject private var reminders = ReminderStore.shared
@@ -82,6 +85,7 @@ struct UmbraShell: View {
         .environmentObject(inspirations)
         .environmentObject(vault)
         .environmentObject(vaultSession)
+        .environmentObject(money)
         // 通知里点开的那条提醒：切到提醒 Tab 再推详情，这样返回是回提醒列表而不是空栈。
         .onChange(of: deepLink.route) { route in
             guard let route else { return }
@@ -139,6 +143,14 @@ struct UmbraRouteView: View {
             UmbraPhraseEditView(id: id)
         case .meDevices:
             UmbraDevicesView()
+        case .moneyHome:
+            UmbraMoneyHomeView()
+        case .moneyList:
+            UmbraMoneyListView()
+        case .moneyAdd(let id):
+            UmbraMoneyAddView(id: id)
+        case .moneyCats:
+            UmbraMoneyCatsView()
         case .deviceDetail(let id):
             UmbraDeviceDetailView(id: id)
         case .meCaps:

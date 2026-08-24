@@ -36,6 +36,11 @@ enum UmbraRoute: Hashable {
     case mePhraseEdit(id: String?)
     case meDevices
     case deviceDetail(id: String)
+    // 记账（一期：统计 / 流水 / 记一笔 / 分类管理；入口在「我」，归 me Tab）
+    case moneyHome
+    case moneyList
+    case moneyAdd(id: String?)         // nil = 新建，非 nil = 编辑这一条
+    case moneyCats
     case meCaps
     case meWorkspace
     case meProfile

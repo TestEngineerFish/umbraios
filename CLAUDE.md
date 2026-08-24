@@ -47,15 +47,15 @@ UmbraiOS/
 
 ## 工程文件
 
-`UmbraiOS.xcodeproj/project.pbxproj` 是 **objectVersion 56 的显式文件清单**：
-新增或删除一个 .swift 要同时改四处（PBXBuildFile、PBXFileReference、
-所属 PBXGroup 的 children、PBXSourcesBuildPhase 的 files）。
-用 Xcode 增删文件它会自己维护；手改容易漏，漏了的表现是「找不到符号」或
-「Build input file cannot be found」。
+`UmbraiOS.xcodeproj/project.pbxproj` 已经转成 **Xcode 16 的同步文件夹**
+（objectVersion 70，PBXFileSystemSynchronizedRootGroup）：源码目录里的 .swift
+自动入编，**新增 / 删除 / 挪目录都不用再碰 pbxproj** —— 原来「一个文件改四处」
+的约定随之作废（2026-08-24 记账一期起生效，五个新文件零登记直接入编）。
 
-顶层现在是**一个** `UmbraiOS` 组（不是原来 7 个各带全路径的并列组），
-所以可以在 Xcode 里右键它选 `Convert to Folder` 转成 Xcode 16 的同步文件夹，
-转完之后 pbxproj 不再逐个列文件，加文件、挪目录都不用再碰它。
+唯一还要手改的地方：**跨 target 共享的文件**。Widgets / AutoFill 用到主 target
+的文件（如 `Utils/WidgetShared.swift`、`DesignSystem/UmbraTokens.swift`）列在
+PBXFileSystemSynchronizedBuildFileExceptionSet 里 —— 给扩展 target 新增共享文件时，
+要把它加进对应 target 的那个 exception set；只给主 App 用的文件什么都不用做。
 
 ## 提交
 
