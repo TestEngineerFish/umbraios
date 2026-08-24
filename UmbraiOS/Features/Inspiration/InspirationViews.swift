@@ -228,12 +228,12 @@ struct UmbraInspirationListView: View {
             Button(role: .destructive) {
                 router.confirm(UmbraAlert(
                     title: "确认删除这条灵感？",
-                    body: "删除后无法恢复。",
-                    confirmLabel: "删除",
+                    body: "删除后移入回收站，保留 30 天，之后彻底删除。",
+                    confirmLabel: "移入回收站",
                     confirmDestructive: true,
                     onConfirm: {
                         Task { await insp.delete(id: i.id) }
-                        router.showToast("已删除")
+                        router.showToast("已移入回收站 · 保留 30 天")
                     }))
             } label: {
                 Label("删除", systemImage: "trash")
@@ -356,13 +356,13 @@ struct UmbraInspirationDetailView: View {
                         Button(role: .destructive) {
                             router.confirm(UmbraAlert(
                                 title: "确认删除这条灵感？",
-                                body: "删除后无法恢复。",
-                                confirmLabel: "删除",
+                                body: "删除后移入回收站，保留 30 天，之后彻底删除。",
+                                confirmLabel: "移入回收站",
                                 confirmDestructive: true,
                                 onConfirm: {
                                     Task { await insp.delete(id: i.id) }
                                     router.back()
-                                    router.showToast("已删除")
+                                    router.showToast("已移入回收站 · 保留 30 天")
                                 }))
                         } label: {
                             Label("删除", systemImage: "trash")

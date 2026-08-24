@@ -211,3 +211,55 @@ struct PhraseBundle: Codable {
     var items: [Phrase]
     var deleted: [PhraseTomb]
 }
+
+// MARK: - 回收站（通用区）
+
+/// 回收站里的一条。**id 有两种类型**：灵感是自增整数，任务/提醒是 uuid 字符串。
+/// Swift 的 Codable 不认联合类型，所以这里自己解一层，两种都收进 String ——
+/// 回传给服务端时原样发回去即可（服务端按 kind 决定怎么用）。
+struct TrashItem: Codable, Identifiable {
+    let kind: String            // idea / task / reminder（操控记录在服务端就并进 task 了）
+    let rawId: String
+    let title: String
+    let deleted_at_ms: Double
+    let left_days: Int
+
+    var id: String { "\(kind):\(rawId)" }
+
+    private enum K: String, CodingKey { case kind, id, title, deleted_at_ms, left_days }
+
+    init(from d: Decoder) throws {
+        let c = try d.container(keyedBy: K.self)
+        kind = (try? c.decode(String.self, forKey: .kind)) ?? ""
+        // 先按字符串试，不成再按整数 —— 反过来会把 uuid 判成解码失败。
+        if let s = try? c.decode(String.self, forKey: .id) { rawId = s }
+        else if let n = try? c.decode(Int.self, forKey: .id) { rawId = String(n) }
+        else { rawId = "" }
+        title = (try? c.decode(String.self, forKey: .title)) ?? ""
+        deleted_at_ms = (try? c.decode(Double.self, forKey: .deleted_at_ms)) ?? 0
+        left_days = (try? c.decode(Int.self, forKey: .left_days)) ?? 0
+    }
+
+    func encode(to e: Encoder) throws {
+        var c = e.container(keyedBy: K.self)
+        try c.encode(kind, forKey: .kind); try c.encode(rawId, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(deleted_at_ms, forKey: .deleted_at_ms); try c.encode(left_days, forKey: .left_days)
+    }
+
+    /// 发回服务端时的形状。灵感那一路要还原成整数，别把 "12" 发过去。
+    var entry: [String: Any] {
+        ["kind": kind, "id": kind == "idea" ? (Int(rawId) ?? 0) as Any : rawId as Any]
+    }
+}
+
+/// GET /trash 的响应体。
+///
+/// counts / keep_days 都是 **optional**：连到旧版服务端时字段是缺的，
+/// 非 optional 会让整条解码失败 —— 回收站变空白，而用户只会以为「没东西」，
+/// 完全看不出是版本不匹配（这个坑 Inspiration 那边已经踩过一次）。
+struct TrashListDTO: Codable {
+    let items: [TrashItem]
+    let counts: [String: Int]?
+    let keep_days: Int?
+}

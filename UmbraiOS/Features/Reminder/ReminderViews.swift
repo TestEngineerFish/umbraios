@@ -659,12 +659,12 @@ struct UmbraReminderListView: View {
             Button {
                 router.confirm(UmbraAlert(
                     title: "删除「\(r.text)」？",
-                    body: "删除后无法恢复。",
-                    confirmLabel: "删除",
+                    body: "删除后移入回收站，保留 30 天，之后彻底删除。",
+                    confirmLabel: "移入回收站",
                     confirmDestructive: true,
                     onConfirm: {
                         withAnimation { store.delete(id: r.id) }
-                        router.showToast("已删除")
+                        router.showToast("已移入回收站 · 保留 30 天")
                     }))
             } label: {
                 Label("删除", systemImage: "trash")

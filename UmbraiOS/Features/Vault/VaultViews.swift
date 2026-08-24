@@ -701,12 +701,12 @@ struct UmbraVaultHomeView: View {
         session.touch()
         router.confirm(UmbraAlert(
             title: "删除「\(it.title)」？",
-            body: "会同步删除到所有设备。这一版没有回收站，删了找不回来。",
-            confirmLabel: "删除",
+            body: "会移入回收站保留 30 天，之后彻底删除。附件与图片一并移入。所有设备上都会一起进回收站。",
+            confirmLabel: "移入回收站",
             confirmDestructive: true,
             onConfirm: {
                 Task { await store.deleteItem(it.id) }
-                router.showToast("已删除")
+                router.showToast("已移入回收站 · 保留 30 天")
             }))
     }
 
@@ -896,7 +896,7 @@ struct UmbraVaultHomeView: View {
                 UmbraSheetItem(label: "身份库", note: "当前：\(vaultName) · 共 \(store.vaults.count) 个") {
                     session.touch(); router.go(.vaultProfiles)
                 },
-                UmbraSheetItem(label: "回收站", note: "这一版在电脑上") {
+                UmbraSheetItem(label: "回收站", note: store.trashCount > 0 ? "\(store.trashCount) 项" : "保留 30 天") {
                     session.touch(); router.go(.vaultTrash)
                 },
                 UmbraSheetItem(label: "从别处导入", note: "这一版在电脑上") {
@@ -1199,13 +1199,13 @@ struct UmbraVaultEditView: View {
                     UmbraButton(title: "删除这条记录", kind: .dangerOutline) {
                         router.confirm(UmbraAlert(
                             title: "删除「\(it.title)」？",
-                            body: "会同步删除到所有设备。这一版没有回收站，删了找不回来。",
-                            confirmLabel: "删除",
+                            body: "会移入回收站保留 30 天，之后彻底删除。附件与图片一并移入。所有设备上都会一起进回收站。",
+                            confirmLabel: "移入回收站",
                             confirmDestructive: true,
                             onConfirm: {
                                 Task { await store.deleteItem(it.id) }
                                 router.back()
-                                router.showToast("已删除")
+                                router.showToast("已移入回收站 · 保留 30 天")
                             }))
                     }
                 }

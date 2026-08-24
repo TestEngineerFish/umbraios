@@ -196,6 +196,37 @@ class HTTPService {
         }
     }
 
+    // MARK: - 回收站（只有通用区：灵感 / 任务 / 提醒，都存在服务端）
+    //
+    // 保险箱那一区端到端加密、条目只在快照里，走 VaultStore 自己的方法，不经过这里 ——
+    // 服务端连它有几条都不知道。见 doc/回收站-实现方案.md §3。
+
+    func fetchTrash() async -> TrashListDTO? {
+        guard let url = URL(string: "\(baseUrl)/trash") else { return nil }
+        return await request(url)
+    }
+
+    /// 恢复：条目回到原来的位置，状态原样保留（不会被复位成「待办」）。
+    @discardableResult
+    func restoreTrash(_ entries: [[String: Any]]) async -> Bool {
+        guard !entries.isEmpty, let url = URL(string: "\(baseUrl)/trash/restore") else { return false }
+        return await sendJSON(url, method: "POST", body: ["entries": entries])
+    }
+
+    /// 彻底删除。不进任何地方，也没有恢复的路。
+    @discardableResult
+    func purgeTrash(_ entries: [[String: Any]]) async -> Bool {
+        guard !entries.isEmpty, let url = URL(string: "\(baseUrl)/trash/purge") else { return false }
+        return await sendJSON(url, method: "POST", body: ["entries": entries])
+    }
+
+    /// 清空回收站。**只清通用区** —— 保险箱那一区服务端动不了，要解锁后单独清。
+    @discardableResult
+    func purgeAllTrash() async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/trash/purge") else { return false }
+        return await sendJSON(url, method: "POST", body: ["all": true])
+    }
+
     // MARK: - Capabilities
     func fetchCapabilities() async -> [Capability] {
         guard let url = URL(string: "\(baseUrl)/capabilities") else { return [] }

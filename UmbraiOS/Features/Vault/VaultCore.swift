@@ -186,6 +186,9 @@ final class VaultStore: ObservableObject {
     @Published var offline = false
     /// 有本地改动还没推上去。离线改了东西时置起来，下次同步成功清掉。
     @Published var pendingPush = false
+    /// 回收站里有几条。**锁着时也有值**（读的是本机缓存里那个明文数字），
+    /// 解锁后每次进出回收站重算。设置页那一行和回收站页的锁定态都用它。
+    @Published var trashCount = 0
 
     private var auk: Data?
     private var record: VRecord?
@@ -202,7 +205,12 @@ final class VaultStore: ObservableObject {
     // 没有它的话，飞机上、地铁里、服务端挂了的时候保险箱就是一块砖：
     // 密码管理器最该顶用的时刻恰恰是网络不通的时刻。
     // 文件用 completeFileProtection：设备锁屏后连这份密文都读不到。
-    private struct VCache: Codable { var blob: String; var rev: Int }
+    // trashCount 是**明文**的：锁着时没有 AUK，数不出回收站里有几条，
+    // 而界面上要显示「N 项 · 解锁后可查看」。这个数字只在这台设备的本机文件里，
+    // **不上传** —— 推送的 body 只有 {blob, baseRev, deviceId, force}，blob 是整份密文。
+    // 代价是拿到这台设备文件的人能读到「回收站里有几条」，没有标题、没有类型，就一个数。
+    // 可选类型：老缓存文件里没有这个字段，解码时要能容忍。
+    private struct VCache: Codable { var blob: String; var rev: Int; var trashCount: Int? }
 
     private var cacheURL: URL? {
         guard let dir = try? FileManager.default.url(for: .applicationSupportDirectory,
@@ -212,7 +220,8 @@ final class VaultStore: ObservableObject {
     }
 
     private func writeCache(blob: String, rev: Int) {
-        guard let url = cacheURL, let data = try? JSONEncoder().encode(VCache(blob: blob, rev: rev)) else { return }
+        guard let url = cacheURL,
+              let data = try? JSONEncoder().encode(VCache(blob: blob, rev: rev, trashCount: trashCount)) else { return }
         try? data.write(to: url, options: [.atomic, .completeFileProtection])
     }
 
@@ -236,6 +245,7 @@ final class VaultStore: ObservableObject {
         }
         record = rd
         syncRev = c.rev
+        trashCount = c.trashCount ?? 0
         recordExists = true
         offline = true
         error = ""                    // 有缓存就能解锁，别拿网络问题挡着用户
@@ -296,6 +306,10 @@ final class VaultStore: ObservableObject {
         VaultKeychain.save(sk); hasSecretKey = true
         applySnapshot(snap)
         unlocked = true
+        // 回收站的到期清理借解锁这一刻做（锁着时没有密钥，什么都干不了）。
+        // **不 await**：清理是杂务，让它拖慢解锁不值当 ——
+        // 因为一次清理没跑成而解不开保险箱，那是本末倒置。
+        Task { await self.sweepExpiredTrash() }
     }
 
     /// 只校验主密码对不对，**不解密、不改状态**。开启 Face ID 时要先验一次主密码，
@@ -339,6 +353,7 @@ final class VaultStore: ObservableObject {
         syncRev = 0
         offline = false
         pendingPush = false
+        trashCount = 0   // 缓存文件已经删了，这个数字再留着就是在说假话
     }
 
     func imageData(_ attId: String) -> Data? {
@@ -358,14 +373,174 @@ final class VaultStore: ObservableObject {
         snap.data[curVaultId] = d; snapshot = snap; loadCurrent()
         await push()
     }
+    // MARK: - 删除的三态（回收站，2026-08-23）
+    //
+    //   正常        deleted 未置位
+    //   在回收站    deleted = true，**内容还在**（blocks / attachments 原封不动）
+    //   已彻底删除  deleted = true，内容与标题全擦掉，附件字节也从快照里移除
+    //
+    // **一个新字段都没加**，用的还是同步协议里早就有的 deleted。这是刻意的：
+    // VItem 是普通 Codable 结构体，解码时会丢掉不认识的字段、编码时也不会再吐出来。
+    // 只要有一端还是旧版本，新加一个 `trashed` 就会在下一次同步里被抹平 ——
+    // 那条已删除的记录会在所有设备上原地复活。复用 deleted 则天然兼容。
+    //
+    // ⚠️ 这套语义**必须和电脑端一字不差**（UmbraPC/electron/core/vault/trash.ts）。
+    // 两端对「这条算不算还能恢复」判得不一样，同步时就会各自当真、互相覆盖。
+
+    /// 回收站保留期。跟电脑端、跟服务端那套（提醒的墓碑）取同一个 30 天。
+    static let trashKeepMs: Double = 30 * 24 * 3600 * 1000
+
+    /// 一条记录是不是「在回收站里、还能恢复」。
+    ///
+    /// 判据是**内容还在不在**，不需要额外的标记位。顺带把两种情况都排除对了：
+    /// - 本端彻底删除过的 → 内容空 → 不是
+    /// - **旧版本客户端删的**（它会当场清空 blocks/attachments，只留标题）→ 也不是。
+    ///   那种记录确实恢复不出任何东西，列进回收站给个「恢复」按钮，
+    ///   点完只会得到一条空壳，比根本不显示更糟。
+    static func isTrashed(_ it: VItem) -> Bool {
+        guard it.deleted == true else { return false }
+        return !it.blocks.isEmpty || !it.attachments.isEmpty
+    }
+
+    /// 还剩几天。向上取整（删完当天显示 30 而不是 29），过期未清的回 0
+    /// —— 界面上「还剩 -3 天」是在把实现细节漏给用户看。
+    static func leftDays(deletedAtMs: Double, now: Double = Date().timeIntervalSince1970 * 1000) -> Int {
+        let left = deletedAtMs + trashKeepMs - now
+        return left <= 0 ? 0 : Int(ceil(left / 86_400_000))
+    }
+
+    /// 删除 = **移进回收站**：只置标志、抬 revision，内容与附件一个都不动。
     func deleteItem(_ id: String) async {
         guard var snap = snapshot, var d = snap.data[curVaultId] else { return }
-        if let i = d.items.firstIndex(where: { $0.id == id }) {   // 打墓碑而非移除，让删除跨端传播
-            var it = d.items[i]; it.deleted = true; it.blocks = []; it.attachments = []; it.tags = []
-            it.updatedAt = Date().timeIntervalSince1970 * 1000; it.revision += 1; d.items[i] = it
+        if let i = d.items.firstIndex(where: { $0.id == id }), d.items[i].deleted != true {
+            var it = d.items[i]
+            it.deleted = true
+            it.updatedAt = Date().timeIntervalSince1970 * 1000   // 同时是「删除时刻」，倒计时按它算
+            it.revision += 1
+            d.items[i] = it
         }
         snap.data[curVaultId] = d; snapshot = snap; loadCurrent()
+        refreshTrashCount()
         await push()
+    }
+
+    // MARK: - 回收站
+
+    /// 回收站里的一条（**跨所有身份库**）。from 是类型名，对应稿上「登录 · 3 天前删除」。
+    struct TrashRow: Identifiable {
+        var id: String { "\(vaultId):\(itemId)" }
+        let vaultId: String
+        let itemId: String
+        let title: String
+        let from: String
+        let deletedAtMs: Double
+        let leftDays: Int
+    }
+
+    /// 回收站列表，最近删的在前。只在解锁态有内容（锁着时 snapshot 是 nil）。
+    func trashRows() -> [TrashRow] {
+        guard let snap = snapshot else { return [] }
+        let now = Date().timeIntervalSince1970 * 1000
+        var out: [TrashRow] = []
+        for (vid, d) in snap.data {
+            var typeName: [String: String] = [:]
+            for t in d.types { typeName[t.id] = t.name }
+            for it in d.items where Self.isTrashed(it) {
+                out.append(TrashRow(
+                    vaultId: vid, itemId: it.id,
+                    title: it.title.isEmpty ? "（无标题）" : it.title,
+                    from: typeName[it.typeId] ?? "记录",
+                    deletedAtMs: it.updatedAt,
+                    leftDays: Self.leftDays(deletedAtMs: it.updatedAt, now: now)))
+            }
+        }
+        return out.sorted { $0.deletedAtMs > $1.deletedAtMs }
+    }
+
+    /// 从回收站恢复。
+    ///
+    /// 抬 revision 是关键：云端那份的 revision 停在「已删除」那一版，
+    /// 不抬的话下一次合并会按「revision 高者胜」把删除态又拉回来 ——
+    /// 用户看到的是「恢复了，过一会儿又没了」。
+    func restoreTrash(vaultId: String, itemId: String) async {
+        guard var snap = snapshot, var d = snap.data[vaultId],
+              let i = d.items.firstIndex(where: { $0.id == itemId }),
+              Self.isTrashed(d.items[i]) else { return }
+        var it = d.items[i]
+        it.deleted = false
+        it.updatedAt = Date().timeIntervalSince1970 * 1000
+        it.revision += 1
+        d.items[i] = it
+        snap.data[vaultId] = d; snapshot = snap; loadCurrent()
+        refreshTrashCount()
+        await push()
+    }
+
+    /// 彻底删除：擦干净内容，但**保留这一行**（墓碑还得跨端传播「这条没了」）。
+    ///
+    /// 比原来的删除多做两件事：
+    /// 1. 擦掉 title —— 原来只清 blocks/attachments/tags，于是「旧公司 VPN」这个标题
+    ///    会永远躺在加密快照里跟着同步。内容确实没了，但「你曾经有一个叫它的东西」留下来了。
+    /// 2. **把附件字节从 d.attachments 里删掉** —— 原来只清了 it.attachments 这份清单，
+    ///    真正的 base64 一直留在快照里，谁也引用不到、却永远跟着每次同步来回传。
+    func purgeTrash(vaultId: String, itemId: String) async {
+        guard var snap = snapshot, var d = snap.data[vaultId],
+              let i = d.items.firstIndex(where: { $0.id == itemId }),
+              Self.isTrashed(d.items[i]) else { return }
+        purgeInPlace(&d, at: i)
+        snap.data[vaultId] = d; snapshot = snap; loadCurrent()
+        refreshTrashCount()
+        await push()
+    }
+
+    /// 到期清理：超过保留期的自动彻底删除。**解锁时跑一次。**
+    ///
+    /// 为什么挂在解锁上而不是定时器：锁着时没有密钥，连有几条都数不出来，
+    /// 定时器醒了也什么都干不了。而保险箱一定是解锁之后才用，
+    /// 这个时机既够勤，又保证有活干。
+    @discardableResult
+    func sweepExpiredTrash() async -> Int {
+        guard var snap = snapshot else { return 0 }
+        let now = Date().timeIntervalSince1970 * 1000
+        var n = 0
+        // 不能写成 `for (vid, var d) in ...` —— Swift 3 起 for-in 的模式里就不许用 var 了，
+        // 得在循环体里另取一份可变副本。
+        for (vid, orig) in snap.data {
+            var d = orig
+            var changed = false
+            for i in d.items.indices where Self.isTrashed(d.items[i]) {
+                guard now - d.items[i].updatedAt >= Self.trashKeepMs else { continue }
+                purgeInPlace(&d, at: i); changed = true; n += 1
+            }
+            if changed { snap.data[vid] = d }
+        }
+        guard n > 0 else { refreshTrashCount(); return 0 }
+        snapshot = snap; loadCurrent()
+        refreshTrashCount()
+        await push()
+        return n
+    }
+
+    /// 就地擦干净一条（内容 + 标题 + 附件字节），保留墓碑行。
+    private func purgeInPlace(_ d: inout VData, at i: Int) {
+        var it = d.items[i]
+        for a in it.attachments { d.attachments.removeValue(forKey: a.id) }
+        it.title = ""; it.icon = nil; it.blocks = []; it.attachments = []; it.tags = []
+        it.deleted = true
+        it.updatedAt = Date().timeIntervalSince1970 * 1000
+        it.revision += 1
+        d.items[i] = it
+    }
+
+    /// 重算回收站条数并落到本机缓存（锁着时要显示它）。
+    private func refreshTrashCount() {
+        let n = trashRows().count
+        guard n != trashCount else { return }   // 没变就别写盘
+        trashCount = n
+        if let rec = record, let blob = try? JSONEncoder().encode(rec),
+           let s = String(data: blob, encoding: .utf8) {
+            writeCache(blob: s, rev: syncRev)
+        }
     }
     func toggleFav(_ id: String) async {
         guard let it = items.first(where: { $0.id == id }) else { return }

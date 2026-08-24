@@ -299,38 +299,275 @@ struct UmbraVaultProfilesView: View {
     }
 }
 
-// MARK: - 回收站（如实说明）
+// MARK: - 回收站
+//
+// **界面一页，存储两套。** 这是这个页面唯一需要记住的事：
+//   通用区（灵感 / 任务 / 提醒）—— 存在服务端，走 HTTPService 的 /trash 三个接口
+//   保险箱区                   —— 端到端加密，走 VaultStore，服务端连它有几条都不知道
+//
+// 保险箱那一区**锁着时读不出标题**（没有密钥），只显示一个条数 ——
+// 那个数字来自本机缓存里的明文字段。这不是「藏起来了」，是密码学事实：解不开就是解不开。
+//
+// 手机上刻意**不做多选**：一屏就三四张卡，每张自带「恢复 / 彻底删除」，
+// 比先进多选态再点批量条快。电脑端那一套多选是为了一次处理十几条，手机上用不上。
 
 struct UmbraVaultTrashView: View {
     @EnvironmentObject private var router: UmbraRouter
+    @EnvironmentObject private var store: VaultStore
+
+    @State private var generic: [TrashItem] = []
+    @State private var keepDays = 30
+    @State private var loading = true
+
+    private var vaultRows: [VaultStore.TrashRow] { store.unlocked ? store.trashRows() : [] }
+    private var vaultCount: Int { store.unlocked ? vaultRows.count : store.trashCount }
+    private var isEmpty: Bool { generic.isEmpty && vaultCount == 0 }
 
     var body: some View {
         UmbraSettingsPage(
             backLabel: "返回", title: "回收站", onBack: { router.back() },
-            intro: nil,
+            intro: isEmpty ? nil
+                : "删除的东西在这里保留 \(keepDays) 天，到期彻底删除。密码保险箱的条目单独加密，锁着时只能看到条数。",
             sections: [],
-            footnote: nil,
+            footnote: isEmpty ? nil : "恢复会把条目放回原来的位置。彻底删除不进任何地方，也没有恢复的路。",
             extra: {
-                VStack(alignment: .leading, spacing: UmbraMetric.sp4) {
-                    UmbraCard {
-                        VStack(alignment: .leading, spacing: UmbraMetric.sp2) {
-                            UmbraSectionLabel(text: "这一版没有回收站")
-                            Text("删除记录时写的是删除标记，内容和附件当场就清掉了 —— 没有留一份可恢复的副本，所以恢复不了。")
-                                .font(UmbraFont.body)
-                                .foregroundColor(UmbraColor.text)
-                                .lineSpacing(UmbraFont.bodyLineSpacing)
-                            Text("要做成「保留 30 天」的回收站，得先改两端共用的数据格式（删除时保留密文副本 + 到期清理），改完两端一起升级才行。这一步在电脑端做。")
-                                .font(UmbraFont.rowSub)
-                                .foregroundColor(UmbraColor.muted)
-                                .lineSpacing(4)
-                        }
+                VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
+                    if isEmpty && !loading {
+                        UmbraEmptyState(
+                            iconPath: UmbraIconPath.trash,
+                            title: "回收站是空的",
+                            hint: "删掉的任务、灵感、提醒会先放进来，保留 \(keepDays) 天。保险箱的条目也在这里，锁着时只显示条数。")
+                            .padding(.horizontal, UmbraMetric.pagePadX)
+                    } else {
+                        genericZone
+                        vaultZone
                     }
-                    .padding(.horizontal, UmbraMetric.pagePadX)
-
-                    UmbraButton(title: "回到保险箱", kind: .secondary) { router.back() }
-                        .padding(.horizontal, UmbraMetric.pagePadX)
                 }
             })
+        .task { await reload() }
+        .refreshable { await reload() }
+    }
+
+    // MARK: 通用区
+
+    @ViewBuilder private var genericZone: some View {
+        VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                UmbraSectionLabel(text: "通用")
+                Text("\(generic.count) 项")
+                    .font(UmbraFont.sans(12, .w400))
+                    .foregroundColor(UmbraColor.faint)
+                Spacer(minLength: 0)
+                if !generic.isEmpty {
+                    Button("清空") { askPurgeAll() }
+                        .font(UmbraFont.sans(13, .w400))
+                        .foregroundColor(UmbraColor.danger)
+                        .frame(minHeight: 44)          // 44 是可点区下限，不是视觉高度
+                }
+            }
+            .padding(.horizontal, UmbraMetric.pagePadX + 4)
+
+            if generic.isEmpty {
+                UmbraCard {
+                    Text("通用区没有东西")
+                        .font(UmbraFont.sans(13, .w400))
+                        .foregroundColor(UmbraColor.faint)
+                        .frame(maxWidth: .infinity)
+                }
+                .padding(.horizontal, UmbraMetric.pagePadX)
+            } else {
+                ForEach(generic) { it in
+                    row(icon: kindIcon(it.kind), title: it.title,
+                        meta: "\(kindName(it.kind)) · \(whenText(it.deleted_at_ms))",
+                        leftDays: it.left_days,
+                        onRestore: { Task { await restoreGeneric(it) } },
+                        onPurge: { askPurgeGeneric(it) })
+                        .padding(.horizontal, UmbraMetric.pagePadX)
+                }
+            }
+        }
+    }
+
+    // MARK: 保险箱区
+
+    @ViewBuilder private var vaultZone: some View {
+        // 条数为 0 就整区不画。没建过保险箱、或者里面本来就没删过东西时，
+        // 常驻一个空区只是在提醒用户「你没有的东西是空的」。
+        if vaultCount > 0 {
+            VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    UmbraSectionLabel(text: "密码保险箱")
+                    Text("\(vaultCount) 项")
+                        .font(UmbraFont.sans(12, .w400))
+                        .foregroundColor(UmbraColor.faint)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, UmbraMetric.pagePadX + 4)
+
+                if store.unlocked {
+                    ForEach(vaultRows) { r in
+                        row(icon: UmbraIconPath.lock, title: r.title,
+                            meta: "\(r.from) · \(whenText(r.deletedAtMs))",
+                            leftDays: r.leftDays,
+                            onRestore: { Task { await store.restoreTrash(vaultId: r.vaultId, itemId: r.itemId) } },
+                            onPurge: { askPurgeVault(r) })
+                            .padding(.horizontal, UmbraMetric.pagePadX)
+                    }
+                } else {
+                    lockedCard.padding(.horizontal, UmbraMetric.pagePadX)
+                }
+            }
+        }
+    }
+
+    private var lockedCard: some View {
+        UmbraCard {
+            HStack(spacing: UmbraMetric.sp3) {
+                UmbraIconBlock(d: UmbraIconPath.lock, block: 34, icon: 17)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("\(store.trashCount) 项 · 解锁后可查看")
+                        .font(UmbraFont.sans(14.5, .w560))
+                        .foregroundColor(UmbraColor.text)
+                    Text("这些条目是端到端加密的，锁着时读不出标题。")
+                        .font(UmbraFont.sans(12, .w400))
+                        .foregroundColor(UmbraColor.faint)
+                        .lineSpacing(12 * 0.55)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
+                Button("解锁") { router.go(.vaultHome) }
+                    .font(UmbraFont.sans(14, .w560))
+                    .foregroundColor(UmbraColor.orange)
+                    .frame(minHeight: 44)
+            }
+        }
+    }
+
+    // MARK: 一张条目卡
+
+    private func row(icon: String, title: String, meta: String, leftDays: Int,
+                     onRestore: @escaping () -> Void, onPurge: @escaping () -> Void) -> some View {
+        UmbraCard {
+            VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
+                HStack(spacing: UmbraMetric.sp3) {
+                    UmbraIconBlock(d: icon, block: 34, icon: 17)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title)
+                            .font(UmbraFont.sans(16, .w560))
+                            .foregroundColor(UmbraColor.text)
+                            .lineLimit(1)
+                        Text("\(meta) · 还剩 \(leftDays) 天")
+                            .font(UmbraFont.sans(12.5, .w400))
+                            // 稿：剩余 ≤ 7 天转 warning。这是这一页**唯一**的紧迫信号，
+                            // 没有别的红点角标，所以这一档不能省。
+                            .foregroundColor(leftDays <= 7 ? UmbraColor.warning : UmbraColor.faint)
+                            .lineLimit(1)
+                    }
+                    Spacer(minLength: 0)
+                }
+                HStack(spacing: 8) {
+                    UmbraButton(title: "恢复", kind: .secondary, height: 44, action: onRestore)
+                    UmbraButton(title: "彻底删除", kind: .dangerOutline, height: 44, action: onPurge)
+                }
+            }
+        }
+    }
+
+    // MARK: 动作
+
+    @MainActor private func reload() async {
+        loading = true
+        defer { loading = false }
+        if let dto = await HTTPService.shared.fetchTrash() {
+            generic = dto.items
+            keepDays = dto.keep_days ?? 30
+        }
+    }
+
+    @MainActor private func restoreGeneric(_ it: TrashItem) async {
+        guard await HTTPService.shared.restoreTrash([it.entry]) else {
+            router.showToast("恢复失败，服务端没有响应"); return
+        }
+        await reload()
+        router.showToast("已恢复「\(it.title)」")
+    }
+
+    private func askPurgeGeneric(_ it: TrashItem) {
+        router.confirm(UmbraAlert(
+            title: "彻底删除「\(it.title)」？",
+            body: "不再进回收站，也没有恢复的路。",
+            confirmLabel: "彻底删除",
+            confirmDestructive: true,
+            onConfirm: {
+                Task {
+                    _ = await HTTPService.shared.purgeTrash([it.entry])
+                    await reload()
+                    router.showToast("已彻底删除")
+                }
+            }))
+    }
+
+    private func askPurgeVault(_ r: VaultStore.TrashRow) {
+        router.confirm(UmbraAlert(
+            title: "彻底删除「\(r.title)」？",
+            body: "密文与附件一并擦掉，其它设备下次同步后同样消失。没有恢复的路。",
+            confirmLabel: "彻底删除",
+            confirmDestructive: true,
+            onConfirm: {
+                Task {
+                    await store.purgeTrash(vaultId: r.vaultId, itemId: r.itemId)
+                    router.showToast("已彻底删除")
+                }
+            }))
+    }
+
+    private func askPurgeAll() {
+        // 稿里这句点名了「保险箱那一区要解锁后单独清」——
+        // 那不是界面上的取舍，是服务端确实碰不到那一区。
+        let body = vaultCount > 0
+            ? "通用区 \(generic.count) 项会被彻底删除。保险箱那 \(vaultCount) 项要解锁后单独清，这里动不了。"
+            : "通用区 \(generic.count) 项会被彻底删除，没有恢复的路。"
+        router.confirm(UmbraAlert(
+            title: "清空回收站？", body: body,
+            confirmLabel: "清空", confirmDestructive: true,
+            onConfirm: {
+                Task {
+                    _ = await HTTPService.shared.purgeAllTrash()
+                    await reload()
+                    router.showToast("已清空通用区")
+                }
+            }))
+    }
+
+    // MARK: 小工具
+
+    private func kindIcon(_ kind: String) -> String {
+        switch kind {
+        case "idea": return UmbraIconPath.bulb
+        case "reminder": return UmbraIconPath.bell
+        default: return UmbraIconPath.task
+        }
+    }
+
+    private func kindName(_ kind: String) -> String {
+        switch kind {
+        case "idea": return "灵感"
+        case "reminder": return "提醒"
+        default: return "任务"
+        }
+    }
+
+    /// 删除时刻 → 「今天 14:02」「昨天 22:10」「8月17日」。
+    private func whenText(_ ms: Double) -> String {
+        guard ms > 0 else { return "" }
+        let d = Date(timeIntervalSince1970: ms / 1000)
+        let cal = Calendar.current
+        let f = DateFormatter()
+        if cal.isDateInToday(d) { f.dateFormat = "今天 HH:mm" }
+        else if cal.isDateInYesterday(d) { f.dateFormat = "昨天 HH:mm" }
+        else if cal.isDate(d, equalTo: Date(), toGranularity: .year) { f.dateFormat = "M月d日" }
+        else { f.dateFormat = "yyyy年M月d日" }
+        return f.string(from: d) + "删除"
     }
 }
 
@@ -578,6 +815,17 @@ struct UmbraVaultSettingsView: View {
     @State private var confirmBusy = false
     @FocusState private var confirmFocused: Bool
 
+    /// 回收站里通用区（灵感 / 任务 / 提醒）的条数。保险箱那一区的条数
+    /// 直接读 store.trashCount —— 它锁着时也有值。
+    @State private var genericTrash = 0
+
+    /// 「N 项」/「没有」。**拉不到就先按只有保险箱那部分算** ——
+    /// 宁可少报也不要报一个编出来的数字。
+    private var trashCountLabel: String {
+        let n = genericTrash + store.trashCount
+        return n > 0 ? "\(n) 项" : "没有"
+    }
+
     var body: some View {
         UmbraSettingsPage(
             backLabel: "返回", title: "保险箱设置", onBack: { router.back() },
@@ -589,7 +837,7 @@ struct UmbraVaultSettingsView: View {
                 UmbraSettingSection(header: "整理", rows: [
                     UmbraSettingRow(label: "分组", value: "\(store.types.count) 个", chevron: true) { router.go(.vaultGroups) },
                     UmbraSettingRow(label: "身份库", value: "\(store.vaults.count) 个", chevron: true) { router.go(.vaultProfiles) },
-                    UmbraSettingRow(label: "回收站", value: "没有", chevron: true) { router.go(.vaultTrash) }
+                    UmbraSettingRow(label: "回收站", value: trashCountLabel, chevron: true) { router.go(.vaultTrash) }
                 ]),
                 UmbraSettingSection(
                     header: "主密码与恢复",
@@ -642,6 +890,11 @@ struct UmbraVaultSettingsView: View {
                     ])
             ])
             .onAppear { session.touch() }
+            .task {
+                // 回收站那一行要显示「N 项」。通用区的条数只有服务端知道，
+                // 拉一次；拉不到就退回只算保险箱那部分（trashCountLabel 里那句注释）。
+                if let dto = await HTTPService.shared.fetchTrash() { genericTrash = dto.items.count }
+            }
             .overlay { if askPassword { passwordConfirm } }
     }
 
