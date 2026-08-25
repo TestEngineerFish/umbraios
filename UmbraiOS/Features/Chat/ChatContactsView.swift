@@ -103,11 +103,12 @@ struct UmbraChatContactsView: View {
                             // （unread 是 Set<String>），编不出一个真实的条数。
                             // 摆一个假数字比不摆更糟。
                             //
-                            // 颜色从**橙**改成了**红**（2026-08-22 稿的新硬规则）：
-                            // 「角标一律 --danger 实底 + 白字，橙色只留给主操作 / 当前选中 / 进度三处」。
-                            // 这一条在会话行上尤其成立 —— 秘书那一行的头像本来就是橙的，
-                            // 再顶一颗橙点，两团橙糊在一起，反而看不出「这行有未读」。
-                            Circle().fill(UmbraColor.danger).frame(width: 8, height: 8)
+                            // 取色跟计数角标同源（badgeRed = systemRed）：2026-08-22 稿的
+                            // 硬规则是「角标一律 --danger 实底」，但底栏回归系统 bar 后
+                            // 徽标是系统红 —— iOS 端把「角标红」统一映射到 systemRed
+                            //（--danger 留给破坏性操作；已记台账待设计确认）。
+                            // 不用橙的理由不变：秘书行头像本来就是橙的，橙点会糊在一起。
+                            Circle().fill(UmbraColor.badgeRed).frame(width: 8, height: 8)
                         } else if let d = dev, !d.online, let seen = d.last_seen {
                             Text("最后在线 \(timeLabel(seen))")
                                 .font(UmbraFont.sans(12, .w400))

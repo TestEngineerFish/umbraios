@@ -677,6 +677,28 @@ struct UmbraFilterChips<T: Hashable>: View {
     }
 }
 
+// MARK: - 计数角标
+
+/// 计数角标：对齐**系统底栏徽标**的形态 —— systemRed 实底 + 白字胶囊，>99 显示 99+。
+/// 底栏回归系统 tab bar 后，页面里的计数角标必须跟它同色同形才算一套
+///（老板验收点名：底栏红、页内橙，两套红橙并存像色差事故）。
+/// 全 App「催人处理」的数字一律用它；中性数量继续用灰 chip，别拿红角标撑场面。
+/// count ≤ 0 时自身消失，调用方不用再包一层 if。
+struct UmbraCountBadge: View {
+    let count: Int
+
+    var body: some View {
+        if count > 0 {
+            Text(count > 99 ? "99+" : "\(count)")
+                .font(UmbraFont.sans(11.5, .w600))
+                .foregroundColor(.white)
+                .padding(.horizontal, 6)
+                .frame(minWidth: 19, minHeight: 19)
+                .background(Capsule().fill(UmbraColor.badgeRed))
+        }
+    }
+}
+
 // MARK: - 左滑操作行 —— 已退役（2026-08-25）
 //
 // 原来这里有一个自绘的 UmbraSwipeRow（ScrollView+VStack 里手写 DragGesture）。

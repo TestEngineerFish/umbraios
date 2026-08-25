@@ -201,11 +201,19 @@ struct UmbraToolHomeView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 if row.count > 0 {
-                    Text("\(row.count)")
-                        .font(UmbraFont.mono(11.5, .w600))
-                        .foregroundColor(row.attn ? .white : UmbraColor.muted)
-                        .padding(.horizontal, 7).frame(minWidth: 20, minHeight: 19)
-                        .background(Capsule().fill(row.attn ? UmbraColor.orange : UmbraColor.chip))
+                    if row.attn {
+                        // 催办数字 = 计数角标（系统底栏徽标同款红）。原来是橙胶囊 ——
+                        // 底栏徽标红、进到页里同一个数变橙，像两套系统，老板点名统一。
+                        UmbraCountBadge(count: row.count)
+                    } else {
+                        // 中性数量（没逾期没待办，只是「有多少条」）：灰 chip，
+                        // 不做成角标 —— 红角标只留给催人的数字。
+                        Text("\(row.count)")
+                            .font(UmbraFont.mono(11.5, .w600))
+                            .foregroundColor(UmbraColor.muted)
+                            .padding(.horizontal, 7).frame(minWidth: 20, minHeight: 19)
+                            .background(Capsule().fill(UmbraColor.chip))
+                    }
                 }
                 UmbraIcon(d: UmbraIconPath.chevronRight, size: 15, strokeWidth: 2)
                     .foregroundColor(UmbraColor.faint)

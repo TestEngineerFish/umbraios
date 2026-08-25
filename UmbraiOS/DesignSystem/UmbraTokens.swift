@@ -90,6 +90,11 @@ enum UmbraColor {
     static let warningSoft = dynColor(light: Color(hex: "FBEEDD"), dark: Color(hex: "B45309").opacity(0.22))
     static let danger      = dyn(light: "B42318", dark: "E0675C")
     static let dangerSoft  = dynColor(light: Color(hex: "FBE9E7"), dark: Color(hex: "B42318").opacity(0.22))
+    /// 计数角标专用红：取系统 systemRed（浅 #FF3B30 / 深 #FF453A，系统自适应），
+    /// 跟系统底栏徽标同色。不复用 --danger —— 那是破坏性操作的红（偏深偏哑），
+    /// 底栏回归系统 bar 后两个红并排出现像色差事故（实机可辨，老板点名统一）。
+    /// 稿的口径偏离已记台账，待设计确认：iOS 端「角标红」→ systemRed。
+    static let badgeRed    = Color(UIColor.systemRed)
 
     /// 用户气泡。这一条不在 colors.css 里，来自主设计稿对话页的取值。
     // 我方气泡。浅色是交接包给的冷调蓝灰（衬白卡片）；
