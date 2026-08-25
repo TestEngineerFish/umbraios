@@ -1,11 +1,12 @@
 // 记一笔 / 编辑账目（money.add，对齐稿 2521–2636）。
 //
-// 与稿的三处一期取舍（都已记进回流台账）：
-//   · 「新增分类」「管理子类」不画 —— 服务端一期没有建分类 / 存子类的接口，
-//     放一个点了没反应的入口比不放更糟；
-//   · 「附件」整段不画 —— money_entries 表没有附件字段（它属于四期截图链路）；
-//   · 保存失败的文案说真话：「检查网络后再点一次保存」，不说「已排队自动重试」——
-//     离线队列要等整体同步模型拍板（05 的 E15），没有队列就不许诺队列。
+// 第二批起补齐了原来的两处取舍：「新增分类」「管理子类」入口（服务端有接口了），
+// 以及编辑态的**附件区**（截图快捷记账的原图落在这，origin 不可删）。
+// iOS 一期附件只展示 / 删，不从相册加图 —— 加图的入口形态要等设计出稿
+// （已记回流台账，批次 004 一并发）。
+//
+// 保存失败的文案说真话：「检查网络后再点一次保存」，不说「已排队自动重试」——
+// 离线队列要等整体同步模型拍板（05 的 E15），没有队列就不许诺队列。
 import SwiftUI
 
 struct UmbraMoneyAddView: View {
@@ -25,6 +26,9 @@ struct UmbraMoneyAddView: View {
     @State private var showTimePick = false
     @State private var busy = false
     @State private var failed = false
+    /// 记账半路新增分类的名字弹层。
+    @State private var addingCat = false
+    @State private var addText = ""
     /// 编辑态只在**进页那一刻**灌一次值 —— save 之后 store 会静默重拉，
     /// 不挡住的话 onAppear 再跑会把用户正在改的草稿冲掉。
     @State private var seeded = false
@@ -45,8 +49,11 @@ struct UmbraMoneyAddView: View {
                 amountCard
                 recentRow
                 catGrid
+                catToolsRow
                 subChips
                 timeNoteCard
+                recurLinkRow
+                attsCard
             }
             .padding(.horizontal, UmbraMetric.pagePadX)
             .padding(.top, UmbraMetric.sp2)
@@ -258,9 +265,62 @@ struct UmbraMoneyAddView: View {
         }
     }
 
+    /// 分类网格下的两个小入口（稿 mAdd 的 addCat / editSubs）。
+    /// 管理子类只在选了分类时出现 —— 没有分类，「管理谁的子类」没有答案。
+    private var catToolsRow: some View {
+        HStack(spacing: 16) {
+            Button { addText = ""; addingCat = true } label: {
+                Text("＋ 新增分类").font(UmbraFont.sans(12.5, .w560))
+                    .foregroundColor(UmbraColor.muted)
+                    .frame(minHeight: UmbraMetric.tapMin)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            if let slug = cat {
+                Button { router.go(.moneyCat(slug: slug)) } label: {
+                    Text("管理「\(money.catName(slug))」的子类").font(UmbraFont.sans(12.5, .w560))
+                        .foregroundColor(UmbraColor.muted)
+                        .frame(minHeight: UmbraMetric.tapMin)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+        // 弹层挂在这行上（挂 body 会和日期滚轮的 modifier 挤在一起难读）。
+        .alert("新增\(dir == "income" ? "收入" : "支出")分类", isPresented: $addingCat) {
+            TextField("分类名，例如「宠物」", text: $addText)
+            Button("取消", role: .cancel) { addingCat = false }
+            Button("创建分类") { commitAddCat() }
+        } message: {
+            Text("先起个名字，子类可以之后在分类里加。")
+        }
+    }
+
+    /// 建好立刻选中 —— 用户在记账半路建分类，十有八九就是要给这一笔用。
+    private func commitAddCat() {
+        addingCat = false
+        let name = addText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { router.showToast("分类得有个名字"); return }
+        guard !money.cats.contains(where: { $0.name == name }) else {
+            router.showToast("已经有一个叫「\(name)」的分类了")
+            return
+        }
+        Task { @MainActor in
+            guard let slug = await money.createCat(name: name, direction: dir) else {
+                router.showToast("没存上，检查网络后再试")
+                return
+            }
+            cat = slug
+            sub = ""
+            router.showToast("已加上分类「\(name)」")
+        }
+    }
+
     @ViewBuilder
     private var subChips: some View {
-        let subs = cat.map { MoneySubs.of($0) } ?? []
+        // 子类从服务端来（第二批落库）：选中分类的 subs 跟着分类列表一起下发。
+        let subs = cat.flatMap { s in money.cats.first { $0.slug == s }?.subList } ?? []
         if !subs.isEmpty {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 7) {
@@ -321,6 +381,112 @@ struct UmbraMoneyAddView: View {
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
         }
         .buttonStyle(.plain)
+    }
+
+    /// 周期生成的账在编辑页给一条回规则的路（iOS 定稿：流水行上的徽章不可点 ——
+    /// 14px 命中区嵌在可左滑的行里必然误触；跳规则的入口挪到这里）。
+    /// 规则可能已删（删规则不删流水）—— 那就说人话，别装作能跳。
+    @ViewBuilder
+    private var recurLinkRow: some View {
+        if let e = editing, e.src == "recur", !e.rule_id.isEmpty {
+            Button {
+                if money.recurRule(e.rule_id) != nil {
+                    router.go(.moneyRecurEdit(id: e.rule_id))
+                } else {
+                    router.showToast("这条账的周期规则已经删了，账还在")
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    UmbraIcon(d: MoneySrc.badge("recur")!.icon, size: 14, strokeWidth: 1.9)
+                        .foregroundColor(UmbraColor.orangeText)
+                    Text(money.recurRule(e.rule_id).map { "由周期规则「\($0.name)」自动记入" }
+                         ?? "由周期规则自动记入（规则已删除）")
+                        .font(UmbraFont.sans(12.5)).foregroundColor(UmbraColor.muted)
+                    Spacer()
+                    if money.recurRule(e.rule_id) != nil {
+                        Text("查看规则").font(UmbraFont.sans(12.5, .w560))
+                            .foregroundColor(UmbraColor.orangeText)
+                    }
+                }
+                .frame(minHeight: UmbraMetric.tapMin)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+        }
+    }
+
+    // MARK: 附件（编辑态，截图快捷记账的原图落在这）
+
+    /// 只在「编辑一笔已有附件的账」时出现。展示位是临时的（放时间卡下面）——
+    /// 正式的附件区形态等 ClaudeDesign 出稿（已记回流台账），先保证图看得到、
+    /// 普通附件删得掉、原图删不掉这三件事成立。
+    @ViewBuilder
+    private var attsCard: some View {
+        if let e = editing, !e.attList.isEmpty {
+            VStack(alignment: .leading, spacing: 10) {
+                Text("附件").font(UmbraFont.sans(12, .w600)).foregroundColor(UmbraColor.faint)
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 10) {
+                        ForEach(e.attList, id: \.file_id) { a in attThumb(entry: e, att: a) }
+                    }
+                }
+                Text(e.attList.contains(where: { $0.origin })
+                     ? "这笔是截图记的，原始截图一直留着，不能删。"
+                     : "小票、账单、转账截图都能放这儿，跟账目一起存。")
+                    .font(UmbraFont.sans(11.5)).foregroundColor(UmbraColor.faint)
+            }
+            .padding(.horizontal, 16).padding(.vertical, 14)
+            .moneyCard()
+        }
+    }
+
+    private func attThumb(entry e: MoneyEntryDTO, att a: MoneyAttDTO) -> some View {
+        VStack(spacing: 5) {
+            AsyncImage(url: HTTPService.shared.moneyFileURL(a.file_id)) { phase in
+                switch phase {
+                case .success(let img):
+                    img.resizable().scaledToFill()
+                default:
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .fill(UmbraColor.chip)
+                        .overlay(UmbraIcon(d: UmbraIconPath.image, size: 18, strokeWidth: 1.8)
+                            .foregroundColor(UmbraColor.faint))
+                }
+            }
+            .frame(width: 92, height: 92)
+            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+            .overlay(alignment: .topTrailing) {
+                // 原图没有删除键（稿：它是凭证，一直留着）；普通附件右上角一个 ×。
+                if !a.origin {
+                    Button { confirmDeleteAtt(entry: e, att: a) } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 17))
+                            .foregroundStyle(.white, Color.black.opacity(0.45))
+                            .padding(4)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            Text(a.origin ? "原始截图" : (a.label.isEmpty ? "图片" : a.label))
+                .font(UmbraFont.sans(10.5)).foregroundColor(UmbraColor.faint)
+                .lineLimit(1)
+        }
+    }
+
+    private func confirmDeleteAtt(entry e: MoneyEntryDTO, att a: MoneyAttDTO) {
+        router.confirm(UmbraAlert(
+            title: "删掉这张附件？",
+            body: "只删图片，账目本身不变。",
+            confirmLabel: "删除",
+            confirmDestructive: true,
+            onConfirm: {
+                Task { @MainActor in
+                    let ok = await money.deleteAtt(entryId: e.id, fileId: a.file_id)
+                    router.showToast(ok ? "已删掉附件" : "没删掉，检查网络后再试")
+                }
+            }))
     }
 
     private var dateLabel: String {

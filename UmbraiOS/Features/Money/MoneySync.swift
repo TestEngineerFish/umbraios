@@ -16,11 +16,23 @@ struct MoneyCatDTO: Codable, Identifiable, Hashable {
     let slug: String
     let name: String
     let direction: String        // expense / income
-    let slot: Int                // 0 = 无色槽（图表里中性灰），1–7 彩色
+    let slot: Int                // 0 = 无色槽（图表里中性灰），1–7 / 9 / 10 彩色
     let seq: Int
     let enabled: Bool
     let locked: Bool             // other / other_in：兜底分类，不可停用
+    /// 二级分类（第二批起服务端落库，跟着分类一起下发）。可选是给老服务端
+    /// 留的余量 —— 字段缺了整个分类列表不该解不开。
+    let subs: [String]?
     var id: String { slug }
+    var subList: [String] { subs ?? [] }
+}
+
+/// 一张账单附件。文件本体在服务端（GET /files/{file_id}），这里只有引用。
+struct MoneyAttDTO: Codable, Hashable {
+    let file_id: String
+    let label: String
+    /// 截图记账的**原图**：稿明写「一直留着，不能删」—— 它是这笔账的凭证。
+    let origin: Bool
 }
 
 /// 一笔流水。金额一律**整数分**，展示时才 /100。
@@ -40,6 +52,10 @@ struct MoneyEntryDTO: Codable, Identifiable, Hashable {
     let order_no: String
     let updated_at_ms: Int64
     let deleted: Bool
+    /// 附件（截图记账的原图 + 手动加的图）。可选：老服务端没有这个字段，
+    /// 且 PUT 上行时 nil 会被整个省掉（synthesized Codable 用 encodeIfPresent）。
+    let atts: [MoneyAttDTO]?
+    var attList: [MoneyAttDTO] { atts ?? [] }
 }
 
 /// GET /money/entries 的合计（服务端按**整个筛选结果**算，不是按页）。
@@ -83,6 +99,53 @@ struct MoneyStatsDTO: Codable {
     let prev_ym: String
     let prev_expense: Int?
     let trend: [MoneyTrendDTO]           // 老→新，含当月
+}
+
+// MARK: - 周期记账（二期）
+
+/// 一条周期规则。日期是 'YYYY-MM-DD' 文本 —— 「每月 31 号」的锚是首次日期的
+/// 「31」，转时间戳这层日历语义就丢了（服务端同款存法）。
+/// done_count / last_done_ms 是服务端**从流水现算**的（没有第二份真相）。
+struct MoneyRecurDTO: Codable, Identifiable, Hashable {
+    let id: String
+    let name: String
+    let cents: Int
+    let direction: String
+    let cat: String
+    let sub: String
+    let merchant: String
+    let cycle: String            // day / week / month / year
+    let every_n: Int             // 每 N 个周期（D6 备用，编辑器一期恒 1）
+    let week_day: Int            // cycle='week' 用，0=周一
+    let first_date: String
+    let time_hhmm: String
+    let tz_offset_min: Int
+    let end_kind: String         // never / date（结束日期**含当天**）
+    let end_date: String
+    let next_date: String        // '' = 到头了（过了结束日期）
+    let next_at_ms: Int64
+    let paused: Bool
+    let done_count: Int
+    let last_done_ms: Int64
+    let updated_at_ms: Int64
+}
+
+struct MoneyRecurListDTO: Codable {
+    let items: [MoneyRecurDTO]
+}
+
+struct MoneyRecurPutDTO: Codable {
+    let rule: MoneyRecurDTO
+}
+
+/// 子类 + 「N 笔在用」（全部历史口径）。money.cat 页专用。
+struct MoneySubUsedDTO: Codable, Hashable {
+    let label: String
+    let used: Int
+}
+
+struct MoneySubUsedListDTO: Codable {
+    let items: [MoneySubUsedDTO]
 }
 
 // MARK: - 金额展示
@@ -269,10 +332,11 @@ enum MoneyCatArt {
         "other_in": "M12,3.5C10.21,3.5 8.46,4.07 7,5.12C5.55,6.18 4.47,7.67 3.92,9.37C3.36,11.08 3.36,12.92 3.92,14.63C4.47,16.33 5.55,17.82 7,18.88C8.46,19.93 10.21,20.5 12,20.5C13.79,20.5 15.54,19.93 17,18.88C18.45,17.82 19.53,16.33 20.08,14.63C20.64,12.92 20.64,11.08 20.08,9.37C19.53,7.67 18.45,6.18 17,5.12C15.54,4.07 13.79,3.5 12,3.5M8.4,12L8.41,12M12,12L12.01,12M15.6,12L15.61,12",
     ]
 
-    /// 未知 slug 兜底到「其他」的三个点 —— 历史流水可能指向停用/未知的分类，
-    /// 那行流水不能因此消失或崩掉。
+    /// 未知 slug（主要是用户自建分类，slug 形如 u<毫秒>）兜底到**标签形状** ——
+    /// 稿的新增分类流程只要名字不选图标，给的就是这个通用标签（已转 M/L/C/Z）。
+    /// 历史流水指向停用/未知分类时同样走这里，那行流水不能消失或崩掉。
     static func icon(_ slug: String) -> String {
-        icons[slug] ?? icons["other"]!
+        icons[slug] ?? "M3.5,12L12,3.5L20.5,3.5L20.5,12L12,20.5ZM16,8L16.01,8"
     }
 
     /// 色槽 1–7 → 彩色，0 与一切非法值 → 中性灰。
@@ -326,25 +390,8 @@ enum MoneySrc {
     }
 }
 
-/// 二级分类预设（稿 SUBS 表原样）。二级存的是**中文字符串不是 slug**（服务端 §3.1），
-/// 所以这是「输入建议」不是枚举 —— 流水里出现表外的二级也完全合法。
-/// 稿里的「新增子类 / 子类改名」需要服务端存这张表，一期服务端没有，先用预设。
-enum MoneySubs {
-    private static let table: [String: [String]] = [
-        "food": ["早餐", "午餐", "晚餐", "外卖", "咖啡奶茶", "请客"],
-        "transport": ["打车", "公交地铁", "加油", "停车", "火车高铁", "机票"],
-        "shopping": ["服饰", "数码", "家居", "美妆"],
-        "housing": ["房租房贷", "水电燃气", "物业", "宽带"],
-        "daily": ["生活用品", "母婴", "宠物"],
-        "fun": ["订阅会员", "游戏", "观影演出", "旅行"],
-        "medical": ["门诊", "药品", "体检", "保险"],
-        "study": ["书籍", "课程", "软件工具"],
-        "social": ["红包", "礼物", "请客送礼"],
-        "salary": ["月薪", "年终"],
-        "reimburse": ["差旅", "办公"],
-    ]
-
-    static func of(_ slug: String) -> [String] {
-        table[slug] ?? []
-    }
-}
+// （已退场）enum MoneySubs —— 硬编码的二级预设表。第二批「子类落库」后
+// 服务端是唯一正本（money_subs 表，跟着 GET /money/categories 的 subs 字段下发，
+// 用 MoneyCatDTO.subList 取），本地表删除：留着它，用户在别的端加的子类
+// 这里永远看不见，两份来源迟早对不上。二级仍是**中文字符串不是 slug**，
+// 流水里出现表外的二级依旧完全合法（选择器候选 ≠ 枚举）。

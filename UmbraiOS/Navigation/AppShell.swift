@@ -237,6 +237,12 @@ struct UmbraRouteView: View {
             UmbraMoneyAddView(id: id)
         case .moneyCats:
             UmbraMoneyCatsView()
+        case .moneyCat(let slug):
+            UmbraMoneyCatDetailView(slug: slug)
+        case .moneyRecur:
+            UmbraMoneyRecurListView()
+        case .moneyRecurEdit(let id):
+            UmbraMoneyRecurEditView(id: id)
         case .deviceDetail(let id):
             UmbraDeviceDetailView(id: id)
         case .meCaps:

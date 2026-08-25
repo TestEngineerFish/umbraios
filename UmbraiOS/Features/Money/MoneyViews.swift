@@ -60,6 +60,7 @@ struct UmbraMoneyHomeView: View {
         VStack(alignment: .leading, spacing: UmbraMetric.sp4) {
             monthRow
             summaryCard(st)
+            recurCard
             catShareCard(st)
             trendCard(st)
             topCard
@@ -98,6 +99,48 @@ struct UmbraMoneyHomeView: View {
                 // 圆钮画 32、点 44（规范：热区用透明外框撑，不把控件画大）。
                 .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)
                 .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 周期记账入口卡（二期，照稿 mnVM 的 goRecur / recHint / recNext）：
+    /// 「N 条在跑」+ 最近要记的两条预览。没有规则时也显示 —— 入口藏起来，
+    /// 「房租不用手记」这个功能就永远没人发现。
+    private var recurCard: some View {
+        let live = money.recurRules.filter { !$0.paused && $0.next_at_ms > 0 }
+        let next2 = live.sorted { $0.next_at_ms < $1.next_at_ms }.prefix(2)
+        return Button { router.go(.moneyRecur) } label: {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack(spacing: 8) {
+                    UmbraIcon(d: MoneySrc.badge("recur")!.icon, size: 15, strokeWidth: 1.9)
+                        .foregroundColor(UmbraColor.orangeText)
+                    Text("周期记账").font(UmbraFont.sans(14.5, .w600)).foregroundColor(UmbraColor.text)
+                    Spacer()
+                    Text(live.isEmpty ? "还没有" : "\(live.count) 条在跑")
+                        .font(UmbraFont.sans(12)).foregroundColor(UmbraColor.muted)
+                    UmbraIcon(d: UmbraIconPath.chevronRight, size: 14, strokeWidth: 2.2)
+                        .foregroundColor(UmbraColor.faint)
+                }
+                if next2.isEmpty {
+                    Text("房租、订阅这类固定账，建一条规则到点自动记，不用再手记。")
+                        .font(UmbraFont.sans(12)).foregroundColor(UmbraColor.faint)
+                } else {
+                    ForEach(Array(next2), id: \.id) { r in
+                        HStack(spacing: 8) {
+                            Text(r.name).font(UmbraFont.sans(13)).foregroundColor(UmbraColor.text)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(MoneyFmt.yuan(r.cents))
+                                .font(UmbraFont.mono(12.5, .w560)).foregroundColor(UmbraColor.muted)
+                            Text("下次 \(MoneyRecurFmt.shortDate(r.next_date))")
+                                .font(UmbraFont.sans(11.5)).foregroundColor(UmbraColor.orangeText)
+                        }
+                    }
+                }
+            }
+            .padding(.horizontal, 16).padding(.vertical, 13)
+            .moneyCard()
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

@@ -305,6 +305,76 @@ class HTTPService {
         return await request(components?.url)
     }
 
+    /// 新增分类（第二批）。slug 服务端生成；重名会 400，界面在弹层里就先查过。
+    func createMoneyCat(name: String, direction: String) async -> MoneyCatDTO? {
+        guard let url = URL(string: "\(baseUrl)/money/categories") else { return nil }
+        return await sendJSONReturning(url, method: "POST",
+                                       body: ["name": name, "direction": direction],
+                                       as: MoneyCatDTO.self)
+    }
+
+    /// 子类的增 / 改名 / 删（money.cat 页）。都只影响以后记账，历史流水不动。
+    func addMoneySub(cat: String, label: String) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/money/categories/\(cat)/subs") else { return false }
+        return await sendJSON(url, method: "POST", body: ["label": label])
+    }
+
+    func renameMoneySub(cat: String, old: String, new: String) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/money/categories/\(cat)/subs") else { return false }
+        return await sendJSON(url, method: "PATCH", body: ["old": old, "new": new])
+    }
+
+    func deleteMoneySub(cat: String, label: String) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/money/categories/\(cat)/subs/delete") else { return false }
+        return await sendJSON(url, method: "POST", body: ["label": label])
+    }
+
+    /// 某分类的子类 + 「N 笔在用」（全部历史口径，money.cat 页的行副文案与删除确认用）。
+    func fetchMoneySubsUsed(cat: String) async -> [MoneySubUsedDTO]? {
+        var components = URLComponents(string: "\(baseUrl)/money/categories/\(cat)/subs")
+        components?.queryItems = [URLQueryItem(name: "with_used", value: "true")]
+        let got: MoneySubUsedListDTO? = await request(components?.url)
+        return got?.items
+    }
+
+    /// 摘一张附件。**原图（origin）服务端会拒** —— 界面本来就不给它删除键。
+    func deleteMoneyAtt(entryId: String, fileId: String) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/money/entries/\(entryId)/atts/delete") else { return false }
+        return await sendJSON(url, method: "POST", body: ["file_id": fileId])
+    }
+
+    /// 附件图片的下载地址（GET /files/{id} 不鉴权，file_id 本身即凭证）。
+    func moneyFileURL(_ fileId: String) -> URL? {
+        URL(string: "\(baseUrl)/files/\(fileId)")
+    }
+
+    // MARK: - Money 周期记账（二期）
+
+    func fetchMoneyRecur() async -> [MoneyRecurDTO]? {
+        guard let url = URL(string: "\(baseUrl)/money/recur") else { return nil }
+        let got: MoneyRecurListDTO? = await request(url)
+        return got?.items
+    }
+
+    /// 建/改一条规则。服务端校验「一笔都记不到」的规则并 400 —— 界面同款拦截
+    /// 先挡一道，这里只是兜底。
+    func putMoneyRecur(id: String, body: [String: Any]) async -> MoneyRecurDTO? {
+        guard let url = URL(string: "\(baseUrl)/money/recur/\(id)") else { return nil }
+        let got: MoneyRecurPutDTO? = await sendJSONReturning(url, method: "PUT", body: body,
+                                                             as: MoneyRecurPutDTO.self)
+        return got?.rule
+    }
+
+    func pauseMoneyRecur(id: String, paused: Bool) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/money/recur/\(id)/pause") else { return false }
+        return await sendJSON(url, method: "POST", body: ["paused": paused])
+    }
+
+    func deleteMoneyRecur(id: String) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/money/recur/\(id)") else { return false }
+        return await sendJSON(url, method: "DELETE", body: nil)
+    }
+
     // MARK: - Capabilities
     func fetchCapabilities() async -> [Capability] {
         guard let url = URL(string: "\(baseUrl)/capabilities") else { return [] }

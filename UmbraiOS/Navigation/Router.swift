@@ -34,6 +34,11 @@ enum UmbraRoute: Hashable {
     case moneyList
     case moneyAdd(id: String?)         // nil = 新建，非 nil = 编辑这一条
     case moneyCats
+    /// 单个分类（money.cat）：子类的看 / 加 / 改名 / 删（第二批）。
+    case moneyCat(slug: String)
+    // 周期记账（二期）：规则列表 + 编辑（nil = 新建）
+    case moneyRecur
+    case moneyRecurEdit(id: String?)
     // Tab 3 我
     case meHome
     case mePhrases
@@ -78,7 +83,8 @@ enum UmbraRoute: Hashable {
              .remList, .remDetail, .remEdit,
              .taskList, .taskDetail,
              .inspList, .inspDetail, .inspEdit,
-             .moneyHome, .moneyList, .moneyAdd, .moneyCats:
+             .moneyHome, .moneyList, .moneyAdd, .moneyCats,
+             .moneyCat, .moneyRecur, .moneyRecurEdit:
             return .tool
         case .vaultTrash:
             return .me

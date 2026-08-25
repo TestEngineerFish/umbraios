@@ -18,6 +18,9 @@ final class MoneyStore: ObservableObject {
     @Published var cats: [MoneyCatDTO] = []
     @Published var entries: [MoneyEntryDTO] = []
     @Published var stats: MoneyStatsDTO?
+    /// 周期规则（二期）。跟主数据一起拉，但**不参与整页成败** ——
+    /// 统计页的周期入口卡缺了顶多不显示，不该把整页打成错误态。
+    @Published var recurRules: [MoneyRecurDTO] = []
     /// 当前看的月（= 当月）。每次 load 重算 —— 页面跨零点开着不关，第二天要进新的月。
     @Published var ym: String = MoneyFmt.ymNow()
 
@@ -39,11 +42,12 @@ final class MoneyStore: ObservableObject {
         let m = MoneyFmt.ymNow()
         ym = m
         if !silent { phase = .loading }
-        // 三个请求并发发出去。趋势一次拉 12 个月，近 6 月在统计页里切片。
+        // 四个请求并发发出去。趋势一次拉 12 个月，近 6 月在统计页里切片。
         async let c = HTTPService.shared.fetchMoneyCats(includeDisabled: true)
         async let e = HTTPService.shared.fetchMoneyEntries(ym: m)
         async let s = HTTPService.shared.fetchMoneyStats(ym: m, trendMonths: 12)
-        let (rc, re, rs) = await (c, e, s)
+        async let r = HTTPService.shared.fetchMoneyRecur()
+        let (rc, re, rs, rr) = await (c, e, s, r)
         guard let rc, let re, let rs else {
             // 静默刷新失败时不动手上的数据 —— 下拉一次失败就把整页打成错误态，
             // 比「保持旧数据 + 什么都不说」更打扰（提醒列表的同一条经验）。
@@ -53,6 +57,8 @@ final class MoneyStore: ObservableObject {
         cats = rc
         entries = re.items
         stats = rs
+        // 周期规则不在成败守门里：拉挂了保持旧值，入口卡照旧能进列表页重试。
+        if let rr { recurRules = rr }
         phase = .ready
     }
 
@@ -135,5 +141,75 @@ final class MoneyStore: ObservableObject {
         else { return false }
         await reload(silent: true)
         return true
+    }
+
+    /// 新增分类（第二批）。成功返回新分类的 slug（调用方常要立刻选中它）。
+    func createCat(name: String, direction: String) async -> String? {
+        guard let c = await HTTPService.shared.createMoneyCat(name: name, direction: direction)
+        else { return nil }
+        await reload(silent: true)
+        return c.slug
+    }
+
+    /// 子类增 / 改名 / 删。都只影响以后记账（历史流水存的是中文字符串，不动）。
+    func addSub(cat: String, label: String) async -> Bool {
+        guard await HTTPService.shared.addMoneySub(cat: cat, label: label) else { return false }
+        await reload(silent: true)
+        return true
+    }
+
+    func renameSub(cat: String, old: String, new: String) async -> Bool {
+        guard await HTTPService.shared.renameMoneySub(cat: cat, old: old, new: new) else { return false }
+        await reload(silent: true)
+        return true
+    }
+
+    func deleteSub(cat: String, label: String) async -> Bool {
+        guard await HTTPService.shared.deleteMoneySub(cat: cat, label: label) else { return false }
+        await reload(silent: true)
+        return true
+    }
+
+    /// 摘一张附件（原图摘不掉，服务端也会拒）。
+    func deleteAtt(entryId: String, fileId: String) async -> Bool {
+        guard await HTTPService.shared.deleteMoneyAtt(entryId: entryId, fileId: fileId)
+        else { return false }
+        await reload(silent: true)
+        return true
+    }
+
+    // MARK: 周期记账（二期）
+
+    /// 单独刷新规则列表（进 money.recur 页时）。整页成败不看它。
+    func reloadRecur() async {
+        if let rr = await HTTPService.shared.fetchMoneyRecur() { recurRules = rr }
+    }
+
+    /// 建/改一条规则。改动**只影响以后的**（服务端重算下一次，已生成流水不动）。
+    func saveRecur(id: String?, body: [String: Any]) async -> Bool {
+        let rid = id ?? UUID().uuidString.lowercased()
+        guard await HTTPService.shared.putMoneyRecur(id: rid, body: body) != nil else { return false }
+        await reloadRecur()
+        return true
+    }
+
+    /// 停止 / 重新开始。恢复不补停用期间的账（服务端语义，稿的开关文案就是这么说的）。
+    func pauseRecur(id: String, paused: Bool) async -> Bool {
+        guard await HTTPService.shared.pauseMoneyRecur(id: id, paused: paused) else { return false }
+        await reloadRecur()
+        return true
+    }
+
+    /// 删规则不删已生成的流水（稿：那些是真花过的钱）。
+    func deleteRecur(id: String) async -> Bool {
+        guard await HTTPService.shared.deleteMoneyRecur(id: id) else { return false }
+        await reloadRecur()
+        return true
+    }
+
+    /// 流水行上的「周期」徽章要跳的规则。规则可能已删（删规则不删流水）——
+    /// 返回 nil 时调用方给一句人话，别装作能跳。
+    func recurRule(_ id: String) -> MoneyRecurDTO? {
+        recurRules.first { $0.id == id }
     }
 }
