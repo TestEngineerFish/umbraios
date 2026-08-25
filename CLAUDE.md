@@ -45,6 +45,26 @@ UmbraiOS/
 不是复述它做了什么。踩过的坑写进注释里 —— 下一个人（包括三个月后的你）
 会因为看不到坑而把它重新踩一遍。
 
+## 页面骨架
+
+所有页面（根页、推入页都算）一律用 `UmbraScreen` 当容器 —— 它管四件事：可滚动
+内容、底部动作条、页面底色、键盘收起（点空白 + 下拉都能收）。不要自己另起
+ScrollView + background 的组合，安全区的坑它都已经踩平了。
+
+三条铁律，每条都是真事故换来的：
+
+1. **隐藏 tab bar 只有一个声明处**：AppShell 里 navigationDestination 内容上的
+   `.toolbar(.hidden, for: .tabBar)`。任何页面不许自己再挂第二个开关 ——
+   两个来源一起表态时，部分系统版本会藏了 bar 却把安全区占位留在原地，
+   二级页底部永远缺一条 tab bar 高的空带（连着两轮验收中招）。
+2. **任何页面不许挂 `ToolbarItemGroup(placement: .keyboard)`**：键盘附件条撞上
+   隐藏的 tab bar，会把整条导航栈的底部避让 inset 卡死 —— 键盘收了，同栈
+   所有页面底部还空着一块键盘高度的黑，kill App 才恢复（统计页、回收站的
+   截图实锤）。要给键盘补按钮，把按钮画进页面内容里（参照记一笔的运算符芯片）。
+3. **收键盘不自己造轮子**：UmbraScreen 自带「点空白收」和「往下拖收」，页面里
+   别再放「完成」按钮、别自己拿 @FocusState 拼收起逻辑（真需要主动收，调
+   `UmbraKeyboard.dismiss()`）。
+
 ## 工程文件
 
 `UmbraiOS.xcodeproj/project.pbxproj` 已经转成 **Xcode 16 的同步文件夹**

@@ -260,7 +260,7 @@ final class VaultStore: ObservableObject {
         var req = URLRequest(url: url)
         if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await APISession.shared.data(for: req)
             let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
             if code == 401 || code == 403 {
                 // 区分「没填」和「填错了」——两种情况下一步要做的事不一样。
@@ -561,7 +561,7 @@ final class VaultStore: ObservableObject {
         guard let a = auk, let cur = snapshot else { return }
         guard let url = URL(string: "\(base)/vault/sync?have_rev=\(syncRev)") else { return }
         var req = URLRequest(url: url); if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
-        guard let (data, _) = try? await URLSession.shared.data(for: req),
+        guard let (data, _) = try? await APISession.shared.data(for: req),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
         let rev = (obj["rev"] as? Int) ?? 0
         guard rev != syncRev, let blobStr = obj["blob"] as? String,
@@ -605,7 +605,7 @@ final class VaultStore: ObservableObject {
             req.setValue("application/json", forHTTPHeaderField: "Content-Type")
             if !token.isEmpty { req.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
             req.httpBody = try? JSONSerialization.data(withJSONObject: ["blob": recordStr, "baseRev": syncRev, "deviceId": NetworkConfig.shared.clientId, "force": attempt == 2])
-            guard let (data, _) = try? await URLSession.shared.data(for: req),
+            guard let (data, _) = try? await APISession.shared.data(for: req),
                   let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
                 // 推不上去（多半是断网）：改动已经在本机缓存里了，标一下等下次同步。
                 offline = true

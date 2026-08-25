@@ -161,21 +161,7 @@ struct Inspiration: Codable, Identifiable {
     }
 }
 
-// 工作区：AI 写文件的落地目录。手机上**只读**（新增/删除/打开位置都在电脑上做）。
-// 字段对应服务端 workspaces 表 + list_all 附带的两个统计列。
-struct Workspace: Codable, Identifiable {
-    let id: String
-    let name: String
-    let device_id: String
-    let dir: String?
-    let description: String?
-    /// auto = 任务自动建 | manual = 手动新增
-    let origin: String
-    let created_at: String?
-    let last_active_at: String?
-    var task_count: Int? = nil
-    var last_goal: String? = nil
-}
+// Workspace 模型已删：工作区整屏随稿在 iOS 下线（2026-08-22，PC 端保留）。
 
 /// GET/PUT/DELETE /profile 的响应体。
 struct ProfileBody: Codable {

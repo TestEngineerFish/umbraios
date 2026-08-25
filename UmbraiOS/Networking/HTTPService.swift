@@ -1,5 +1,22 @@
      import Foundation
 
+// MARK: - 无缓存会话
+//
+// 对 Umbra 服务端的所有 REST 请求共用这一个会话，**彻底关掉 URL 缓存**。
+// 为什么：服务端的 GET 响应不带 Cache-Control，URLSession 会按「启发式缓存」
+// 自作主张存一份再直接回放 —— 实测：在 PC 端把流水从回收站恢复后，iOS 下拉
+// 刷新拿到的仍是缓存里的旧列表，kill 掉 App 才能看到真数据。记账、提醒、任务
+// 这些数据接口没有一个是能吃缓存的：宁可每次多一个来回，也不能把旧账当新账。
+// （POST/PUT 本来就不缓存，走同一个会话只是省得两套。）
+enum APISession {
+    static let shared: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        cfg.urlCache = nil
+        return URLSession(configuration: cfg)
+    }()
+}
+
 // MARK: - HTTP Service
 @MainActor
 class HTTPService {
@@ -48,7 +65,7 @@ class HTTPService {
             "conversation": conversation,
             "client_id": NetworkConfig.shared.clientId,
         ])
-        _ = try? await URLSession.shared.data(for: req)
+        _ = try? await APISession.shared.data(for: req)
     }
 
     // MARK: - Jobs
@@ -76,7 +93,7 @@ class HTTPService {
         req.httpMethod = "POST"
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         do {
-            let (_, resp) = try await URLSession.shared.data(for: req)
+            let (_, resp) = try await APISession.shared.data(for: req)
             return (resp as? HTTPURLResponse).map { $0.statusCode < 400 } ?? false
         } catch {
             return false
@@ -103,7 +120,7 @@ class HTTPService {
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         req.httpBody = try? JSONEncoder().encode(dto)
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await APISession.shared.data(for: req)
             if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
                 // 400 基本只有一个原因：枚举没走 ReminderWire 映射，中文漏出去了。
                 print("[HTTPService] PUT /reminders/\(dto.id) 返回 HTTP \(http.statusCode)")
@@ -126,7 +143,7 @@ class HTTPService {
         req.httpMethod = "DELETE"
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         do {
-            let (_, resp) = try await URLSession.shared.data(for: req)
+            let (_, resp) = try await APISession.shared.data(for: req)
             return (resp as? HTTPURLResponse).map { $0.statusCode < 400 } ?? false
         } catch {
             return false
@@ -144,7 +161,7 @@ class HTTPService {
         do {
             var req = URLRequest(url: url)
             for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
-            let (data, _) = try await URLSession.shared.data(for: req)
+            let (data, _) = try await APISession.shared.data(for: req)
             return try? JSONDecoder().decode([Inspiration].self, from: data)
         } catch {
             return nil
@@ -189,7 +206,7 @@ class HTTPService {
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         if let body { req.httpBody = try? JSONSerialization.data(withJSONObject: body) }
         do {
-            let (_, response) = try await URLSession.shared.data(for: req)
+            let (_, response) = try await APISession.shared.data(for: req)
             return (response as? HTTPURLResponse).map { $0.statusCode < 400 } ?? false
         } catch {
             return false
@@ -272,7 +289,7 @@ class HTTPService {
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         req.httpBody = try? JSONEncoder().encode(dto)
         do {
-            let (data, resp) = try await URLSession.shared.data(for: req)
+            let (data, resp) = try await APISession.shared.data(for: req)
             if let http = resp as? HTTPURLResponse, http.statusCode >= 400 {
                 // 400 基本只有一个原因：金额闸门在客户端被绕过了（cents ≤ 0 之类）。
                 print("[HTTPService] PUT /money/entries/\(dto.id) 返回 HTTP \(http.statusCode)")
@@ -350,7 +367,7 @@ class HTTPService {
         body.append("\r\n--\(boundary)--\r\n")
         request.httpBody = body
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await APISession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode < 400 else {
             throw NetworkError.serverError
         }
@@ -366,7 +383,7 @@ class HTTPService {
         if !token.isEmpty { request.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
         request.httpBody = try JSONSerialization.data(withJSONObject: ["messages": messages])
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await APISession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode < 400 else {
             throw NetworkError.serverError
         }
@@ -384,7 +401,7 @@ class HTTPService {
         if let hint { body["hint"] = hint }
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await APISession.shared.data(for: request)
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode < 400 else {
             throw NetworkError.serverError
         }
@@ -392,11 +409,7 @@ class HTTPService {
         return json?["text"] as? String ?? ""
     }
 
-    // MARK: - Workspaces（工作区，手机上只读）
-    func fetchWorkspaces() async -> [Workspace] {
-        guard let url = URL(string: "\(baseUrl)/workspaces") else { return [] }
-        return await request(url) ?? []
-    }
+    // fetchWorkspaces 已删：工作区整屏随稿在 iOS 下线（2026-08-22，PC 端保留）。
 
     // MARK: - Profile（用户画像）
     func fetchProfile() async -> String {
@@ -443,7 +456,7 @@ class HTTPService {
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
         if let body { req.httpBody = try? JSONSerialization.data(withJSONObject: body) }
         do {
-            let (data, response) = try await URLSession.shared.data(for: req)
+            let (data, response) = try await APISession.shared.data(for: req)
             if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
                 print("[HTTPService] \(url.path) 返回 HTTP \(http.statusCode)")
                 return nil
@@ -477,7 +490,7 @@ class HTTPService {
         do {
             var urlRequest = URLRequest(url: url)
             for (key, value) in headers { urlRequest.setValue(value, forHTTPHeaderField: key) }
-            let (data, response) = try await URLSession.shared.data(for: urlRequest)
+            let (data, response) = try await APISession.shared.data(for: urlRequest)
             if let http = response as? HTTPURLResponse, http.statusCode >= 400 {
                 // 4xx/5xx 的响应体多半不是目标结构，硬解只会得到一个更难懂的解码错误。
                 print("[HTTPService] \(url.path) 返回 HTTP \(http.statusCode)")
@@ -495,7 +508,7 @@ class HTTPService {
         do {
             var urlRequest = URLRequest(url: url)
             for (key, value) in headers { urlRequest.setValue(value, forHTTPHeaderField: key) }
-            let (data, _) = try await URLSession.shared.data(for: urlRequest)
+            let (data, _) = try await APISession.shared.data(for: urlRequest)
             return try JSONSerialization.jsonObject(with: data) as? [[String: Any]] ?? []
         } catch {
             return []

@@ -29,14 +29,17 @@ struct UmbraShell: View {
 
     /// 底栏角标，两个都是真实数据：
     ///   聊天 = 有新消息的**会话数**（服务端没给条数，不编）；
-    ///   提醒 = 已过期 + 今天到点的待办数（「更远」的不该顶个红点催人）。
+    ///   工具 = 已逾期的提醒 + 待确认的任务（稿原话：一级 tab 上的数字要能让人
+    ///   立刻决定要不要点 —— 「今天晚些时候」的提醒不该顶个红点催人）。
     private func badge(_ tab: UmbraTab) -> Int {
         switch tab {
         case .chat:
             return chat.unread.count
-        case .reminder:
-            return reminders.items.filter { !$0.done && ($0.group == "已过期" || $0.group == "今天") }.count
-        default:
+        case .tool:
+            let overdue = reminders.items.filter { !$0.done && $0.group == "已过期" }.count
+            let attn = tasks.jobs.filter { UmbraStatus(jobStatus: $0.status) == .awaitingReview }.count
+            return overdue + attn
+        case .me:
             return 0
         }
     }
@@ -47,21 +50,20 @@ struct UmbraShell: View {
                 NavigationStack(path: router.pathBinding(tab)) {
                     UmbraRouteView(route: tab.root)
                         .navigationDestination(for: UmbraRoute.self) { route in
-                            // 二级页自己也声明隐藏 tab bar（验收：二级页底部留了一条
-                            // tab bar 高度的空带）。下面栈外那条负责「回到根页立刻显示」，
-                            // 这条负责「推入时连占位一起让出来」—— 两层缺一不可：
-                            // 只留外层，部分系统版本会藏了 bar 却留着它的安全区占位。
+                            // 隐藏 tab bar 的**唯一**声明处（设计稿 showTabBar:
+                            // stack.length===1 —— 推入页一律无底栏、内容撑满）。
+                            // 历史教训：这里之外栈外还挂过一条「path 空 → .visible、
+                            // 非空 → .hidden」的开关，两个来源一起表态，部分系统版本
+                            // 会藏了 bar 却把它的安全区占位留在原地 —— 二级页底部
+                            // 永远缺一条 tab bar 高的带（两轮验收都中招）。
+                            // 单一来源 + 挂在 destination 内容上，是系统文档的写法；
+                            // 以后不管发现什么闪烁，都只许在这一处调，不许再加第二个开关。
                             UmbraRouteView(route: route)
                                 .toolbar(.hidden, for: .tabBar)
                         }
                 }
-                // 底栏只在 Tab 根页显示（设计稿的 showTabBar: stack.length===1）。
-                // 挂在**栈外**、由 path 是否为空驱动，而不是在每个 destination 上
-                // .toolbar(.hidden)：那种写法返回根页时 tab bar 要等转场完全结束
-                // 才回来（实机 0.5~1s 的空档）。path 一清空这里立即翻回 .visible。
-                // tab bar 背景不再强行 .hidden：内容能穿到 bar 底下之后，
+                // tab bar 背景不强行 .hidden：内容能穿到 bar 底下之后，
                 // 系统材质是「玻璃下透出内容」的正确形态，抹掉反而露馅。
-                .toolbar((router.paths[tab] ?? []).isEmpty ? .visible : .hidden, for: .tabBar)
                 .tabItem { Label(tab.label, systemImage: tab.sfSymbol) }
                 .badge(badge(tab))
                 .tag(tab)
@@ -91,11 +93,19 @@ struct UmbraShell: View {
         .environmentObject(vault)
         .environmentObject(vaultSession)
         .environmentObject(money)
-        // 通知里点开的那条提醒：切到提醒 Tab 再推详情，这样返回是回提醒列表而不是空栈。
+        // 通知里点开的那条提醒：切到工具 Tab、先垫上提醒列表再推详情 ——
+        // 这样返回是「详情 → 提醒列表 → 工具页」，而不是从详情一步掉回工具页
+        // （tab 减到三个之后提醒列表不再是根页，不垫这一层就没有回列表的路）。
         .onChange(of: deepLink.route) { route in
             guard let route else { return }
             deepLink.route = nil
             router.root(route.tab)
+            switch route {
+            case .remDetail, .remEdit:
+                router.go(.remList)
+            default:
+                break
+            }
             if route != route.tab.root { router.go(route) }
         }
     }
@@ -116,6 +126,10 @@ struct UmbraRouteView: View {
             UmbraChatContactsView()
         case .chatThread(let conv):
             UmbraChatThreadView(conv: conv)
+
+        // ── 工具（Tab 2 根页）
+        case .toolHome:
+            UmbraToolHomeView()
 
         // ── 提醒
         case .remList:
@@ -160,8 +174,6 @@ struct UmbraRouteView: View {
             UmbraDeviceDetailView(id: id)
         case .meCaps:
             UmbraCapabilitiesView()
-        case .meWorkspace:
-            UmbraWorkspaceView()
         case .meProfile:
             UmbraProfileView()
         case .setConn:

@@ -18,31 +18,31 @@ enum UmbraRoute: Hashable {
     // Tab 1 聊天
     case chatContacts
     case chatThread(conv: String)
-    // Tab 2 提醒
+    // Tab 2 工具（2026-08-23 稿：tab 从五个减到三个，任务/提醒/灵感/记账/保险箱
+    // 全部收进工具页 —— 它们都是「清单与工具」，并列在一级 tab 上分不清该点哪个）
+    case toolHome
     case remList
     case remDetail(id: String)
     case remEdit(id: String?)          // nil = 新建
-    // Tab 3 任务
     case taskList
     case taskDetail(id: String)
-    // Tab 4 灵感
     case inspList
     case inspDetail(id: String)
     case inspEdit(id: String?)
-    // Tab 5 我
+    // 记账（一期：统计 / 流水 / 记一笔 / 分类管理；入口在工具页的大卡）
+    case moneyHome
+    case moneyList
+    case moneyAdd(id: String?)         // nil = 新建，非 nil = 编辑这一条
+    case moneyCats
+    // Tab 3 我
     case meHome
     case mePhrases
     /// 常用语的新建/编辑页（nil = 新建）。设计稿 phrase.edit —— 独立推入页，不是弹窗。
     case mePhraseEdit(id: String?)
     case meDevices
     case deviceDetail(id: String)
-    // 记账（一期：统计 / 流水 / 记一笔 / 分类管理；入口在「我」，归 me Tab）
-    case moneyHome
-    case moneyList
-    case moneyAdd(id: String?)         // nil = 新建，非 nil = 编辑这一条
-    case moneyCats
     case meCaps
-    case meWorkspace
+    // meWorkspace 已删：工作区 2026-08-22 起在 iOS 下线（稿原文「整屏移除，PC 端保留」）。
     case meProfile
     case setConn
     case setNotify
@@ -68,13 +68,24 @@ enum UmbraRoute: Hashable {
     case vaultAutofill
 
     /// 这一页属于哪个 Tab。深链跳转时用来对齐底栏。
+    /// 记账 / 保险箱的入口在工具页，所以归 tool；只有回收站例外 ——
+    /// 它的正门在「我 › 设置」（vault 前缀只是历史沿用，两区通用）。
     var tab: UmbraTab {
         switch self {
-        case .chatContacts, .chatThread: return .chat
-        case .remList, .remDetail, .remEdit: return .reminder
-        case .taskList, .taskDetail: return .task
-        case .inspList, .inspDetail, .inspEdit: return .inspiration
-        default: return .me
+        case .chatContacts, .chatThread:
+            return .chat
+        case .toolHome,
+             .remList, .remDetail, .remEdit,
+             .taskList, .taskDetail,
+             .inspList, .inspDetail, .inspEdit,
+             .moneyHome, .moneyList, .moneyAdd, .moneyCats:
+            return .tool
+        case .vaultTrash:
+            return .me
+        case _ where isVaultSubtree:
+            return .tool
+        default:
+            return .me
         }
     }
 
@@ -93,37 +104,34 @@ enum UmbraRoute: Hashable {
 
 // MARK: - Tab
 //
-// 顺序按主设计稿的 tabsVM()：聊天 / 提醒 / 任务 / 灵感 / 我。
+// 顺序按主设计稿的 tabsVM()：聊天 / 工具 / 我。
+// 2026-08-23 稿把 tab 从五个减到三个：任务和提醒都是「待办清单」，并列在一级
+// tab 上分不清该点哪个 —— 一起收进工具页，由「记录」组统一收口。
 enum UmbraTab: String, CaseIterable, Hashable {
-    case chat, reminder, task, inspiration, me
+    case chat, tool, me
 
     var label: String {
         switch self {
         case .chat: return "聊天"
-        case .reminder: return "提醒"
-        case .task: return "任务"
-        case .inspiration: return "灵感"
+        case .tool: return "工具"
         case .me: return "我"
         }
     }
     /// v2：tab bar 交给系统 TabView，图标用 SF Symbols ——
     /// 系统符号才吃得到 tab bar 的选中态渲染（iOS 26 上还有玻璃胶囊与动效）。
-    /// 自绘 SVG 路径图标只在内容区继续用。
+    /// 自绘 SVG 路径图标只在内容区继续用。稿的工具图标是个工具箱，
+    /// SF 里语义最近且 iOS 16 一定有的是扳手螺丝刀。
     var sfSymbol: String {
         switch self {
         case .chat: return "bubble.left.and.bubble.right"
-        case .reminder: return "bell"
-        case .task: return "checklist"
-        case .inspiration: return "lightbulb"
+        case .tool: return "wrench.and.screwdriver"
         case .me: return "person.crop.circle"
         }
     }
     var root: UmbraRoute {
         switch self {
         case .chat: return .chatContacts
-        case .reminder: return .remList
-        case .task: return .taskList
-        case .inspiration: return .inspList
+        case .tool: return .toolHome
         case .me: return .meHome
         }
     }

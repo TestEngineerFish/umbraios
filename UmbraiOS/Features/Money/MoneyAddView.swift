@@ -29,7 +29,6 @@ struct UmbraMoneyAddView: View {
     /// 不挡住的话 onAppear 再跑会把用户正在改的草稿冲掉。
     @State private var seeded = false
     @FocusState private var amountFocused: Bool
-    @FocusState private var noteFocused: Bool
 
     /// 编辑的原条目（身份字段 src / rule_id / batch_id / order_no 要原样带回去）。
     private var editing: MoneyEntryDTO? {
@@ -67,23 +66,12 @@ struct UmbraMoneyAddView: View {
                 }
                 .tint(UmbraColor.muted)
             }
-            // 键盘工具条：decimalPad 打不出运算符，算式的 ＋－×÷ 从这里补。
-            // 只在金额框聚焦时出现 —— 备注框的键盘上挂四个运算符只会让人困惑。
-            ToolbarItemGroup(placement: .keyboard) {
-                if amountFocused {
-                    ForEach(["+", "-", "×", "÷"], id: \.self) { op in
-                        Button(op) { expr += op }
-                            .font(UmbraFont.mono(17, .w560))
-                            .tint(UmbraColor.orangeText)
-                    }
-                }
-                Spacer()
-                Button("完成") {
-                    amountFocused = false
-                    noteFocused = false
-                }
-                .tint(UmbraColor.orange)
-            }
+            // ⚠️ 这里**不许**再挂 ToolbarItemGroup(placement: .keyboard)。
+            // 上一版把 ＋－×÷ 放在键盘上方的工具条里，结果键盘收起后底部避让
+            // inset 会卡住不还（tab bar 隐藏 + 键盘附件条的系统级冲突）——
+            // 同一条导航栈上的**所有页面**底部都空出一大块键盘高度的黑（用户
+            // 截图实锤：统计页、回收站全中招，kill App 才恢复）。
+            // 运算符改放金额卡片里（见 amountCard），收键盘靠点空白 / 下拉。
         }
         .onAppear { seed() }
         .umbraWheelPicker(isPresented: $showDatePick, title: "日期", mode: .date, date: $atDate)
@@ -116,8 +104,8 @@ struct UmbraMoneyAddView: View {
             HStack(alignment: .lastTextBaseline, spacing: 8) {
                 Text("¥").font(UmbraFont.sans(22)).foregroundColor(UmbraColor.muted)
                 // 纯数字键盘（验收点名：金额不该弹出符号和拼音）。
-                // 算式要用的 ＋－×÷ 放在键盘上方的工具条里（见下面的 keyboard toolbar），
-                // 数字键盘 + 一排运算符，两头都保住。
+                // 算式要用的 ＋－×÷ 是下面卡片内的一排芯片 —— 不挂键盘工具条，
+                // 那个方案会把整条导航栈的底部 inset 卡死（见 .toolbar 处的警告）。
                 TextField("0.00", text: $expr)
                     .keyboardType(.decimalPad)
                     .multilineTextAlignment(.trailing)
@@ -125,6 +113,38 @@ struct UmbraMoneyAddView: View {
                     .foregroundColor(cents != nil ? UmbraColor.text : UmbraColor.faint)
                     .focused($amountFocused)
             }
+            // 运算符芯片：decimalPad 打不出 ＋－×÷，从这里补进算式。
+            // 点芯片顺手把焦点拉回金额框 —— 键盘收着时点「＋」，多半是想接着敲数字。
+            HStack(spacing: 8) {
+                ForEach(["+", "-", "×", "÷"], id: \.self) { op in
+                    Button {
+                        expr += op
+                        amountFocused = true
+                    } label: {
+                        Text(op)
+                            .font(UmbraFont.mono(17, .w560))
+                            .foregroundColor(UmbraColor.orangeText)
+                            .frame(width: 44, height: 32)
+                            .background(Capsule().fill(UmbraColor.chip))
+                            .overlay(Capsule().strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+                    }
+                    .buttonStyle(.plain)
+                }
+                Spacer()
+                if !expr.isEmpty {
+                    Button {
+                        expr = ""
+                        amountFocused = true
+                    } label: {
+                        Text("清空")
+                            .font(UmbraFont.sans(12.5, .w560))
+                            .foregroundColor(UmbraColor.muted)
+                            .frame(height: 32).padding(.horizontal, 10)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.top, 2)
             if MoneyAmount.isExpr(expr) {
                 Text(cents.map { "= \(MoneyFmt.yuan($0))" } ?? "算式还没写完")
                     .font(UmbraFont.mono(12.5))
@@ -138,7 +158,8 @@ struct UmbraMoneyAddView: View {
 
     private var failBanner: some View {
         HStack(alignment: .top, spacing: 9) {
-            UmbraIcon(d: "M12,3C10.1,3 8.25,3.6 6.71,4.72C5.17,5.84 4.03,7.41 3.44,9.22C2.85,11.03 2.85,12.97 3.44,14.78C4.03,16.59 5.17,18.16 6.71,19.28C8.25,20.4 10.1,21 12,21C13.9,21 15.75,20.4 17.29,19.28C18.83,18.16 19.97,16.59 20.56,14.78C21.15,12.97 21.15,11.03 20.56,9.22C19.97,7.41 18.83,5.84 17.29,4.72C15.75,3.6 13.9,3 12,3M12,8L12,13M12,16.5L12,16.51", size: 15, strokeWidth: 2)
+            // 2026-08-24 稿：错误图标从圆形改成八角形轮廓（和 info 的圆一眼分得开）。
+            UmbraIcon(d: "M8.6,3L15.4,3L21,8.6L21,15.4L15.4,21L8.6,21L3,15.4L3,8.6ZM12,8L12,12.5M12,16L12.01,16", size: 15, strokeWidth: 2)
                 .foregroundColor(UmbraColor.danger)
                 .padding(.top, 2)
             VStack(alignment: .leading, spacing: 8) {
@@ -271,7 +292,6 @@ struct UmbraMoneyAddView: View {
                     .multilineTextAlignment(.trailing)
                     .font(UmbraFont.sans(14.5))
                     .foregroundColor(UmbraColor.text)
-                    .focused($noteFocused)
             }
             .padding(.horizontal, 14).frame(minHeight: 48)
         }

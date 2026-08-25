@@ -1,12 +1,15 @@
-// 「我」这一 Tab 的全部页面：首页 + 设备与能力 + 设备详情 + 能力 + 工作区 +
+// 「我」这一 Tab 的全部页面：首页 + 设备与能力 + 设备详情 + 能力 +
 // 用户画像 + 连接 / 通知 / 通用 / 关于。
+//
+// TabBar 收成三个（2026-08-23 稿）之后，「我」只留身份与设置：
+// 记账 / 保险箱 / 任务 / 提醒 / 灵感 / 常用语的入口都在工具页（ToolHomeView）。
+// 工作区整屏随稿下线（2026-08-22，「PC 端保留」），相关代码已删。
 //
 // 除首页外都用 UmbraSettingsKit 的那套模板（设计稿本来就是同一个模板）。
 //
 // 与设计稿的差异，都是「服务端没有这个数据」而不是漏做，逐条写在各页注释里：
 //   · 设备详情的「延迟 / 心跳 / 已注册 / 系统授权」—— /devices/all 只回
 //     device_id / name / platform / online / last_seen / providers 六项；
-//   · 工作区的「目录内容」二级页 —— 服务端没有列目录的接口（设计稿也标了二期）；
 //   · 通知页的分类开关 —— 服务端没有推送订阅接口，这一页做成**本机通知权限**的真实入口。
 import SwiftUI
 import UIKit
@@ -28,10 +31,6 @@ struct UmbraMeHomeView: View {
                 .padding(.top, 2)
                 .padding(.horizontal, UmbraMetric.pagePadX)
                 .padding(.bottom, UmbraMetric.sp5)
-
-            vaultEntry
-                .padding(.horizontal, UmbraMetric.pagePadX)
-                .padding(.bottom, UmbraMetric.sp6)
 
             VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
                 ForEach(groups) { UmbraSettingSectionView(section: $0) }
@@ -55,54 +54,10 @@ struct UmbraMeHomeView: View {
         return c.port.map { "\(h):\($0)" } ?? h
     }
 
-    /// 保险箱是「我」里最重的入口，设计稿单独给了一张大卡（40 图标块 + 两行字 + 右侧 Face ID 图形）。
-    private var vaultEntry: some View {
-        Button {
-            router.go(.vaultHome)
-        } label: {
-            HStack(spacing: 13) {
-                RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(UmbraColor.orangeSoft)
-                    .frame(width: 40, height: 40)
-                    .overlay(
-                        UmbraIcon(d: UmbraIconPath.lockKeyhole, size: 20, strokeWidth: 1.9)
-                            .foregroundColor(UmbraColor.orangeText)
-                    )
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("密码保险箱")
-                        .font(UmbraFont.sans(17, .w600))
-                        .foregroundColor(UmbraColor.text)
-                    Text("本地加密保存账号密码，主密码解锁后才可读取。")
-                        .font(UmbraFont.sans(12.5, .w400))
-                        .foregroundColor(UmbraColor.muted)
-                        .lineSpacing(12.5 * 0.5)
-                        .multilineTextAlignment(.leading)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                UmbraIcon(d: UmbraIconPath.faceId, size: 30, strokeWidth: 1.6)
-                    .foregroundColor(UmbraColor.orange)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 16)
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
-            .overlay(
-                RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
-                    .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
-            )
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
+    /// TabBar-3 之后「我」只剩身份与设置（稿的 meVM）：保险箱大卡、记账、
+    /// 常用语都搬去了工具页；工作区整屏随稿在 iOS 下线。
     private var groups: [UmbraSettingSection] {
         [
-            UmbraSettingSection(header: "常用", rows: [
-                // 稿 5259 的记账行还带「本月 ¥」和「N 笔待确认」——前者要一次统计请求、
-                // 后者是四期的功能。进「我」就发一次网络请求不值当，先只做干净的入口。
-                UmbraSettingRow(label: "记账", chevron: true) { router.go(.moneyHome) },
-                UmbraSettingRow(label: "常用语", chevron: true) { router.go(.mePhrases) },
-                UmbraSettingRow(label: "工作区", chevron: true) { router.go(.meWorkspace) }
-            ]),
             UmbraSettingSection(header: "设备", rows: [
                 UmbraSettingRow(label: "设备与能力",
                                 value: chat.devices.isEmpty ? nil : "\(chat.devices.count) 台",
@@ -287,54 +242,6 @@ struct UmbraCapabilitiesView: View {
                                             value: p.available ? "已就绪" : "不可用")
                         })
             }
-        }
-    }
-}
-
-// MARK: - 工作区（只读）
-
-struct UmbraWorkspaceView: View {
-    @EnvironmentObject private var router: UmbraRouter
-    @State private var list: [Workspace] = []
-    @State private var loaded = false
-
-    var body: some View {
-        UmbraSettingsPage(
-            backLabel: "我", title: "工作区", onBack: { router.back() },
-            intro: "工作区是 AI 写文件的落地目录。写代码类任务会自动按目标名建一个，也可以手动指向已有目录。",
-            sections: [
-                UmbraSettingSection(
-                    header: header,
-                    footer: "手机上是只读查看：看有哪些工作区、复制路径。新增、删除、打开位置都在电脑上做。",
-                    rows: rows)
-            ])
-            .onAppear {
-                guard !loaded else { return }
-                loaded = true
-                Task { list = await HTTPService.shared.fetchWorkspaces() }
-            }
-    }
-
-    private var header: String {
-        guard !list.isEmpty else { return "工作区" }
-        let auto = list.filter { $0.origin == "auto" }.count
-        return "共 \(list.count) 个 · \(auto) 个自动创建"
-    }
-
-    private var rows: [UmbraSettingRow] {
-        guard !list.isEmpty else {
-            return [UmbraSettingRow(label: loaded ? "（还没有工作区）" : "正在读取…", tint: UmbraColor.faint)]
-        }
-        return list.map { w in
-            // 点一行 = 复制路径。设计稿写的是进二级页看目录内容，但服务端没有列目录的接口，
-            // 与其进一个空页，不如把手机上真正做得到的那件事（复制路径）做顺。
-            UmbraSettingRow(
-                label: w.name,
-                sub: "\(w.dir ?? "路径未知") · \(w.origin == "auto" ? "自动创建" : "手动") · \(UmbraTime.relative(w.last_active_at)) 活动",
-                value: w.task_count.map { "\($0) 个任务" }) {
-                    UIPasteboard.general.string = w.dir ?? w.name
-                    router.showToast("已复制路径")
-                }
         }
     }
 }
