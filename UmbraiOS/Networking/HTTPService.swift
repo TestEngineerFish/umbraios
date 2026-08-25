@@ -1,21 +1,7 @@
      import Foundation
 
-// MARK: - 无缓存会话
-//
-// 对 Umbra 服务端的所有 REST 请求共用这一个会话，**彻底关掉 URL 缓存**。
-// 为什么：服务端的 GET 响应不带 Cache-Control，URLSession 会按「启发式缓存」
-// 自作主张存一份再直接回放 —— 实测：在 PC 端把流水从回收站恢复后，iOS 下拉
-// 刷新拿到的仍是缓存里的旧列表，kill 掉 App 才能看到真数据。记账、提醒、任务
-// 这些数据接口没有一个是能吃缓存的：宁可每次多一个来回，也不能把旧账当新账。
-// （POST/PUT 本来就不缓存，走同一个会话只是省得两套。）
-enum APISession {
-    static let shared: URLSession = {
-        let cfg = URLSessionConfiguration.default
-        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
-        cfg.urlCache = nil
-        return URLSession(configuration: cfg)
-    }()
-}
+// 全部请求走无缓存会话 APISession（定义在 NetworkConfig.swift——它被共享进
+// AutoFillExtension，VaultCore 在扩展里也要用；放这个文件扩展就编译不过）。
 
 // MARK: - HTTP Service
 @MainActor

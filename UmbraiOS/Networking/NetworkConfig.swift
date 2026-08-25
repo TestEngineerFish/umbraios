@@ -4,6 +4,27 @@ import UIKit
 // 传递性带进来了；这个文件还要单独编进 AutoFillExtension，必须自己显式 import。
 import Combine
 
+// MARK: - 无缓存会话
+//
+// 对 Umbra 服务端的所有 REST 请求共用这一个会话，**彻底关掉 URL 缓存**。
+// 为什么：服务端的 GET 响应不带 Cache-Control，URLSession 会按「启发式缓存」
+// 自作主张存一份再直接回放 —— 实测：在 PC 端把流水从回收站恢复后，iOS 下拉
+// 刷新拿到的仍是缓存里的旧列表，kill 掉 App 才能看到真数据。数据接口没有一个
+// 是能吃缓存的：宁可每次多一个来回，也不能把旧账当新账。
+//
+// ⚠️ 定义**必须**放在这个文件里，不能放 HTTPService.swift：VaultCore.swift 也在用它，
+// 而 VaultCore 会被单独编进 AutoFillExtension（pbxproj 的 exception set 只共享了
+// 五个文件，HTTPService 不在其中）—— 放错文件扩展 target 当场编译失败（真炸过）。
+// NetworkConfig.swift 本来就在共享名单里，网络配置和网络会话放一起也名正言顺。
+enum APISession {
+    static let shared: URLSession = {
+        let cfg = URLSessionConfiguration.default
+        cfg.requestCachePolicy = .reloadIgnoringLocalCacheData
+        cfg.urlCache = nil
+        return URLSession(configuration: cfg)
+    }()
+}
+
 // MARK: - Configuration
 @MainActor
 class NetworkConfig: ObservableObject {
