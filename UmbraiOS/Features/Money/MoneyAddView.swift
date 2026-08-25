@@ -115,6 +115,7 @@ struct UmbraMoneyAddView: View {
             }
             // 运算符芯片：decimalPad 打不出 ＋－×÷，从这里补进算式。
             // 点芯片顺手把焦点拉回金额框 —— 键盘收着时点「＋」，多半是想接着敲数字。
+            // 高度 44：ClaudeDesign 批次 003 回稿定的值（也正好是触达底线，不用再撑热区）。
             HStack(spacing: 8) {
                 ForEach(["+", "-", "×", "÷"], id: \.self) { op in
                     Button {
@@ -124,7 +125,7 @@ struct UmbraMoneyAddView: View {
                         Text(op)
                             .font(UmbraFont.mono(17, .w560))
                             .foregroundColor(UmbraColor.orangeText)
-                            .frame(width: 44, height: 32)
+                            .frame(width: 48, height: 44)
                             .background(Capsule().fill(UmbraColor.chip))
                             .overlay(Capsule().strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
                     }
@@ -139,7 +140,7 @@ struct UmbraMoneyAddView: View {
                         Text("清空")
                             .font(UmbraFont.sans(12.5, .w560))
                             .foregroundColor(UmbraColor.muted)
-                            .frame(height: 32).padding(.horizontal, 10)
+                            .frame(height: 44).padding(.horizontal, 10)
                     }
                     .buttonStyle(.plain)
                 }
@@ -213,13 +214,18 @@ struct UmbraMoneyAddView: View {
             sub = ""
         } label: {
             HStack(spacing: 6) {
+                // 记一笔只给图标上色、不铺色底（批次 003 定稿）；选中态整体归橙。
                 UmbraIcon(d: MoneyCatArt.icon(slug), size: 14, strokeWidth: 1.9)
+                    .foregroundColor(on ? UmbraColor.orangeText : MoneyCatArt.slotColor(money.catSlot(slug)))
                 Text(money.catName(slug)).font(UmbraFont.sans(13, .w560))
+                    .foregroundColor(on ? UmbraColor.orangeText : UmbraColor.muted)
             }
-            .foregroundColor(on ? UmbraColor.orangeText : UmbraColor.muted)
             .padding(.horizontal, 12).frame(height: 32)
+            // 视觉 32、热区 44（规范新条款）：外面包一层透明高框，不放大控件本体。
             .background(Capsule().fill(on ? UmbraColor.orangeSoft : UmbraColor.card))
             .overlay(Capsule().strokeBorder(on ? UmbraColor.orange : UmbraColor.border, lineWidth: UmbraMetric.borderW))
+            .frame(minHeight: UmbraMetric.tapMin)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -233,10 +239,13 @@ struct UmbraMoneyAddView: View {
                     sub = ""
                 } label: {
                     VStack(spacing: 5) {
+                        // 记一笔的分类格只给图标上色、不铺色底（批次 003 定稿）；
+                        // 选中态整格归橙，图标转 orange-text。
                         UmbraIcon(d: MoneyCatArt.icon(c.slug), size: 19, strokeWidth: 1.9)
+                            .foregroundColor(on ? UmbraColor.orangeText : MoneyCatArt.slotColor(c.slot))
                         Text(c.name).font(UmbraFont.sans(12.5, .w560)).lineLimit(1)
+                            .foregroundColor(on ? UmbraColor.orangeText : UmbraColor.text)
                     }
-                    .foregroundColor(on ? UmbraColor.orangeText : UmbraColor.text)
                     .frame(maxWidth: .infinity).frame(height: 64)
                     .background(RoundedRectangle(cornerRadius: 14, style: .continuous)
                         .fill(on ? UmbraColor.orangeSoft : UmbraColor.card))
@@ -343,9 +352,11 @@ struct UmbraMoneyAddView: View {
                     UmbraButton(title: id == nil ? "记下这笔" : "保存修改",
                                 kind: canSave ? .primary : .disabled, height: 48) { save(again: false) }
                 }
+                // 提示文案照批次 003 回稿：直说「数字键盘打不出运算符」这个事实，
+                // 比只举个算式例子更能把人引到金额卡里的那排芯片上。
                 Text(id == nil
-                     ? "金额可以直接敲算式，例如 32+18。「再记一笔」会留着分类和时间，只清金额和备注。"
-                     : "改完点「保存修改」。金额可以直接敲算式，例如 32+18。")
+                     ? "金额可以敲算式，例如 32+18；数字键盘打不出的 ＋－×÷ 在金额卡里。「再记一笔」会留着分类和时间，只清金额和备注。"
+                     : "改完点「保存修改」。金额可以敲算式，数字键盘打不出的 ＋－×÷ 在金额卡里。")
                     .font(UmbraFont.sans(11.5)).foregroundColor(UmbraColor.faint)
                     .lineSpacing(11.5 * 0.55)
             }

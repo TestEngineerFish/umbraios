@@ -45,28 +45,44 @@ struct UmbraShell: View {
     }
 
     var body: some View {
-        TabView(selection: router.tabSelection) {
-            ForEach(UmbraTab.allCases, id: \.self) { tab in
-                NavigationStack(path: router.pathBinding(tab)) {
-                    UmbraRouteView(route: tab.root)
-                        .navigationDestination(for: UmbraRoute.self) { route in
-                            // 隐藏 tab bar 的**唯一**声明处（设计稿 showTabBar:
-                            // stack.length===1 —— 推入页一律无底栏、内容撑满）。
-                            // 历史教训：这里之外栈外还挂过一条「path 空 → .visible、
-                            // 非空 → .hidden」的开关，两个来源一起表态，部分系统版本
-                            // 会藏了 bar 却把它的安全区占位留在原地 —— 二级页底部
-                            // 永远缺一条 tab bar 高的带（两轮验收都中招）。
-                            // 单一来源 + 挂在 destination 内容上，是系统文档的写法；
-                            // 以后不管发现什么闪烁，都只许在这一处调，不许再加第二个开关。
-                            UmbraRouteView(route: route)
-                                .toolbar(.hidden, for: .tabBar)
-                        }
+        // 栈挂在 TabView **外面**：推入页盖住整个 TabView（含 tab bar），
+        // 它的布局里根本没有 bar 的安全区 —— 「二级页底部一条 tab bar 高的死带」
+        // 这类问题从结构上消灭。
+        //
+        // 为什么不再用 .toolbar(.hidden, for: .tabBar)：栈在 TabView 里面时，
+        // 首个推入层是「从显示着 bar 的页面推入」的，系统按有 bar 布局、bar 藏掉后
+        // inset 不回收 —— 于是二级页缺一条底、三级页反而正常（从无 bar 的页面起推，
+        // 用户实测钉死的现场）。该 API 的三种挂法（只挂栈外 / 内外都挂 / 只挂
+        // destination）连续三轮验收全部失败，禁止再引入，见 CLAUDE.md「页面骨架」。
+        //
+        NavigationStack(path: router.pathBinding) {
+            TabView(selection: router.tabSelection) {
+                ForEach(UmbraTab.allCases, id: \.self) { tab in
+                    // 每个根页配一条**永不推入的内层栈**，只干一件事：给根页一条
+                    // 属于自己的导航栏。原生的大标题联动（上滑收成小标题）是
+                    // 「导航栏 ↔ 它正下方的滚动视图」之间的机制 —— 大标题挂在外层
+                    // 栈上时隔着一整个 TabView，系统挂不上去：标题上方多出一截空、
+                    // 收放也不是系统手感（用户实测截图）。内层栈 + 根页内容
+                    // 就是改造前那个像素级正确的形态，原样保留；推入一律走外层栈，
+                    // 内层栈的 path 永远为空（router.go 只改外层 path）。
+                    //
+                    // tab bar 背景不强行 .hidden：内容能穿到 bar 底下之后，
+                    // 系统材质是「玻璃下透出内容」的正确形态，抹掉反而露馅。
+                    NavigationStack {
+                        UmbraRouteView(route: tab.root)
+                    }
+                    .tabItem { Label(tab.label, systemImage: tab.sfSymbol) }
+                    .badge(badge(tab))
+                    .tag(tab)
                 }
-                // tab bar 背景不强行 .hidden：内容能穿到 bar 底下之后，
-                // 系统材质是「玻璃下透出内容」的正确形态，抹掉反而露馅。
-                .tabItem { Label(tab.label, systemImage: tab.sfSymbol) }
-                .badge(badge(tab))
-                .tag(tab)
+            }
+            // 外层栈的导航栏在根页**隐藏** —— 根页的栏由上面的内层栈提供，
+            // 两条都显示就是双栏。navigationTitle 仍要给：栏虽然藏着，
+            // 推入页返回按钮的文字取的是它（「< 工具」而不是「< 返回」）。
+            .navigationTitle(router.tab.label)
+            .toolbar(.hidden, for: .navigationBar)
+            .navigationDestination(for: UmbraRoute.self) { route in
+                UmbraRouteView(route: route)
             }
         }
         // ⚠️ 这里原来挂了 `.id("shell-<外观>")`，外观一变就把整棵 TabView 重建。

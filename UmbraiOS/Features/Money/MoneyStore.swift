@@ -74,13 +74,22 @@ final class MoneyStore: ObservableObject {
     }
 
     /// 「最近用过」：本月流水里同方向、按时间新→旧去重后的前三个分类。
+    /// 最近用过（批次 003 定稿）：按方向从流水新→旧去重取 3 个；该方向还没记过
+    /// 就用分类表前几个兜底；**该方向分类总数 ≤ 3 时返回空** —— 那时「最近用过」
+    /// 和下面的分类网格完全重复（收入侧默认只有工资、报销等寥寥几个），
+    /// 调用方按空数组整行不显示。
     func recentCats(_ direction: String) -> [String] {
+        let cats = enabledCats(direction)
+        guard cats.count > 3 else { return [] }
         var out: [String] = []
-        let valid = Set(enabledCats(direction).map { $0.slug })
+        let valid = Set(cats.map { $0.slug })
         for e in entries where e.direction == direction {
             guard valid.contains(e.cat), !out.contains(e.cat) else { continue }
             out.append(e.cat)
             if out.count >= 3 { break }
+        }
+        for c in cats where out.count < 3 {
+            if !out.contains(c.slug) { out.append(c.slug) }
         }
         return out
     }

@@ -95,6 +95,9 @@ struct UmbraMoneyHomeView: View {
                 .frame(width: 32, height: 32)
                 .background(Circle().fill(UmbraColor.card))
                 .overlay(Circle().strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+                // 圆钮画 32、点 44（规范：热区用透明外框撑，不把控件画大）。
+                .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
@@ -241,8 +244,12 @@ struct UmbraMoneyHomeView: View {
         } label: {
             HStack(spacing: 9) {
                 Circle().fill(MoneyCatArt.slotColor(money.catSlot(row.cat))).frame(width: 8, height: 8)
-                UmbraIcon(d: MoneyCatArt.icon(row.cat), size: 15, strokeWidth: 1.9)
-                    .foregroundColor(UmbraColor.muted)
+                // 分类色块（批次 003）：排行的图标进同色 tint 块，色点保留当图例锚。
+                RoundedRectangle(cornerRadius: 6, style: .continuous)
+                    .fill(MoneyCatArt.tint(money.catSlot(row.cat)))
+                    .frame(width: 22, height: 22)
+                    .overlay(UmbraIcon(d: MoneyCatArt.icon(row.cat), size: 14, strokeWidth: 1.9)
+                        .foregroundColor(MoneyCatArt.slotColor(money.catSlot(row.cat))))
                 Text(money.catName(row.cat))
                     .font(UmbraFont.sans(14.5)).foregroundColor(UmbraColor.text)
                     .lineLimit(1)
@@ -376,11 +383,12 @@ struct UmbraMoneyHomeView: View {
                     router.go(.moneyList)
                 } label: {
                     HStack(spacing: 10) {
+                        // 分类色块（批次 003）：同色 tint 底 + 色槽色描边图标。
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .fill(UmbraColor.chip)
+                            .fill(MoneyCatArt.tint(money.catSlot(e.cat)))
                             .frame(width: 30, height: 30)
                             .overlay(UmbraIcon(d: MoneyCatArt.icon(e.cat), size: 15, strokeWidth: 1.9)
-                                .foregroundColor(UmbraColor.muted))
+                                .foregroundColor(MoneyCatArt.slotColor(money.catSlot(e.cat))))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(e.merchant.isEmpty ? money.catName(e.cat) : e.merchant)
                                 .font(UmbraFont.sans(14.5)).foregroundColor(UmbraColor.text).lineLimit(1)
@@ -592,11 +600,14 @@ struct UmbraMoneyListView: View {
             },
         ]) {
             HStack(spacing: 11) {
+                // 分类色块（批次 003）：流水行统一走同色 tint + 色槽色，
+                // 不再按收支分绿/灰 —— 方向已经由右侧的 +/− 金额颜色表达，
+                // 图标块的职责回归「这是哪个分类」。
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(income ? UmbraColor.successSoft : UmbraColor.chip)
+                    .fill(MoneyCatArt.tint(money.catSlot(e.cat)))
                     .frame(width: 32, height: 32)
                     .overlay(UmbraIcon(d: MoneyCatArt.icon(e.cat), size: 16, strokeWidth: 1.9)
-                        .foregroundColor(income ? UmbraColor.success : UmbraColor.muted))
+                        .foregroundColor(MoneyCatArt.slotColor(money.catSlot(e.cat))))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
                         Text(money.catName(e.cat) + (e.sub.isEmpty ? "" : " · \(e.sub)"))

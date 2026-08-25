@@ -185,9 +185,17 @@ struct UmbraToast: Identifiable {
 final class UmbraRouter: ObservableObject {
 
     @Published var tab: UmbraTab = .chat
-    /// 每个 Tab 一条独立路径 —— 切走再切回来，各 Tab 的深栈还在（系统 App 的习惯）。
-    /// 一期是全局一条栈、切 Tab 就清空，那是自绘栈的简化，不是想要的行为。
-    @Published var paths: [UmbraTab: [UmbraRoute]] = [:]
+    /// **一条全局栈，挂在 TabView 外面**（见 AppShell：NavigationStack 包着 TabView）。
+    ///
+    /// 为什么不是"每个 Tab 一条栈"：tab bar 只在根页显示（设计契约
+    /// showTabBar: stack.length===1），用户能切 Tab 的时刻栈必然是空的 ——
+    /// "各 Tab 保留深栈"是一份永远用不上的状态。而它逼着栈住在 TabView **里面**，
+    /// 推入页就得靠 .toolbar(.hidden, for: .tabBar) 去藏 bar：那个 API 的三种挂法
+    /// （只挂栈外、内外都挂、只挂 destination）在真机上全都留过一条 tab bar 高的
+    /// 死 inset —— 首个推入层按"有 bar"布局，bar 藏了 inset 不回收；再推一层
+    /// 反而正常（从无 bar 的页面起推）。三轮验收中招后改成栈在外：
+    /// 推入页从布局上就不含 tab bar，整类问题不存在，也不再需要任何 toolbar 调用。
+    @Published var path: [UmbraRoute] = []
 
     /// 多层底部选择器。空 = 没开。
     @Published var sheets: [UmbraSheet] = []
@@ -197,15 +205,15 @@ final class UmbraRouter: ObservableObject {
     private var toastTask: Task<Void, Never>?
 
     /// 当前可见路由（Tab 根页时 = 根路由）。后台遮盖用它判断在不在保险箱子树。
-    var current: UmbraRoute { paths[tab]?.last ?? tab.root }
-    var canGoBack: Bool { !(paths[tab] ?? []).isEmpty }
+    var current: UmbraRoute { path.last ?? tab.root }
+    var canGoBack: Bool { !path.isEmpty }
 
     /// 给 NavigationStack(path:) 用的 Binding。系统返回（边缘右划 / 返回钮）
     /// 会直接改这个数组，所以 back() 和系统手势天然一致，不会各记各的账。
-    func pathBinding(_ tab: UmbraTab) -> Binding<[UmbraRoute]> {
+    var pathBinding: Binding<[UmbraRoute]> {
         Binding(
-            get: { [weak self] in self?.paths[tab] ?? [] },
-            set: { [weak self] in self?.paths[tab] = $0 }
+            get: { [weak self] in self?.path ?? [] },
+            set: { [weak self] in self?.path = $0 }
         )
     }
 
@@ -217,7 +225,7 @@ final class UmbraRouter: ObservableObject {
             get: { [weak self] in self?.tab ?? .chat },
             set: { [weak self] new in
                 guard let self else { return }
-                if new == self.tab { self.paths[new] = [] } else { self.tab = new }
+                if new == self.tab { self.path = [] } else { self.tab = new }
             }
         )
     }
@@ -225,17 +233,17 @@ final class UmbraRouter: ObservableObject {
     // MARK: 栈操作
 
     func go(_ route: UmbraRoute) {
-        paths[tab, default: []].append(route)
+        path.append(route)
     }
 
     func back() {
-        if !(paths[tab] ?? []).isEmpty { paths[tab]?.removeLast() }
+        if !path.isEmpty { path.removeLast() }
     }
 
-    /// 切到某个 Tab 的根（清掉该 Tab 的深栈）。深链与「回到主页」用。
+    /// 切到某个 Tab 的根（清空栈）。深链与「回到主页」用。
     func root(_ tab: UmbraTab) {
         self.tab = tab
-        paths[tab] = []
+        path = []
     }
 
     // MARK: 瞬时 UI

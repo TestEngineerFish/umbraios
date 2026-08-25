@@ -285,6 +285,9 @@ struct UmbraSegmentedControl<T: Hashable>: View {
                                 .matchedGeometryEffect(id: "seg-slider", in: slider)
                         }
                     }
+                    // 视觉 30、热区 44（规范：视觉高度可小于 44，热区必须 ≥44）。
+                    // 轨道本来就不画背景，外面这圈透明高度不会改变任何可见形状。
+                    .frame(minHeight: UmbraMetric.tapMin)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)

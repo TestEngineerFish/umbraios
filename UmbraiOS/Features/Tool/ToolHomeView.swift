@@ -21,6 +21,10 @@ struct UmbraToolHomeView: View {
     var body: some View {
         UmbraScreen {
             VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
+                // 稿在大标题下有一句定位说明 —— 它解释了这页的分区逻辑，照抄。
+                Text("每天用的两件在上面，其余按类收着")
+                    .font(UmbraFont.sans(12.5))
+                    .foregroundColor(UmbraColor.faint)
                 bigCards
                 group(name: "记录", rows: recordRows)
                 group(name: "输入辅助", rows: inputRows)

@@ -278,20 +278,36 @@ enum MoneyCatArt {
     /// 色槽 1–7 → 彩色，0 与一切非法值 → 中性灰。
     /// 色值与 PC 端 index.css 的 --c1…--c8 完全一致（浅/深各一套）——
     /// 同一个分类在两端图表里必须是同一个颜色，这是「一套产品」的底线之一。
-    static func slotColor(_ slot: Int) -> Color {
-        let pair: (light: String, dark: String)
+    private static func slotPair(_ slot: Int) -> (light: String, dark: String) {
         switch slot {
-        case 1: pair = ("2A78D6", "3987E5")
-        case 2: pair = ("1BAF7A", "199E70")
-        case 3: pair = ("EDA100", "C98500")
-        case 4: pair = ("E87BA4", "D55181")
-        case 5: pair = ("008300", "3FA93F")
-        case 6: pair = ("4A3AA7", "9085E9")
-        case 7: pair = ("8A5A44", "B58163")
-        default: pair = ("9A9992", "6E675E")   // --c8 中性灰
+        case 1: return ("2A78D6", "3987E5")
+        case 2: return ("1BAF7A", "199E70")
+        case 3: return ("EDA100", "C98500")
+        case 4: return ("E87BA4", "D55181")
+        case 5: return ("008300", "3FA93F")
+        case 6: return ("4A3AA7", "9085E9")
+        case 7: return ("8A5A44", "B58163")
+        // 批次 003 定稿：色板扩到 9 彩，居住=9（墨青）、人情=10（紫罗兰），
+        // 取值过了 doc/tools/palette_check.py 校验，改值先过校验再来改这里。
+        case 9: return ("24504C", "90B9A8")
+        case 10: return ("915BA5", "81569F")
+        default: return ("9A9992", "6E675E")   // --c8 中性灰（0 与一切非法值）
         }
+    }
+
+    static func slotColor(_ slot: Int) -> Color {
+        let p = slotPair(slot)
         // 同 UmbraColor.dynColor 的构造方式（那个是 private，不为一个复用点把它掀开）。
-        let l = UIColor(Color(hex: pair.light)), d = UIColor(Color(hex: pair.dark))
+        let l = UIColor(Color(hex: p.light)), d = UIColor(Color(hex: p.dark))
+        return Color(UIColor { $0.userInterfaceStyle == .dark ? d : l })
+    }
+
+    /// 分类色块的底色：同色 tint（稿：--cat-tint 浅色 13% / 深色 22%）。
+    /// 浓度分主题不分槽 —— 深色底上同样的透明度会显得更闷，所以深色更浓。
+    static func tint(_ slot: Int) -> Color {
+        let p = slotPair(slot)
+        let l = UIColor(Color(hex: p.light)).withAlphaComponent(0.13)
+        let d = UIColor(Color(hex: p.dark)).withAlphaComponent(0.22)
         return Color(UIColor { $0.userInterfaceStyle == .dark ? d : l })
     }
 }

@@ -53,10 +53,13 @@ ScrollView + background 的组合，安全区的坑它都已经踩平了。
 
 三条铁律，每条都是真事故换来的：
 
-1. **隐藏 tab bar 只有一个声明处**：AppShell 里 navigationDestination 内容上的
-   `.toolbar(.hidden, for: .tabBar)`。任何页面不许自己再挂第二个开关 ——
-   两个来源一起表态时，部分系统版本会藏了 bar 却把安全区占位留在原地，
-   二级页底部永远缺一条 tab bar 高的空带（连着两轮验收中招）。
+1. **推入页天然没有 tab bar，任何页面禁止调 `.toolbar(…, for: .tabBar)`**：
+   导航栈挂在 TabView **外面**（AppShell 里 NavigationStack 包着 TabView），
+   推入页盖住整个 TabView，布局里根本没有 bar 的安全区。不要把栈搬回
+   TabView 里面再靠 toolbar API 藏 bar —— 那个 API 的三种挂法（只挂栈外 /
+   内外都挂 / 只挂 destination）在真机上全失败过：首个推入层按「有 bar」布局、
+   bar 藏掉后 inset 不回收，二级页底部缺一条 tab bar 高的死带而三级页正常
+   （连着三轮验收中招后才改成现在的结构）。
 2. **任何页面不许挂 `ToolbarItemGroup(placement: .keyboard)`**：键盘附件条撞上
    隐藏的 tab bar，会把整条导航栈的底部避让 inset 卡死 —— 键盘收了，同栈
    所有页面底部还空着一块键盘高度的黑，kill App 才恢复（统计页、回收站的
