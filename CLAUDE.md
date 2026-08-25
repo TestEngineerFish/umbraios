@@ -53,13 +53,19 @@ ScrollView + background 的组合，安全区的坑它都已经踩平了。
 
 三条铁律，每条都是真事故换来的：
 
-1. **推入页天然没有 tab bar，任何页面禁止调 `.toolbar(…, for: .tabBar)`**：
-   导航栈挂在 TabView **外面**（AppShell 里 NavigationStack 包着 TabView），
-   推入页盖住整个 TabView，布局里根本没有 bar 的安全区。不要把栈搬回
-   TabView 里面再靠 toolbar API 藏 bar —— 那个 API 的三种挂法（只挂栈外 /
-   内外都挂 / 只挂 destination）在真机上全失败过：首个推入层按「有 bar」布局、
-   bar 藏掉后 inset 不回收，二级页底部缺一条 tab bar 高的死带而三级页正常
-   （连着三轮验收中招后才改成现在的结构）。
+1. **导航结构只有一种合法形态**：TabView 在外、每个 Tab 一条自己的
+   NavigationStack（根页原生大标题靠它）。推入页无底栏的实现在 **UIKit 层**：
+   AppShell 的 UINavigationController 扩展在 pushViewController 里统一设
+   `hidesBottomBarWhenPushed = true`（推入前就参与布局，占位回收走系统成熟
+   路径），destination 上再挂保险丝 `UmbraReclaimBottom()`。三条实机翻过车
+   的禁区：① SwiftUI 的 `.toolbar(…, for: .tabBar)`（任何挂法）→ 首个推入层
+   的底部占位收不回；② 栈挪到 TabView 外面 → 根页大标题挂不到滚动内容上；
+   ③ 栈套栈 → 推入目标解析失败，二级页整页空白只剩 ⚠️。
+4. **列表 = 系统 List + 系统 .swipeActions**（提醒列表是模板：insetGrouped +
+   `scrollContentBackground(.hidden)` + `listRowBackground(card)`，破坏性操作
+   过 router.confirm、不用 role: .destructive）。**不许自绘侧滑行** ——
+   自绘的 UmbraSwipeRow 已退役，三宗罪：划开一行后整页卡住不能滚、
+   几行能同时划开、行上的拖拽手势抢掉系统边缘返回。
 2. **任何页面不许挂 `ToolbarItemGroup(placement: .keyboard)`**：键盘附件条撞上
    隐藏的 tab bar，会把整条导航栈的底部避让 inset 卡死 —— 键盘收了，同栈
    所有页面底部还空着一块键盘高度的黑，kill App 才恢复（统计页、回收站的

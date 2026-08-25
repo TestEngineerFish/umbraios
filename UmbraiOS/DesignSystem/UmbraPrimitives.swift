@@ -677,79 +677,11 @@ struct UmbraFilterChips<T: Hashable>: View {
     }
 }
 
-// MARK: - 左滑操作行（SwipeActionRow）
+// MARK: - 左滑操作行 —— 已退役（2026-08-25）
 //
-// 行底露出操作块，行本体 translateX，松手 .16s cubic-bezier(.2,.8,.3,1) 回弹（UmbraMotion.swipe）。
-// 不用系统的 .swipeActions：它只在 List 里生效，而这里的列表是 ScrollView + VStack
-//（设计稿的分组间距、卡片圆角、分组标题样式都做不到系统 List 里）。
-//
-// 只支持右侧操作 —— 设计稿里左滑露出的都在右边，没有左侧操作的场景。
-struct UmbraSwipeAction: Identifiable {
-    let id = UUID()
-    let label: String
-    let width: CGFloat
-    let background: Color
-    let action: () -> Void
-}
+// 原来这里有一个自绘的 UmbraSwipeRow（ScrollView+VStack 里手写 DragGesture）。
+// 实机三宗罪：划开一行后整页卡住不能滚、几行能同时划开、行上的拖拽手势抢掉
+// 系统的边缘返回。列表侧滑一律改用**系统 List + 系统 .swipeActions**
+//（提醒列表是模板：insetGrouped + listRowBackground(card) + swipeActions，
+// 破坏性操作过 router.confirm、不用 role: .destructive）。别再把自绘侧滑加回来。
 
-struct UmbraSwipeRow<Content: View>: View {
-    let actions: [UmbraSwipeAction]
-    @ViewBuilder var content: () -> Content
-
-    @State private var offset: CGFloat = 0
-    @State private var opened = false
-
-    private var total: CGFloat { actions.reduce(0) { $0 + $1.width } }
-
-    var body: some View {
-        ZStack(alignment: .trailing) {
-            HStack(spacing: 0) {
-                ForEach(actions) { a in
-                    Button {
-                        close()
-                        a.action()
-                    } label: {
-                        Text(a.label)
-                            .font(UmbraFont.sans(12.5, .w560))
-                            .foregroundColor(.white)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(12.5 * 0.35)
-                            .frame(width: a.width)
-                            .frame(maxHeight: .infinity)
-                            .background(a.background)
-                            .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                }
-            }
-
-            content()
-                .background(UmbraColor.bg)   // 不透明，否则滑动时能看见底下的操作块透上来
-                .offset(x: offset)
-                .gesture(
-                    DragGesture(minimumDistance: 12)
-                        .onChanged { g in
-                            // 只跟手往左；往右最多回到 0（没有左侧操作）。
-                            let base = opened ? -total : 0
-                            offset = min(0, max(-total - 24, base + g.translation.width))
-                        }
-                        .onEnded { g in
-                            let shouldOpen = (offset + g.predictedEndTranslation.width * 0.2) < -total / 2
-                            withAnimation(UmbraMotion.swipe) {
-                                opened = shouldOpen
-                                offset = shouldOpen ? -total : 0
-                            }
-                        }
-                )
-        }
-        // 左滑行有自己的圆角档（16），不是小控件的 10。之前这里取错了 token。
-        .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusSwipeRow, style: .continuous))
-    }
-
-    private func close() {
-        withAnimation(UmbraMotion.swipe) {
-            opened = false
-            offset = 0
-        }
-    }
-}

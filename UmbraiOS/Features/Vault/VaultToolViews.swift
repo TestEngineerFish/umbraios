@@ -380,7 +380,7 @@ struct UmbraVaultTrashView: View {
                     row(icon: kindIcon(it.kind), title: it.title,
                         meta: "\(kindName(it.kind)) · \(whenText(it.deleted_at_ms))",
                         leftDays: it.left_days,
-                        onRestore: { Task { await restoreGeneric(it) } },
+                        onRestore: { askRestoreGeneric(it) },
                         onPurge: { askPurgeGeneric(it) })
                         .padding(.horizontal, UmbraMetric.pagePadX)
                 }
@@ -409,7 +409,7 @@ struct UmbraVaultTrashView: View {
                         row(icon: UmbraIconPath.lock, title: r.title,
                             meta: "\(r.from) · \(whenText(r.deletedAtMs))",
                             leftDays: r.leftDays,
-                            onRestore: { Task { await store.restoreTrash(vaultId: r.vaultId, itemId: r.itemId) } },
+                            onRestore: { askRestoreVault(r) },
                             onPurge: { askPurgeVault(r) })
                             .padding(.horizontal, UmbraMetric.pagePadX)
                     }
@@ -482,6 +482,24 @@ struct UmbraVaultTrashView: View {
             generic = dto.items
             keepDays = dto.keep_days ?? 30
         }
+    }
+
+    /// 恢复也过确认（老板验收点名）：恢复不是破坏性操作，但它会把条目放回
+    /// 列表并改动统计 —— 回收站里挨着「彻底删除」，手滑点错的成本要挡一道。
+    private func askRestoreGeneric(_ it: TrashItem) {
+        router.confirm(UmbraAlert(
+            title: "恢复「\(it.title)」？",
+            body: "条目会回到原来的位置，统计也会跟着回来。",
+            confirmLabel: "恢复",
+            onConfirm: { Task { await restoreGeneric(it) } }))
+    }
+
+    private func askRestoreVault(_ r: VaultStore.TrashRow) {
+        router.confirm(UmbraAlert(
+            title: "恢复「\(r.title)」？",
+            body: "条目会回到保险箱原来的分组。",
+            confirmLabel: "恢复",
+            onConfirm: { Task { await store.restoreTrash(vaultId: r.vaultId, itemId: r.itemId) } }))
     }
 
     @MainActor private func restoreGeneric(_ it: TrashItem) async {

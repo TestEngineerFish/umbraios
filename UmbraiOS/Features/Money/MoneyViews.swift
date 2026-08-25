@@ -465,11 +465,32 @@ struct UmbraMoneyListView: View {
     @EnvironmentObject private var router: UmbraRouter
     @EnvironmentObject private var money: MoneyStore
 
+    // 列表 = 系统 List + 系统 .swipeActions（提醒列表是模板，CLAUDE.md 有铁律）。
+    // 上一版用自绘 UmbraSwipeRow，三宗罪一次全犯（用户验收点名）：
+    // 划开一行后整页卡住不能上下滚、几行能同时划开、行上的拖拽手势抢掉边缘返回。
+    // 系统 swipeActions 这三件事全是 UIKit 替你协调的，不自己造轮子。
     var body: some View {
-        UmbraScreen {
-            VStack(alignment: .leading, spacing: UmbraMetric.sp4) {
-                filterBar
-                if filtered.isEmpty {
+        List {
+            Section {
+                UmbraSegmentedControl(items: [
+                    .init(value: "all", label: "全部"),
+                    .init(value: "expense", label: "支出"),
+                    .init(value: "income", label: "收入"),
+                ], selection: $money.listDir)
+                .listRowInsets(EdgeInsets(top: 2, leading: 0, bottom: UmbraMetric.sp2, trailing: 0))
+                .listRowBackground(Color.clear)
+                .listRowSeparator(.hidden)
+
+                // 分类胶囊只列**当前方向下真的出现过**的分类（稿就是这么派生的）——
+                // 列全量的话大多数点了都是空结果。
+                UmbraFilterChips(items: catChips, selection: $money.listCat, edgeInset: 0)
+                    .listRowInsets(EdgeInsets(top: 0, leading: 0, bottom: UmbraMetric.sp2, trailing: 0))
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+            }
+
+            if filtered.isEmpty {
+                Section {
                     UmbraEmptyState(iconPath: UmbraIconPath.wallet,
                                     title: money.entries.isEmpty ? "这个月还没有记录" : "这个筛选条件下没有记录",
                                     hint: money.entries.isEmpty ? "记一笔，流水会按天分组出现在这里。" : nil,
@@ -481,18 +502,37 @@ struct UmbraMoneyListView: View {
                             money.listCat = nil
                         }
                     }
-                } else {
-                    ForEach(groups, id: \.day) { g in
-                        dayGroup(g)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
+                }
+            } else {
+                ForEach(groups, id: \.day) { g in
+                    Section {
+                        ForEach(g.items) { e in entryRow(e) }
+                    } header: {
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(g.day).font(UmbraFont.sans(12.5, .w600)).foregroundColor(UmbraColor.muted)
+                            Spacer()
+                            Text(g.spend > 0 ? "支出 \(MoneyFmt.yuan(g.spend))" : "仅收入")
+                                .font(UmbraFont.mono(12)).foregroundColor(UmbraColor.faint)
+                        }
+                        .textCase(nil)
                     }
+                }
+                Section {
                     footChip
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     Text("左滑一行可以编辑或删除。")
                         .font(UmbraFont.sans(11.5)).foregroundColor(UmbraColor.faint)
-                        .padding(.horizontal, UmbraMetric.pagePadX)
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                 }
             }
-            .padding(.top, UmbraMetric.sp2)
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(UmbraColor.bg)
         .navigationTitle("流水")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
@@ -501,6 +541,7 @@ struct UmbraMoneyListView: View {
                     .tint(UmbraColor.orange)
             }
         }
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .refreshable { await money.reload(silent: true) }
         .onAppear { money.loadIfNeeded() }
     }
@@ -566,39 +607,9 @@ struct UmbraMoneyListView: View {
         }
     }
 
-    private func dayGroup(_ g: DayGroup) -> some View {
-        VStack(alignment: .leading, spacing: UmbraMetric.sp2) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(g.day).font(UmbraFont.sans(12.5, .w600)).foregroundColor(UmbraColor.muted)
-                Spacer()
-                Text(g.spend > 0 ? "支出 \(MoneyFmt.yuan(g.spend))" : "仅收入")
-                    .font(UmbraFont.mono(12)).foregroundColor(UmbraColor.faint)
-            }
-            .padding(.horizontal, UmbraMetric.pagePadX + 4)
-            VStack(spacing: 0) {
-                ForEach(Array(g.items.enumerated()), id: \.element.id) { idx, e in
-                    entryRow(e, first: idx == 0)
-                }
-            }
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusSwipeRow, style: .continuous).fill(UmbraColor.card))
-            .overlay(RoundedRectangle(cornerRadius: UmbraMetric.radiusSwipeRow, style: .continuous)
-                .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW))
-            .clipShape(RoundedRectangle(cornerRadius: UmbraMetric.radiusSwipeRow, style: .continuous))
-            .padding(.horizontal, UmbraMetric.pagePadX)
-        }
-        .padding(.bottom, UmbraMetric.sp2)
-    }
-
-    private func entryRow(_ e: MoneyEntryDTO, first: Bool) -> some View {
+    private func entryRow(_ e: MoneyEntryDTO) -> some View {
         let income = e.direction == "income"
-        return UmbraSwipeRow(actions: [
-            UmbraSwipeAction(label: "编辑", width: 64, background: UmbraColor.warning) {
-                router.go(.moneyAdd(id: e.id))
-            },
-            UmbraSwipeAction(label: "删除", width: 64, background: UmbraColor.danger) {
-                confirmDelete(e)
-            },
-        ]) {
+        return Group {
             HStack(spacing: 11) {
                 // 分类色块（批次 003）：流水行统一走同色 tint + 色槽色，
                 // 不再按收支分绿/灰 —— 方向已经由右侧的 +/− 金额颜色表达，
@@ -633,13 +644,17 @@ struct UmbraMoneyListView: View {
                     .font(UmbraFont.mono(15.5, .w560))
                     .foregroundColor(income ? UmbraColor.success : UmbraColor.text)
             }
-            .padding(.horizontal, 13)
-            .padding(.vertical, 10)
-            .frame(minHeight: 60)
-            .background(UmbraColor.card)
-            .overlay(alignment: .top) {
-                if !first { UmbraRowDivider() }
-            }
+            .padding(.vertical, 6)
+            .frame(minHeight: 48)
+        }
+        .listRowBackground(UmbraColor.card)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            // 删除放第一个（最靠边）。不用 role: .destructive —— 带 role 系统会先把行
+            // 划走，确认弹窗点取消行就回不来了（提醒列表同一条注释）。
+            Button { confirmDelete(e) } label: { Label("删除", systemImage: "trash") }
+                .tint(UmbraColor.danger)
+            Button { router.go(.moneyAdd(id: e.id)) } label: { Label("编辑", systemImage: "pencil") }
+                .tint(UmbraColor.warning)
         }
     }
 

@@ -73,6 +73,9 @@ struct UmbraToolHomeView: View {
         return vault.recordExists || vault.hasSecretKey ? "已锁定" : "还没创建"
     }
 
+    /// 大卡不做「强调卡」：稿给记账画了橙底橙框的 accent 态，实机上看着像
+    /// 「被选中了」（老板验收点名 —— iOS 上点了就进，没有选中这回事）。
+    /// 两张卡统一用普通卡面，记账的身份感只靠橙色图标块（已记回流台账，要改稿）。
     private func bigCard(label: String, sub: String, icon: String, accent: Bool,
                          action: @escaping () -> Void) -> some View {
         Button(action: action) {
@@ -89,15 +92,15 @@ struct UmbraToolHomeView: View {
                     .foregroundColor(UmbraColor.text)
                 Text(sub)
                     .font(UmbraFont.sans(12.5))
-                    .foregroundColor(accent ? UmbraColor.orangeText : UmbraColor.faint)
+                    .foregroundColor(UmbraColor.faint)
                     .lineLimit(1)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(14)
             .background(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .fill(accent ? UmbraColor.orangeSoft : UmbraColor.card))
+                .fill(UmbraColor.card))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(accent ? UmbraColor.orange : UmbraColor.border, lineWidth: UmbraMetric.borderW))
+                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

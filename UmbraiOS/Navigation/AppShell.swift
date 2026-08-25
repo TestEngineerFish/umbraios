@@ -45,44 +45,38 @@ struct UmbraShell: View {
     }
 
     var body: some View {
-        // 栈挂在 TabView **外面**：推入页盖住整个 TabView（含 tab bar），
-        // 它的布局里根本没有 bar 的安全区 —— 「二级页底部一条 tab bar 高的死带」
-        // 这类问题从结构上消灭。
+        // 结构 = 最初那个渲染完全正常的形态：TabView 在外，每个 Tab 一条自己的
+        // NavigationStack。这是根页原生大标题唯一可靠的写法 —— 大小标题联动是
+        // 「导航栏 ↔ 它正下方滚动视图」之间的系统机制。
         //
-        // 为什么不再用 .toolbar(.hidden, for: .tabBar)：栈在 TabView 里面时，
-        // 首个推入层是「从显示着 bar 的页面推入」的，系统按有 bar 布局、bar 藏掉后
-        // inset 不回收 —— 于是二级页缺一条底、三级页反而正常（从无 bar 的页面起推，
-        // 用户实测钉死的现场）。该 API 的三种挂法（只挂栈外 / 内外都挂 / 只挂
-        // destination）连续三轮验收全部失败，禁止再引入，见 CLAUDE.md「页面骨架」。
+        // 两次实机翻车钉死的禁区（谁都别再试）：
+        //   · 栈挪到 TabView 外面 → 大标题挂不到滚动内容上，标题上方多一截空、
+        //     收放不是系统手感；
+        //   · 再给根页嵌专用内层栈 → SwiftUI 不支持栈套栈：推入目标解析失败，
+        //     二级页整页空白只剩一个 ⚠️，根页导航栏也被外层的隐藏声明拖没（用户截图）。
         //
-        NavigationStack(path: router.pathBinding) {
-            TabView(selection: router.tabSelection) {
-                ForEach(UmbraTab.allCases, id: \.self) { tab in
-                    // 每个根页配一条**永不推入的内层栈**，只干一件事：给根页一条
-                    // 属于自己的导航栏。原生的大标题联动（上滑收成小标题）是
-                    // 「导航栏 ↔ 它正下方的滚动视图」之间的机制 —— 大标题挂在外层
-                    // 栈上时隔着一整个 TabView，系统挂不上去：标题上方多出一截空、
-                    // 收放也不是系统手感（用户实测截图）。内层栈 + 根页内容
-                    // 就是改造前那个像素级正确的形态，原样保留；推入一律走外层栈，
-                    // 内层栈的 path 永远为空（router.go 只改外层 path）。
-                    //
-                    // tab bar 背景不强行 .hidden：内容能穿到 bar 底下之后，
-                    // 系统材质是「玻璃下透出内容」的正确形态，抹掉反而露馅。
-                    NavigationStack {
-                        UmbraRouteView(route: tab.root)
-                    }
-                    .tabItem { Label(tab.label, systemImage: tab.sfSymbol) }
-                    .badge(badge(tab))
-                    .tag(tab)
+        // 推入页的 tab bar 死 inset（bar 藏了、占位不回收，只发生在「从有 bar 的
+        // 页面推入」的那一层）不再从结构上绕 —— 用 UmbraReclaimBottom 精确补偿。
+        TabView(selection: router.tabSelection) {
+            ForEach(UmbraTab.allCases, id: \.self) { tab in
+                NavigationStack(path: router.pathBinding(tab)) {
+                    UmbraRouteView(route: tab.root)
+                        .navigationDestination(for: UmbraRoute.self) { route in
+                            // 推入页无底栏（设计契约 showTabBar: stack.length===1）。
+                            // 藏 bar 的活在 UIKit 层做（见下面 UINavigationController
+                            // 扩展的 pushViewController：hidesBottomBarWhenPushed）——
+                            // SwiftUI 的 .toolbar(.hidden, for: .tabBar) 在实机上会留下
+                            // 一条收不回的底部占位，四轮验收后弃用，别再挂回来。
+                            // ReclaimBottom 是保险丝：占位健康时它是空操作。
+                            UmbraRouteView(route: route)
+                                .modifier(UmbraReclaimBottom())
+                        }
                 }
-            }
-            // 外层栈的导航栏在根页**隐藏** —— 根页的栏由上面的内层栈提供，
-            // 两条都显示就是双栏。navigationTitle 仍要给：栏虽然藏着，
-            // 推入页返回按钮的文字取的是它（「< 工具」而不是「< 返回」）。
-            .navigationTitle(router.tab.label)
-            .toolbar(.hidden, for: .navigationBar)
-            .navigationDestination(for: UmbraRoute.self) { route in
-                UmbraRouteView(route: route)
+                // tab bar 背景不强行 .hidden：内容能穿到 bar 底下之后，
+                // 系统材质是「玻璃下透出内容」的正确形态，抹掉反而露馅。
+                .tabItem { Label(tab.label, systemImage: tab.sfSymbol) }
+                .badge(badge(tab))
+                .tag(tab)
             }
         }
         // ⚠️ 这里原来挂了 `.id("shell-<外观>")`，外观一变就把整棵 TabView 重建。
@@ -124,6 +118,38 @@ struct UmbraShell: View {
             }
             if route != route.tab.root { router.go(route) }
         }
+    }
+}
+
+// MARK: - 推入页底部撑满补丁
+
+/// 吃掉「隐藏 tab bar 后系统不回收的底部占位」，再把真实的 Home 指示条呼吸垫回来。
+///
+/// 病根（三轮验收钉死的现场）：`.toolbar(.hidden, for: .tabBar)` 在「从显示着
+/// bar 的页面推入」的那一层，bar 视觉上藏了、它的安全区占位却留在原地 ——
+/// 二级页底部缺一条 tab bar 高的死带，而三级页（从无 bar 页面起推）正常。
+///
+/// 做法：忽略容器的底部安全区（把死带整条吃掉），再用 safeAreaInset 垫一块
+/// **窗口级**底部安全区高度的透明条 —— 窗口级 inset 只含 Home 指示条，
+/// tab bar 的占位挂在控制器层，窗口层没有它。占位没坏时两步相抵（容器 inset
+/// 本来就等于窗口 inset），所以这个补丁在任何系统版本上都不改变正确的布局。
+/// 用 safeAreaInset 而不是 padding：ScrollView 会把它当安全区处理，
+/// 内容仍能滚到 Home 条底下，只是停靠位置留出呼吸 —— 系统页的标准观感。
+private struct UmbraReclaimBottom: ViewModifier {
+    func body(content: Content) -> some View {
+        content
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                Color.clear.frame(height: Self.windowBottomInset)
+            }
+            .ignoresSafeArea(.container, edges: .bottom)
+    }
+
+    private static var windowBottomInset: CGFloat {
+        UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?
+            .safeAreaInsets.bottom ?? 0
     }
 }
 
@@ -250,5 +276,17 @@ extension UINavigationController: UIGestureRecognizerDelegate {
     }
     public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
         viewControllers.count > 1
+    }
+
+    /// 所有推入页都无底栏（设计契约 showTabBar: stack.length===1）——
+    /// 用 UIKit 原生的 hidesBottomBarWhenPushed 来做：它在**推入之前**就参与布局，
+    /// 进来的页面从第一帧起就是全高，bar 的隐藏与归还、占位的回收全走系统的
+    /// 成熟路径。SwiftUI 的 .toolbar(.hidden, for: .tabBar) 是事后表态，
+    /// 在本机上会把首个推入层的底部占位卡死（二级页缺一条底、三级页正常，
+    /// 四轮验收钉死的现场），弃用。本 App 没有「推入页要带 tab bar」的场景，
+    /// 全局设为 true 是规则不是例外；不在 tab 容器里的导航控制器设了也无副作用。
+    override open func pushViewController(_ viewController: UIViewController, animated: Bool) {
+        viewController.hidesBottomBarWhenPushed = true
+        super.pushViewController(viewController, animated: animated)
     }
 }

@@ -21,21 +21,26 @@ struct UmbraMoneyCatsView: View {
     @State private var renameText = ""
     @State private var busy = false
 
+    // 列表 = 系统 List + 系统 .swipeActions（提醒列表是模板，CLAUDE.md 有铁律）。
     var body: some View {
-        UmbraScreen {
-            VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
-                group("支出", cats: money.cats.filter { $0.direction == "expense" && $0.enabled })
-                group("收入", cats: money.cats.filter { $0.direction == "income" && $0.enabled })
-                disabledGroup
+        List {
+            catSection("支出", cats: money.cats.filter { $0.direction == "expense" && $0.enabled })
+            catSection("收入", cats: money.cats.filter { $0.direction == "income" && $0.enabled })
+            disabledSection
+            Section {
                 Text("左滑分类行可以改名、停用。改名只改显示名，不影响历史数据 —— 流水里存的是稳定标识。停用的分类不再出现在选择器里，历史账目仍归它，统计不变。")
                     .font(UmbraFont.sans(12)).foregroundColor(UmbraColor.faint)
                     .lineSpacing(12 * 0.65)
-                    .padding(.horizontal, UmbraMetric.pagePadX)
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-            .padding(.top, UmbraMetric.sp2)
         }
+        .listStyle(.insetGrouped)
+        .scrollContentBackground(.hidden)
+        .background(UmbraColor.bg)
         .navigationTitle("分类管理")
         .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .refreshable { await money.reload(silent: true) }
         .onAppear { money.loadIfNeeded() }
         // iOS 16 的 alert 允许放 TextField —— 一个改名不值一整张自定义弹层。
@@ -53,63 +58,54 @@ struct UmbraMoneyCatsView: View {
 
     // MARK: 分组
 
-    private func group(_ title: String, cats: [MoneyCatDTO]) -> some View {
-        VStack(alignment: .leading, spacing: UmbraMetric.sp2) {
+    private func catSection(_ title: String, cats: [MoneyCatDTO]) -> some View {
+        Section {
+            ForEach(cats) { c in catRow(c) }
+        } header: {
             Text(title).font(UmbraFont.sans(12, .w600)).foregroundColor(UmbraColor.faint)
-                .padding(.horizontal, UmbraMetric.pagePadX)
-            VStack(spacing: 0) {
-                ForEach(Array(cats.enumerated()), id: \.element.slug) { idx, c in
-                    if idx > 0 { UmbraRowDivider() }
-                    catRow(c)
-                }
-            }
-            .moneyCard()
-            .padding(.horizontal, UmbraMetric.pagePadX)
+                .textCase(nil)
         }
     }
 
     /// 一级行：左滑 = 改名 / 停用（批次 003 定稿的交互）；点行 = 菜单（同两项）。
     /// 兜底分类左滑只有改名 —— 没有停用键比「有键但点了报错」诚实。
     private func catRow(_ c: MoneyCatDTO) -> some View {
-        var actions = [UmbraSwipeAction(label: "改名", width: 64, background: UmbraColor.warning) {
-            startRename(c)
-        }]
-        if !c.locked {
-            actions.append(UmbraSwipeAction(label: "停用", width: 64, background: UmbraColor.danger) {
-                confirmDisable(c)
-            })
-        }
-        return UmbraSwipeRow(actions: actions) {
-            Button { openSheet(c) } label: {
-                HStack(spacing: 11) {
-                    // 分类色块（批次 003）：同色 tint 底 + 色槽色描边图标。
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .fill(MoneyCatArt.tint(c.slot))
-                        .frame(width: 34, height: 34)
-                        .overlay(UmbraIcon(d: MoneyCatArt.icon(c.slug), size: 18, strokeWidth: 1.9)
-                            .foregroundColor(MoneyCatArt.slotColor(c.slot)))
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 7) {
-                            Text(c.name).font(UmbraFont.sans(15, .w560)).foregroundColor(UmbraColor.text)
-                            if c.locked {
-                                Text("兜底分类")
-                                    .font(UmbraFont.sans(10.5, .w600)).foregroundColor(UmbraColor.faint)
-                                    .padding(.horizontal, 7).padding(.vertical, 1)
-                                    .background(Capsule().fill(UmbraColor.chip))
-                            }
+        Button { openSheet(c) } label: {
+            HStack(spacing: 11) {
+                // 分类色块（批次 003）：同色 tint 底 + 色槽色描边图标。
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(MoneyCatArt.tint(c.slot))
+                    .frame(width: 34, height: 34)
+                    .overlay(UmbraIcon(d: MoneyCatArt.icon(c.slug), size: 18, strokeWidth: 1.9)
+                        .foregroundColor(MoneyCatArt.slotColor(c.slot)))
+                VStack(alignment: .leading, spacing: 2) {
+                    HStack(spacing: 7) {
+                        Text(c.name).font(UmbraFont.sans(15, .w560)).foregroundColor(UmbraColor.text)
+                        if c.locked {
+                            Text("兜底分类")
+                                .font(UmbraFont.sans(10.5, .w600)).foregroundColor(UmbraColor.faint)
+                                .padding(.horizontal, 7).padding(.vertical, 1)
+                                .background(Capsule().fill(UmbraColor.chip))
                         }
-                        Text(meta(c)).font(UmbraFont.sans(12)).foregroundColor(UmbraColor.muted)
                     }
-                    Spacer(minLength: 6)
-                    UmbraIcon(d: UmbraIconPath.chevronRight, size: 15, strokeWidth: 2.2)
-                        .foregroundColor(UmbraColor.faint)
+                    Text(meta(c)).font(UmbraFont.sans(12)).foregroundColor(UmbraColor.muted)
                 }
-                .padding(.horizontal, 14).padding(.vertical, 10)
-                .frame(minHeight: 56)
-                .background(UmbraColor.card)
-                .contentShape(Rectangle())
+                Spacer(minLength: 6)
+                UmbraIcon(d: UmbraIconPath.chevronRight, size: 15, strokeWidth: 2.2)
+                    .foregroundColor(UmbraColor.faint)
             }
-            .buttonStyle(.plain)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .listRowBackground(UmbraColor.card)
+        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+            if !c.locked {
+                Button { confirmDisable(c) } label: { Label("停用", systemImage: "nosign") }
+                    .tint(UmbraColor.danger)
+            }
+            Button { startRename(c) } label: { Label("改名", systemImage: "pencil") }
+                .tint(UmbraColor.warning)
         }
     }
 
@@ -123,37 +119,34 @@ struct UmbraMoneyCatsView: View {
     }
 
     @ViewBuilder
-    private var disabledGroup: some View {
+    private var disabledSection: some View {
         let hidden = money.cats.filter { !$0.enabled }
         if !hidden.isEmpty {
-            VStack(alignment: .leading, spacing: UmbraMetric.sp2) {
-                Text("已停用").font(UmbraFont.sans(12, .w600)).foregroundColor(UmbraColor.faint)
-                    .padding(.horizontal, UmbraMetric.pagePadX)
-                VStack(spacing: 0) {
-                    ForEach(Array(hidden.enumerated()), id: \.element.slug) { idx, c in
-                        if idx > 0 { UmbraRowDivider() }
-                        HStack(spacing: 11) {
-                            // ban（圆 + 斜杠）：批次 003 新增的「停用」图标 ——
-                            // 只表示停用，不表示失败（失败仍是 alert-circle）。
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(UmbraColor.chip)
-                                .frame(width: 30, height: 30)
-                                .overlay(UmbraIcon(d: UmbraIconPath.ban, size: 15, strokeWidth: 1.9)
-                                    .foregroundColor(UmbraColor.faint))
-                            Text(c.name).font(UmbraFont.sans(15)).foregroundColor(UmbraColor.muted)
-                            Spacer()
-                            UmbraButton(title: "恢复", kind: .secondary, height: 32) {
-                                run(toast: "已恢复「\(c.name)」") {
-                                    await money.updateCat(slug: c.slug, enabled: true)
-                                }
+            Section {
+                ForEach(hidden) { c in
+                    HStack(spacing: 11) {
+                        // ban（圆 + 斜杠）：批次 003 新增的「停用」图标 ——
+                        // 只表示停用，不表示失败（失败仍是 alert-circle）。
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .fill(UmbraColor.chip)
+                            .frame(width: 30, height: 30)
+                            .overlay(UmbraIcon(d: UmbraIconPath.ban, size: 15, strokeWidth: 1.9)
+                                .foregroundColor(UmbraColor.faint))
+                        Text(c.name).font(UmbraFont.sans(15)).foregroundColor(UmbraColor.muted)
+                        Spacer()
+                        UmbraButton(title: "恢复", kind: .secondary, height: 32) {
+                            run(toast: "已恢复「\(c.name)」") {
+                                await money.updateCat(slug: c.slug, enabled: true)
                             }
-                            .frame(width: 72)
                         }
-                        .padding(.horizontal, 14).frame(minHeight: 52)
+                        .frame(width: 72)
                     }
+                    .padding(.vertical, 4)
+                    .listRowBackground(UmbraColor.card)
                 }
-                .moneyCard()
-                .padding(.horizontal, UmbraMetric.pagePadX)
+            } header: {
+                Text("已停用").font(UmbraFont.sans(12, .w600)).foregroundColor(UmbraColor.faint)
+                    .textCase(nil)
             }
         }
     }
