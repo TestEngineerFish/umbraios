@@ -520,7 +520,10 @@ struct UmbraMoneyListView: View {
                     }
                 }
                 Section {
+                    // 合计条撑满整行（稿的样式：通栏一条，不是居中小卡）——
+                    // List 会把行按内容收窄，这里把行内衬清零、让它吃满分组宽度。
                     footChip
+                        .listRowInsets(EdgeInsets())
                         .listRowBackground(Color.clear)
                         .listRowSeparator(.hidden)
                     Text("左滑一行可以编辑或删除。")
@@ -686,8 +689,8 @@ struct UmbraMoneyListView: View {
                 .font(UmbraFont.mono(12.5, .w560)).foregroundColor(UmbraColor.text)
         }
         .padding(.horizontal, 13).padding(.vertical, 11)
+        .frame(maxWidth: .infinity)
         .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(UmbraColor.chip))
-        .padding(.horizontal, UmbraMetric.pagePadX)
     }
 }
 

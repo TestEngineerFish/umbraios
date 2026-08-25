@@ -188,7 +188,8 @@ final class UmbraRouter: ObservableObject {
     /// 每个 Tab 一条独立路径，各自的 NavigationStack 住在 TabView **里面** ——
     /// 这是根页原生大标题唯一可靠的形态（大小标题联动 = 导航栏和它正下方
     /// 滚动视图之间的系统机制，栈挪出去/嵌套都会破，两次实机都翻车了）。
-    /// 推入页的 tab bar 死 inset 不在这里修，在 AppShell 的 UmbraReclaimBottom。
+    /// 底栏是真·系统 tab bar（液态玻璃的果冻动效只有系统件有）；「推入隐藏」
+    /// 由 AppShell 监听这里的栈深调 setTabBarHidden 驱动，这里只管路径状态。
     @Published var paths: [UmbraTab: [UmbraRoute]] = [:]
 
     /// 多层底部选择器。空 = 没开。

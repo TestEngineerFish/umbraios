@@ -54,13 +54,18 @@ ScrollView + background 的组合，安全区的坑它都已经踩平了。
 三条铁律，每条都是真事故换来的：
 
 1. **导航结构只有一种合法形态**：TabView 在外、每个 Tab 一条自己的
-   NavigationStack（根页原生大标题靠它）。推入页无底栏的实现在 **UIKit 层**：
-   AppShell 的 UINavigationController 扩展在 pushViewController 里统一设
-   `hidesBottomBarWhenPushed = true`（推入前就参与布局，占位回收走系统成熟
-   路径），destination 上再挂保险丝 `UmbraReclaimBottom()`。三条实机翻过车
-   的禁区：① SwiftUI 的 `.toolbar(…, for: .tabBar)`（任何挂法）→ 首个推入层
-   的底部占位收不回；② 栈挪到 TabView 外面 → 根页大标题挂不到滚动内容上；
-   ③ 栈套栈 → 推入目标解析失败，二级页整页空白只剩 ⚠️。
+   NavigationStack（根页原生大标题靠它）。底栏是**真·系统 tab bar** ——
+   液态玻璃胶囊的果冻选中动效是系统私有渲染，自绘复刻过一版被实机否掉，
+   别再自绘。「推入页不留底栏」只准走 UIKit 官方 API：AppShell 监听栈深，
+   对 TabView 背后的 UITabBarController 调 `setTabBarHidden(_:animated:)`
+   （iOS 18+，Apple 对 FB18543961 点名的替代 API，布局与安全区由 UIKit
+   自己收）；iOS 16/17、或广搜不到 UITabBarController 时退化为底栏常驻
+   （这也是 iOS 26 系统 App 的惯例，不会坏布局）。
+   五条实机翻过车的禁区（一条都别再试）：① SwiftUI .toolbar 切系统 bar
+   显隐（三种挂法，占位卡死）；② hidesBottomBarWhenPushed 的 swizzle
+   （NavigationStack 不走 pushViewController，钩子空转）；③ 栈挪到 TabView
+   外面（根页大标题挂不到滚动内容）；④ 栈套栈（推入目标解析失败，二级页
+   空白 ⚠️）；⑤ 自绘底栏（果冻手感仿不出来，老板否）。
 4. **列表 = 系统 List + 系统 .swipeActions**（提醒列表是模板：insetGrouped +
    `scrollContentBackground(.hidden)` + `listRowBackground(card)`，破坏性操作
    过 router.confirm、不用 role: .destructive）。**不许自绘侧滑行** ——

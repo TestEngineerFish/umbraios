@@ -1,12 +1,15 @@
-// 应用外壳：系统 TabView（五个 Tab）+ 每个 Tab 一条系统 NavigationStack。
+// 应用外壳：系统 TabView（三个 Tab）+ 每个 Tab 一条系统 NavigationStack。
 //
-// v2 起转场、边缘返回、tab bar 全部交给系统 —— iOS 26 上系统自动给出
-// Liquid Glass 的浮动胶囊 tab bar 与玻璃返回钮，老系统上是各版本的原生形态。
-// 一期的自绘转场 / 自绘边缘手势 / UmbraTabBar 已删。
+// 底栏 = **真·系统 tab bar**（终稿②，2026-08-25）：iOS 26 液态玻璃浮动胶囊
+// 和它的果冻选中动效是系统私有渲染 —— 自绘复刻过一版（matchedGeometry +
+// 过冲弹簧），老板实机验收「手感不好」，整体退场。「推入页不留底栏」不再碰
+// SwiftUI 的 toolbar 显隐首选项（占位卡死的雷区），改走 UIKit 官方 API ——
+// 见下面 setSystemTabBarHidden 的注释。
 //
 // 全部页面已在系统导航栏上（UmbraScreen + .navigationTitle/.toolbar），
 // 迁移期的旧 UmbraPage 骨架与自绘导航件已删。
 import SwiftUI
+import UIKit
 
 struct UmbraShell: View {
     @StateObject private var router = UmbraRouter()
@@ -45,35 +48,25 @@ struct UmbraShell: View {
     }
 
     var body: some View {
-        // 结构 = 最初那个渲染完全正常的形态：TabView 在外，每个 Tab 一条自己的
-        // NavigationStack。这是根页原生大标题唯一可靠的写法 —— 大小标题联动是
-        // 「导航栏 ↔ 它正下方滚动视图」之间的系统机制。
+        // 结构：TabView 在外，每个 Tab 一条自己的 NavigationStack ——
+        // 根页原生大标题唯一可靠的形态（大小标题联动是「导航栏 ↔ 它正下方
+        // 滚动视图」之间的系统机制；栈外置 / 栈套栈两条路都实机翻过车）。
         //
-        // 两次实机翻车钉死的禁区（谁都别再试）：
-        //   · 栈挪到 TabView 外面 → 大标题挂不到滚动内容上，标题上方多一截空、
-        //     收放不是系统手感；
-        //   · 再给根页嵌专用内层栈 → SwiftUI 不支持栈套栈：推入目标解析失败，
-        //     二级页整页空白只剩一个 ⚠️，根页导航栏也被外层的隐藏声明拖没（用户截图）。
-        //
-        // 推入页的 tab bar 死 inset（bar 藏了、占位不回收，只发生在「从有 bar 的
-        // 页面推入」的那一层）不再从结构上绕 —— 用 UmbraReclaimBottom 精确补偿。
+        // 底栏（终稿②）：**真·系统 tab bar** —— 液态玻璃胶囊的果冻选中动效
+        // 是系统私有渲染，自绘那版（matchedGeometry + 弹簧）被老板实机否掉。
+        // 「一级显示 / 推入隐藏」由下面 onChange 里的 setSystemTabBarHidden
+        // 驱动（UIKit 官方 API，布局与安全区都由 UIKit 自己收）；SwiftUI 的
+        // .toolbar 显隐首选项一根手指都不碰 —— 三种挂法都占位卡死过（禁区①）。
+        // 根页内容也不再垫底部 spacer：系统 bar 自己管滚动内容的避让。
         TabView(selection: router.tabSelection) {
             ForEach(UmbraTab.allCases, id: \.self) { tab in
                 NavigationStack(path: router.pathBinding(tab)) {
                     UmbraRouteView(route: tab.root)
                         .navigationDestination(for: UmbraRoute.self) { route in
-                            // 推入页无底栏（设计契约 showTabBar: stack.length===1）。
-                            // 藏 bar 的活在 UIKit 层做（见下面 UINavigationController
-                            // 扩展的 pushViewController：hidesBottomBarWhenPushed）——
-                            // SwiftUI 的 .toolbar(.hidden, for: .tabBar) 在实机上会留下
-                            // 一条收不回的底部占位，四轮验收后弃用，别再挂回来。
-                            // ReclaimBottom 是保险丝：占位健康时它是空操作。
                             UmbraRouteView(route: route)
-                                .modifier(UmbraReclaimBottom())
                         }
                 }
-                // tab bar 背景不强行 .hidden：内容能穿到 bar 底下之后，
-                // 系统材质是「玻璃下透出内容」的正确形态，抹掉反而露馅。
+                // 标签与角标都交回系统渲染（badge(0) 自动不显示）。
                 .tabItem { Label(tab.label, systemImage: tab.sfSymbol) }
                 .badge(badge(tab))
                 .tag(tab)
@@ -82,11 +75,8 @@ struct UmbraShell: View {
         // ⚠️ 这里原来挂了 `.id("shell-<外观>")`，外观一变就把整棵 TabView 重建。
         // 但 UmbraiOSApp 已经在窗口级做了同一件事（overrideUserInterfaceStyle +
         // UIView.transition 交叉淡入，整棵 trait 树一起换，导航栏和 tab bar 都跟上）。
-        // 两个修法叠在一起就会打架：SwiftUI 正在重建 tab bar 的同时，UIKit 那边
-        // 盖着一张 0.25s 的旧快照在淡出 —— 于是 tab bar 时而慢半拍、时而画花，
-        // 而且因为是时序竞争所以**非必现**（用户实测，深色下更容易撞上）。
-        // 窗口级那条是完整的解法，这条重建是它之前的遗留，去掉。
-        // 选中态用品牌橙。角标颜色是系统红，不另调 —— 那是系统层的东西。
+        // 两个修法叠在一起就会打架，去掉重建，保留窗口级方案。
+        // 选中态用品牌橙。
         .tint(UmbraColor.orange)
         .background(UmbraColor.bg)
         .umbraOverlays(router)
@@ -103,6 +93,13 @@ struct UmbraShell: View {
         .environmentObject(vault)
         .environmentObject(vaultSession)
         .environmentObject(money)
+        // 推入藏底栏 / 回根现底栏。onChange 首帧不触发正好 —— 启动时本来就该显示。
+        // 边缘右划返回时 path 在手势**完成**那刻才变，所以 bar 是「落定后滑回来」、
+        // 不跟手指走 —— iOS 26 连 UIKit 原生路径的跟手回显都有毛病（论坛 805740），
+        // 不在这上面较劲。
+        .onChange(of: pushed) { hidden in
+            UmbraShell.setSystemTabBarHidden(hidden)
+        }
         // 通知里点开的那条提醒：切到工具 Tab、先垫上提醒列表再推详情 ——
         // 这样返回是「详情 → 提醒列表 → 工具页」，而不是从详情一步掉回工具页
         // （tab 减到三个之后提醒列表不再是根页，不垫这一层就没有回列表的路）。
@@ -116,42 +113,70 @@ struct UmbraShell: View {
             default:
                 break
             }
-            if route != route.tab.root { router.go(route) }
+            postDeepLinkPush(route)
         }
     }
-}
 
-// MARK: - 推入页底部撑满补丁
+    /// 深链的最后一跳拆出来 —— onChange 闭包别叠太深。
+    private func postDeepLinkPush(_ route: UmbraRoute) {
+        if route != route.tab.root { router.go(route) }
+    }
 
-/// 吃掉「隐藏 tab bar 后系统不回收的底部占位」，再把真实的 Home 指示条呼吸垫回来。
-///
-/// 病根（三轮验收钉死的现场）：`.toolbar(.hidden, for: .tabBar)` 在「从显示着
-/// bar 的页面推入」的那一层，bar 视觉上藏了、它的安全区占位却留在原地 ——
-/// 二级页底部缺一条 tab bar 高的死带，而三级页（从无 bar 页面起推）正常。
-///
-/// 做法：忽略容器的底部安全区（把死带整条吃掉），再用 safeAreaInset 垫一块
-/// **窗口级**底部安全区高度的透明条 —— 窗口级 inset 只含 Home 指示条，
-/// tab bar 的占位挂在控制器层，窗口层没有它。占位没坏时两步相抵（容器 inset
-/// 本来就等于窗口 inset），所以这个补丁在任何系统版本上都不改变正确的布局。
-/// 用 safeAreaInset 而不是 padding：ScrollView 会把它当安全区处理，
-/// 内容仍能滚到 Home 条底下，只是停靠位置留出呼吸 —— 系统页的标准观感。
-private struct UmbraReclaimBottom: ViewModifier {
-    func body(content: Content) -> some View {
-        content
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                Color.clear.frame(height: Self.windowBottomInset)
+    /// 当前 Tab 是否在推入页里（栈深 > 0）。系统底栏的显隐跟着它走。
+    private var pushed: Bool { !(router.paths[router.tab] ?? []).isEmpty }
+
+    /// 「推入页不留底栏」的唯一合法通道（终稿②）。
+    ///
+    /// 为什么是它：SwiftUI 侧全部路子都实机翻过车 —— .toolbar 显隐三种挂法
+    /// 占位卡死；hidesBottomBarWhenPushed 的 swizzle 因 NavigationStack 不走
+    /// pushViewController 而空转（且该属性在 iOS 26 早期版本本身坏过，Apple
+    /// 已认账 FB18543961）。Apple 工程师在开发者论坛（thread 789148 / 791287）
+    /// 点名的替代品就是 UITabBarController.setTabBarHidden(_:animated:)：
+    /// iOS 18+ 官方 API，藏的是「各平台各形态的 tab bar 本体」，布局与安全区
+    /// 由 UIKit 自己收 —— SwiftUI 的 toolbar 首选项机制完全不掺和，
+    /// 占位 bug 没有发生的那一层。
+    ///
+    /// iPhone 上 SwiftUI TabView 仍由 UITabBarController 托底，从窗口根往下
+    /// 广搜就能拿到。万一哪个系统版本换了实现拿不到：打一行日志、什么都不做，
+    /// 退化行为是「推入页底栏常驻」—— 恰好也是 iOS 26 系统 App 的惯例，
+    /// 不会出现布局坏死。iOS 16/17 没有这个 API，同样退化为常驻。
+    private static func setSystemTabBarHidden(_ hidden: Bool) {
+        guard #available(iOS 18.0, *) else { return }
+        guard let tbc = findTabBarController() else {
+            print("Umbra 底栏：没找到 UITabBarController，推入页底栏保持系统默认（常驻）")
+            return
+        }
+        if tbc.isTabBarHidden != hidden {
+            tbc.setTabBarHidden(hidden, animated: true)
+        }
+    }
+
+    /// 从各窗口的根控制器往下广搜 UITabBarController（含 presented 分支）。
+    /// 不缓存引用 —— 控制器树就几十个节点，每次现搜比操心缓存失效省心。
+    private static func findTabBarController() -> UITabBarController? {
+        for scene in UIApplication.shared.connectedScenes {
+            guard let ws = scene as? UIWindowScene else { continue }
+            for window in ws.windows {
+                var queue: [UIViewController] = window.rootViewController.map { [$0] } ?? []
+                while !queue.isEmpty {
+                    let vc = queue.removeFirst()
+                    if let tbc = vc as? UITabBarController { return tbc }
+                    queue.append(contentsOf: vc.children)
+                    if let presented = vc.presentedViewController { queue.append(presented) }
+                }
             }
-            .ignoresSafeArea(.container, edges: .bottom)
-    }
-
-    private static var windowBottomInset: CGFloat {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap { $0.windows }
-            .first { $0.isKeyWindow }?
-            .safeAreaInsets.bottom ?? 0
+        }
+        return nil
     }
 }
+
+// MARK: - （已退场）自绘浮动胶囊底栏
+//
+// 2026-08-25 一天之内走完一圈：系统 bar 显隐翻车 → 自绘 UmbraTabBar overlay
+//（材质胶囊 + matchedGeometry 果冻仿制 + 过冲弹簧）→ 老板实机验收「手感不好」。
+// 结论：液态玻璃的果冻选中动效是系统私有渲染，自绘只能形似不能神似 ——
+// 底栏必须是真系统件，推入隐藏走 setSystemTabBarHidden（见 UmbraShell）。
+// 别再把自绘底栏请回来。
 
 // MARK: - 路由分发
 //
@@ -278,15 +303,7 @@ extension UINavigationController: UIGestureRecognizerDelegate {
         viewControllers.count > 1
     }
 
-    /// 所有推入页都无底栏（设计契约 showTabBar: stack.length===1）——
-    /// 用 UIKit 原生的 hidesBottomBarWhenPushed 来做：它在**推入之前**就参与布局，
-    /// 进来的页面从第一帧起就是全高，bar 的隐藏与归还、占位的回收全走系统的
-    /// 成熟路径。SwiftUI 的 .toolbar(.hidden, for: .tabBar) 是事后表态，
-    /// 在本机上会把首个推入层的底部占位卡死（二级页缺一条底、三级页正常，
-    /// 四轮验收钉死的现场），弃用。本 App 没有「推入页要带 tab bar」的场景，
-    /// 全局设为 true 是规则不是例外；不在 tab 容器里的导航控制器设了也无副作用。
-    override open func pushViewController(_ viewController: UIViewController, animated: Bool) {
-        viewController.hidesBottomBarWhenPushed = true
-        super.pushViewController(viewController, animated: animated)
-    }
+    // （曾在这里放过 hidesBottomBarWhenPushed 的 swizzle —— 实测无效：
+    //   NavigationStack 不走 pushViewController 这条路，钩子空转，bar 照常显示。
+    //   推入藏底栏的正解是 UmbraShell.setSystemTabBarHidden，见那里的注释。）
 }

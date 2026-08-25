@@ -307,6 +307,8 @@ extension View {
 //
 // 克制：只有颜色/描边过渡、左滑回弹、弹框位移、运行中匀速旋转。
 // **无弹跳、无缩放、无入场动画** —— 所以这里刻意不提供 spring。
+//（2026-08-25 试过给自绘底栏配过冲弹簧仿系统果冻（jelly），连同自绘底栏
+//  一起被实机否掉：果冻是系统私有渲染，底栏已回归系统件，spring 禁令维持。）
 enum UmbraMotion {
     /// 颜色 / 描边过渡 .12s–.15s ease
     static let tint = Animation.easeInOut(duration: 0.13)
