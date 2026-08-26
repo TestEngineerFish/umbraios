@@ -415,10 +415,13 @@ struct UmbraTaskDetailView: View {
                 // provider/skill 已随统一执行轮模型从接口消失，原来那行「能力：…」
                 // 换成这一步的人话说明（detail，如「设备不在线，挂起等待」）——
                 // 这层信息 PC 一直在显示，iOS 原来因为没声明字段而整层看不见。
+                // 按行内 Markdown 渲染：执行轮写的结论天然带 **粗体** / [链接](url)，
+                // 纯文本展示就是裸星号加不可点的长 URL（用户点名）。链接色走 tint。
                 if let note = s.detail, !note.isEmpty, s.error == nil {
-                    Text(note)
+                    Text(mdInline(note))
                         .font(UmbraFont.sans(12.5, .w400))
                         .foregroundColor(UmbraColor.faint)
+                        .tint(UmbraColor.orange)
                         .lineSpacing(12.5 * 0.45)
                 }
                 if let err = s.error?.message, !err.isEmpty {
@@ -459,6 +462,25 @@ struct UmbraTaskDetailView: View {
                 }
             }
         }
+    }
+
+    /// 步骤说明的轻量 Markdown 渲染：行内标记（粗体/链接/行内代码）交给系统解析，
+    /// 保留换行（inlineOnlyPreservingWhitespace）。块级语法系统不认，其中 `---`
+    /// 分隔线留着就是三个裸横杠，先整行剥掉；其余块级标记按普通文字显示，不吞内容。
+    /// 解析失败退回原文 —— 一段说明不值得为它把详情页弄崩。
+    private func mdInline(_ s: String) -> AttributedString {
+        let cleaned = s.components(separatedBy: "\n")
+            .filter { line in
+                let t = line.trimmingCharacters(in: .whitespaces)
+                return !(t.count >= 3 && (t.allSatisfy { $0 == "-" } || t.allSatisfy { $0 == "*" }))
+            }
+            .joined(separator: "\n")
+        if let a = try? AttributedString(
+            markdown: cleaned,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)) {
+            return a
+        }
+        return AttributedString(s)
     }
 
     /// 从步骤 result_json 里捞第一个图片类 url。url 藏两层是服务端的真实形状：
