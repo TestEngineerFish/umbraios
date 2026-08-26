@@ -93,7 +93,8 @@ enum UmbraColor {
     /// 计数角标专用红：取系统 systemRed（浅 #FF3B30 / 深 #FF453A，系统自适应），
     /// 跟系统底栏徽标同色。不复用 --danger —— 那是破坏性操作的红（偏深偏哑），
     /// 底栏回归系统 bar 后两个红并排出现像色差事故（实机可辨，老板点名统一）。
-    /// 稿的口径偏离已记台账，待设计确认：iOS 端「角标红」→ systemRed。
+    /// 批次 004 设计已确认并写进规范：iOS 所有计数角标（tab / 行角标 / 未读点）
+    /// 用 systemRed，99+ 上限；--danger 在 iOS 只留给破坏性操作。
     static let badgeRed    = Color(UIColor.systemRed)
 
     /// 用户气泡。这一条不在 colors.css 里，来自主设计稿对话页的取值。
