@@ -320,7 +320,9 @@ enum UmbraStatus: String {
         switch self {
         case .running: return "执行中"
         case .done: return "已完成"
-        case .awaitingReview: return "待确认"
+        // 批次 005 定稿「等你授权」（原「待确认」）：触发它的只有 operate 执行等授权，
+        // 文案直说等的是**你**的授权，和「待执行/已挂起」这类系统态区分开。
+        case .awaitingReview: return "等你授权"
         case .failed: return "失败"
         case .pending: return "待执行"
         case .cancelled: return "已取消"

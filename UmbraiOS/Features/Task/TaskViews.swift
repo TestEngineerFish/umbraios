@@ -228,6 +228,8 @@ struct UmbraTaskDetailView: View {
     @EnvironmentObject private var tasks: TasksViewModel
 
     @State private var showRawError = false
+    /// 步骤截图点开的应用内预览器（批次 005：不再跳系统浏览器）。
+    @State private var viewerItem: UmbraViewerItem?
 
     private var detail: TaskDetail? { tasks.detail?.task.id == id ? tasks.detail : nil }
 
@@ -248,6 +250,7 @@ struct UmbraTaskDetailView: View {
         })
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
+        .umbraImageViewer(item: $viewerItem)
         .onAppear { Task { await tasks.loadTaskDetail(id: id) } }
         .onDisappear { tasks.closeTaskDetail() }
     }
@@ -445,20 +448,30 @@ struct UmbraTaskDetailView: View {
     }
 
     /// 该步产出的内联截图（result_json → device_results[].url，同 PC 口径）。
-    /// 稿没画这一块（PC 有「步骤截图 + 脚注」的稿，iOS 没有）——先按 PC 的意思
-    /// 最小实现：图内联、点开系统浏览器看原图；样式待 ClaudeDesign 补稿（已记台账）。
-    /// 加载失败/还在加载都不占位：一格空白骨架比什么都没有更像 bug。
+    /// 批次 005 补了稿：最大 330×280、圆角 9、border-soft 描边，下方挂等宽文件名脚注；
+    /// 点开走应用内预览器（同记账附件），不再跳系统浏览器。
+    /// 加载失败/还在加载都不占位：一格空白骨架比什么都没有更像 bug（脚注也跟着不出）。
     @ViewBuilder
     private func stepShotView(_ s: TaskStep) -> some View {
-        if let url = stepShotURL(s) {
-            AsyncImage(url: url) { phase in
+        if let shot = stepShot(s) {
+            AsyncImage(url: shot.url) { phase in
                 if case .success(let img) = phase {
-                    img.resizable().scaledToFit()
-                        .frame(maxWidth: 330, maxHeight: 280, alignment: .leading)
-                        .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
-                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
-                            .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-                        .onTapGesture { UIApplication.shared.open(url) }
+                    VStack(alignment: .leading, spacing: 5) {
+                        img.resizable().scaledToFit()
+                            .frame(maxWidth: 330, maxHeight: 280, alignment: .leading)
+                            .clipShape(RoundedRectangle(cornerRadius: 9, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW))
+                            .onTapGesture {
+                                viewerItem = UmbraViewerItem(url: shot.url, name: shot.name)
+                            }
+                        Text(shot.name)
+                            .font(UmbraFont.mono(11, .w400))
+                            .foregroundColor(UmbraColor.faint)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                            .frame(maxWidth: 330, alignment: .leading)
+                    }
                 }
             }
         }
@@ -483,10 +496,12 @@ struct UmbraTaskDetailView: View {
         return AttributedString(s)
     }
 
-    /// 从步骤 result_json 里捞第一个图片类 url。url 藏两层是服务端的真实形状：
-    /// 技能直回的在顶层，执行轮聚合的设备结果在 device_results[]（截图在这层）。
-    /// /files/<id> 通常无扩展名，也按图处理 —— AsyncImage 失败时整块不显示，兜得住。
-    private func stepShotURL(_ s: TaskStep) -> URL? {
+    /// 从步骤 result_json 里捞第一个图片类 url 和它的文件名（脚注/预览器标题用）。
+    /// url 藏两层是服务端的真实形状：技能直回的在顶层，执行轮聚合的设备结果在
+    /// device_results[]（截图在这层）。/files/<id> 通常无扩展名，也按图处理 ——
+    /// AsyncImage 失败时整块不显示，兜得住。文件名优先取条目里的 filename / title
+    ///（服务端 _result_links 同款优先级），都没有就退回 url 的最后一段。
+    private func stepShot(_ s: TaskStep) -> (url: URL, name: String)? {
         guard let raw = s.result_json, let data = raw.data(using: .utf8),
               let obj = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
         else { return nil }
@@ -494,12 +509,13 @@ struct UmbraTaskDetailView: View {
         cands.append(obj)
         for d in cands {
             guard let u = d["url"] as? String, !u.isEmpty else { continue }
-            let lower = u.lowercased()
-            let looksImage = lower.contains("/files/")
-                || [".png", ".jpg", ".jpeg", ".gif", ".webp"].contains { lower.contains($0) }
-            guard looksImage else { continue }
+            guard UmbraViewerItem.looksImage(u) else { continue }
             let full = u.hasPrefix("http") ? u : NetworkConfig.shared.serverUrl + u
-            return URL(string: full)
+            guard let url = URL(string: full) else { continue }
+            let name = (d["filename"] as? String)
+                ?? (d["title"] as? String)
+                ?? url.lastPathComponent
+            return (url, name)
         }
         return nil
     }

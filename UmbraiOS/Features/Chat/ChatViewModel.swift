@@ -26,13 +26,28 @@ class ChatViewModel: ObservableObject {
         var at: String? = nil
     }
 
-    @Published var draft: String = ""
-    /// 对话模式：自动 / 聊天 / 执行。服务端 app.py 读 message 里的 mode 字段（auto / chat / execution）。
-    /// 存本地是因为它是「我这台设备当前怎么用秘书」，跨设备各选各的，不该跟着账号走。
-    @Published var mode: ChatMode = ChatMode(rawValue: UserDefaults.standard.string(forKey: "umbra.chat.mode") ?? "") ?? .auto {
-        didSet { UserDefaults.standard.set(mode.rawValue, forKey: "umbra.chat.mode") }
+    /// 草稿变得不再以「/」开头（清空、发出、或删掉了斜杠）时复位「当普通消息发」，
+    /// 下次再敲 / 面板照常弹 —— 不复位的话按过一次之后面板就永远哑了。
+    @Published var draft: String = "" {
+        didSet { if !draft.hasPrefix("/"), slashDismissed { slashDismissed = false } }
     }
+    /// 「/」快捷输入选中的动作芯片（批次 005）。挂着芯片时动作名以 【动作名】 前缀
+    /// 并进正文发出（服务端零改动，秘书按人话前缀理解意图）；nil = 没挂。
+    /// 原来这里是三态「对话模式」（auto / chat / execution）—— 模式条整个撤了，
+    /// 发送固定 auto（服务端 mode 参数保留一段时间），UserDefaults 里的旧键随之作废。
+    @Published var chipAction: SlashAction?
+    /// 面板空态里按过「当普通消息发」：草稿仍以 / 开头但这轮不再弹面板。
+    @Published var slashDismissed = false
+    /// 灵感页「让 Umbra 去做这件事」带过来的来源横幅文案；nil = 不显示。
+    /// 放 VM 不放 View 的 @State：预填发生在灵感页、显示在对话页，跨页面只能走这里。
+    @Published var ideaBanner: String?
     @Published var isThinking: Bool = false
+
+    /// 「/」面板该不该开：芯片未挂、没按过「当普通消息发」、草稿以 / 开头。
+    /// 语音态的额外条件在 View 侧叠（voiceMode 是 View 的 @State）。
+    var slashPanelOn: Bool { chipAction == nil && !slashDismissed && draft.hasPrefix("/") }
+    /// 去掉引导斜杠后的过滤词。
+    var slashQuery: String { String(draft.dropFirst()).trimmingCharacters(in: .whitespaces) }
     // showAttachSheet / showVoiceOverlay / showLightbox / lightboxImageURL 四个已删：
     // 它们只被旧的 ChatView 用过，那个文件已经不在了。新的对话页用自己的 @State 管这些瞬时状态。
     @Published var confirmPending: ConfirmRequest?
@@ -280,9 +295,14 @@ class ChatViewModel: ObservableObject {
     // MARK: - Send
     // 发到**当前会话**：主会话=直接跟秘书说；设备会话=对着这台设备说（秘书按「目标设备=这台」执行）。
     func send() {
-        let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { return }
+        let raw = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !raw.isEmpty else { return }
+        // 芯片动作以【动作名】前缀并入正文（批次 005 拍板）。气泡里显示的就是这份全文 ——
+        // 用户看到的等于发出去的，不藏一层「其实还带了个动作」的暗号。
+        let text = chipAction.map { "【\($0.label)】\(raw)" } ?? raw
         draft = ""
+        chipAction = nil
+        ideaBanner = nil
         stickToBottom = true
         let conv = activeConv
         let s = store(conv)
@@ -292,9 +312,21 @@ class ChatViewModel: ObservableObject {
         s.assistantIdx = s.blocks.count - 1
         setPreview(conv, text, now)
         reflect(conv)
-        ws.sendMessage(text, conversation: conv, mode: mode.rawValue)
+        // mode 固定 "auto"：模式条已撤（批次 005），服务端参数保留一段时间，界面不再出现。
+        ws.sendMessage(text, conversation: conv, mode: "auto")
         pendingConv = conv
         armReplyTimeout()
+    }
+
+    /// 灵感详情「让 Umbra 去做这件事」：切到主会话，挂「创建任务」芯片、
+    /// 把灵感原文填进草稿、亮来源横幅。**不自动发送** —— 发之前让用户能改一句
+    /// （PC 端定下的行为，两端一致）。原来这里是「切执行模式」，模式撤了改走芯片。
+    func prefillTaskFromIdea(_ text: String, sourceTitle: String) {
+        switchConversation(ChatViewModel.mainConv)
+        chipAction = SlashCatalog.taskAction
+        slashDismissed = false
+        draft = text
+        ideaBanner = "来自灵感「\(sourceTitle)」，已经替你填好「创建任务」。"
     }
 
     // 清空【当前会话】历史：本地立即清 + 服务端删除。
@@ -721,21 +753,6 @@ class ChatViewModel: ObservableObject {
                 }
             }
             if changed && conv == activeConv { blocks = s.blocks }
-        }
-    }
-}
-
-// MARK: - 对话模式
-//
-// 取值是服务端约定的 auto / chat / execution；中文名只用于界面。
-enum ChatMode: String, CaseIterable, Hashable {
-    case auto, chat, execution
-
-    var label: String {
-        switch self {
-        case .auto: return "自动"
-        case .chat: return "聊天"
-        case .execution: return "执行"
         }
     }
 }

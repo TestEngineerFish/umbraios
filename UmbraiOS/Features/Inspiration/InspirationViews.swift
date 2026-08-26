@@ -616,14 +616,15 @@ struct UmbraInspirationDetailView: View {
     private func bottomBar(_ i: Inspiration) -> some View {
         VStack(spacing: 7) {
             UmbraButton(title: "让 Umbra 去做这件事", kind: .primary) {
-                // 跳到与秘书的会话，把灵感原文填进草稿并切到「执行」模式。
-                // **不自动发送** —— 发之前让用户能改一句，这是 PC 端定下的行为。
-                chat.switchConversation(ChatViewModel.mainConv)
-                chat.mode = .execution
-                chat.draft = i.raw.isEmpty ? i.title : i.raw
+                // 跳到与秘书的会话，挂「创建任务」芯片 + 填灵感原文 + 亮来源横幅
+                //（批次 005：模式撤了，预填走芯片）。**不自动发送** —— 发之前让用户
+                // 能改一句，这是 PC 端定下的行为。横幅本身就是「填好了」的反馈，
+                // 原来的 toast 撤掉 —— 两个提示叠着说同一句话。
+                chat.prefillTaskFromIdea(
+                    i.raw.isEmpty ? i.title : i.raw,
+                    sourceTitle: i.title.isEmpty ? String(i.raw.prefix(18)) : i.title)
                 router.root(.chat)
                 router.go(.chatThread(conv: ChatViewModel.mainConv))
-                router.showToast("已填进聊天框，改完再发")
             }
             HStack(spacing: 8) {
                 UmbraButton(title: i.status == "done" ? "标回待办" : "标记已实现", kind: .secondary, height: 44) {

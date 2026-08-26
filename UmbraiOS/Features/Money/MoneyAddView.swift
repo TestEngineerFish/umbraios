@@ -32,6 +32,8 @@ struct UmbraMoneyAddView: View {
     /// 编辑态只在**进页那一刻**灌一次值 —— save 之后 store 会静默重拉，
     /// 不挡住的话 onAppear 再跑会把用户正在改的草稿冲掉。
     @State private var seeded = false
+    /// 附件缩略图点开的应用内预览器（批次 005：和步骤截图/产出图片同一个组件）。
+    @State private var viewerItem: UmbraViewerItem?
     @FocusState private var amountFocused: Bool
 
     /// 编辑的原条目（身份字段 src / rule_id / batch_id / order_no 要原样带回去）。
@@ -63,6 +65,7 @@ struct UmbraMoneyAddView: View {
         .navigationTitle(id == nil ? "记一笔" : "编辑账目")
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
+        .umbraImageViewer(item: $viewerItem)
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("取消") { router.back() }.tint(UmbraColor.muted)
@@ -457,6 +460,15 @@ struct UmbraMoneyAddView: View {
             .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+            // 点缩略图开应用内预览器（批次 005）。挂在删除 × 的 overlay **前面**：
+            // × 在更上层，点它仍然走删除，不会先把预览器弹出来。
+            .onTapGesture {
+                if let u = HTTPService.shared.moneyFileURL(a.file_id) {
+                    viewerItem = UmbraViewerItem(
+                        url: u,
+                        name: a.origin ? "原始截图" : (a.label.isEmpty ? "图片" : a.label))
+                }
+            }
             .overlay(alignment: .topTrailing) {
                 // 原图没有删除键（稿：它是凭证，一直留着）；普通附件右上角一个 ×。
                 if !a.origin {

@@ -28,18 +28,44 @@ struct UmbraChatThreadView: View {
     @State private var quickVoiceActive = false
     /// 输入框焦点。点消息区、往下拖、切到语音态都靠它收键盘。
     @FocusState private var inputFocused: Bool
+    /// 应用内图片预览器（产出图片点开）。非 nil 即全屏展示。
+    @State private var viewerItem: UmbraViewerItem?
 
     private var isAssistant: Bool { conv == ChatViewModel.mainConv }
     private var title: String { chat.convLabel(conv) }
     private var device: KnownDevice? { chat.device(for: conv) }
+    /// 「/」面板在这个页面开不开：VM 的条件（芯片/斜杠/没按过「当普通消息发」）
+    /// 再叠 View 侧的两条 —— 语音态不弹、只读会话没有输入框自然不弹。
+    private var slashOn: Bool { chat.slashPanelOn && !voiceMode && inputEnabled }
 
     var body: some View {
         VStack(spacing: 0) {
             if let d = device, !d.online { offlineBanner }
-            messages
+            ZStack(alignment: .bottom) {
+                messages
+                // 「/」快捷面板：输入条上方的浮层卡（批次 005）。稿的关闭手势是点面板外
+                // 空白 = 清空草稿关面板 —— 挡触层盖住消息区，面板本身叠在它上面不受影响。
+                // 挡触层只认点按，但它在 ScrollView 之上，面板开着时消息区不可滚 —— 稿也如此。
+                if slashOn {
+                    Color.clear
+                        .contentShape(Rectangle())
+                        .onTapGesture { chat.draft = "" }
+                    SlashPanelView(
+                        query: chat.slashQuery,
+                        onPick: { a in
+                            chat.chipAction = a
+                            chat.draft = ""
+                            inputFocused = true   // 选完直接打参数，不让用户再点一次输入框
+                        },
+                        onSendPlain: { chat.slashDismissed = true })
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
+                }
+            }
             inputBar
         }
         .background(UmbraColor.bg)
+        .umbraImageViewer(item: $viewerItem)
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbar {
@@ -490,62 +516,125 @@ struct UmbraChatThreadView: View {
         )
     }
 
-    /// 任务产出。设计稿没画这一块（原型里任务完成只有一个「查看结果」按钮），
-    /// 这里按同一套卡片语言补：完成徽标 + 目标 + 产出文件行。
+    /// 绿色完成卡（完成广播）。批次 005 稿：完成时聊天里是两张相邻卡 ——
+    /// 进度卡收敛成 done 态只管过程（查看结果），**产出区只挂这张绿卡**，同一批产出只出一份。
+    /// 稿里没产出时整卡不出，但工程侧广播块已经进了聊天流，整卡消失更像丢消息 ——
+    /// 折中：保留「任务完成」头一行，只是不渲染空的产出容器。
     private func doneCard(goal: String, results: [[String: String]]) -> some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: UmbraMetric.sp3) {
-                UmbraStatusBadge(status: .done)
-                Text(goal)
-                    .font(UmbraFont.sans(14.5, .w560))
-                    .foregroundColor(UmbraColor.text)
+            HStack(alignment: .top, spacing: 8) {
+                UmbraIcon(d: UmbraIconPath.check, size: 15, strokeWidth: 2.2)
+                    .foregroundColor(UmbraColor.success)
+                    .padding(.top, 2)
+                Text("任务完成：\(goal)")
+                    .font(UmbraFont.sans(13.5, .w600))
+                    .foregroundColor(UmbraColor.success)
+                    .lineSpacing(13.5 * 0.45)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
-            if results.isEmpty {
-                Text("没有产出文件。")
-                    .font(UmbraFont.sans(13, .w400))
-                    .foregroundColor(UmbraColor.muted)
-            } else {
+            if !results.isEmpty {
                 VStack(spacing: 0) {
                     ForEach(Array(results.enumerated()), id: \.offset) { i, r in
-                        if i > 0 { UmbraRowDivider() }
-                        Button {
-                            openResult(r["url"] ?? "")
-                        } label: {
-                            HStack(spacing: UmbraMetric.sp3) {
-                                UmbraIcon(d: UmbraIconPath.file, size: 15, strokeWidth: 1.9)
-                                    .foregroundColor(UmbraColor.faint)
-                                Text(r["title"] ?? r["url"] ?? "产出")
-                                    .font(UmbraFont.sans(13.5, .w400))
-                                    .foregroundColor(UmbraColor.text)
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                                UmbraIcon(d: UmbraIconPath.chevronRight, size: 14, strokeWidth: 2)
-                                    .foregroundColor(UmbraColor.faint)
-                            }
-                            .padding(.vertical, 10)
-                            .frame(minHeight: UmbraMetric.tapMin)
-                            .contentShape(Rectangle())
+                        if i > 0 {
+                            Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW)
                         }
-                        .buttonStyle(.plain)
+                        resultRow(r)
                     }
                 }
+                .background(RoundedRectangle(cornerRadius: 12, style: .continuous).fill(UmbraColor.card))
+                .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(UmbraColor.success, lineWidth: UmbraMetric.borderW)
+                )
             }
         }
         .padding(.horizontal, 13)
-        .padding(.vertical, UmbraMetric.sp4)
+        .padding(.vertical, 12)
         .frame(width: 300)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
+        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.successSoft))
         .overlay(
             RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
-                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
+                .strokeBorder(UmbraColor.success, lineWidth: UmbraMetric.borderW)
         )
     }
 
-    private func openResult(_ url: String) {
-        guard !url.isEmpty else { return }
+    /// 产出行（稿：36×36 前导块 + 名 + 等宽 meta + chevron，行高 ≥52）。
+    /// 图片点开走应用内预览器，其它类型交系统打开 —— 只有图在应用内看才有意义，
+    /// html / zip 之类系统比我们会处理。meta 显示服务器路径：同名文件靠路径区分。
+    private func resultRow(_ r: [String: String]) -> some View {
+        let url = r["url"] ?? ""
+        let name = r["title"] ?? (url.isEmpty ? "产出" : url)
+        let isImg = UmbraViewerItem.looksImage(url)
+        let full = fullResultURL(url)
+        let meta = url.replacingOccurrences(of: #"^https?://[^/]+"#, with: "", options: .regularExpression)
+        return Button {
+            if isImg, let u = full {
+                viewerItem = UmbraViewerItem(url: u, name: name)
+            } else {
+                openResult(url)
+            }
+        } label: {
+            HStack(spacing: 10) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous).fill(UmbraColor.chip)
+                    if isImg, let u = full {
+                        // 内联缩略：截图任务的重点就是看那张图。失败退回图片图标，不留破图占位。
+                        AsyncImage(url: u) { phase in
+                            if case .success(let img) = phase {
+                                img.resizable().scaledToFill()
+                            } else {
+                                UmbraIcon(d: UmbraIconPath.image, size: 16, strokeWidth: 1.8)
+                                    .foregroundColor(UmbraColor.muted)
+                            }
+                        }
+                    } else {
+                        UmbraIcon(d: UmbraIconPath.file, size: 16, strokeWidth: 1.8)
+                            .foregroundColor(UmbraColor.muted)
+                    }
+                }
+                .frame(width: 36, height: 36)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW)
+                )
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .font(UmbraFont.sans(13.5, .w560))
+                        .foregroundColor(UmbraColor.text)
+                        .lineLimit(1)
+                    if !meta.isEmpty {
+                        Text(meta)
+                            .font(UmbraFont.mono(11, .w400))
+                            .foregroundColor(UmbraColor.faint)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+                UmbraIcon(d: UmbraIconPath.chevronRight, size: 14, strokeWidth: 2.2)
+                    .foregroundColor(UmbraColor.faint)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .frame(minHeight: 52)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    /// 相对路径补服务端前缀。返回 nil 表示这条产出连 url 都拼不出来（不该出现，防御）。
+    private func fullResultURL(_ url: String) -> URL? {
+        guard !url.isEmpty else { return nil }
         let full = url.hasPrefix("http") ? url : NetworkConfig.shared.serverUrl + url
-        guard let u = URL(string: full) else { return }
+        return URL(string: full)
+    }
+
+    private func openResult(_ url: String) {
+        guard let u = fullResultURL(url) else { return }
         UIApplication.shared.open(u)
     }
 
@@ -682,10 +771,12 @@ struct UmbraChatThreadView: View {
         }
     }
 
+    // 模式切换 chip（auto / chat / execution 的 Menu）已随批次 005 整个撤除 ——
+    // 它的位置由「/」快捷输入的前缀芯片顶上，芯片直接住在输入框里。
     private var composer: some View {
         VStack(spacing: 0) {
+            if let banner = chat.ideaBanner { ideaBannerView(banner) }
             HStack(alignment: .bottom, spacing: 8) {
-                modeChip
                 ZStack {
                     if voiceMode { holdBar } else { textField }
                 }
@@ -694,9 +785,11 @@ struct UmbraChatThreadView: View {
                 // 改成**只在「没焦点、没内容」时**盖一层透明层：点一下 = 我们自己给焦点弹键盘，
                 // 长按 = 进语音；一旦有焦点/有内容，这层就撤掉，输入框恢复系统原生行为。
                 // quickVoiceActive 期间这层必须留着 —— 手势挂在它身上，中途拆了录音就停不下来。
+                // 挂着动作芯片时也不盖：盖了会把「点芯片删除」吃掉；此时长按快捷语音让位，
+                // 右侧的麦克风按钮照常可用。
                 .overlay {
                     if quickVoiceActive ||
-                        (!voiceMode && !inputFocused &&
+                        (!voiceMode && !inputFocused && chat.chipAction == nil &&
                          chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty) {
                         Color.clear
                             .contentShape(Rectangle())
@@ -706,8 +799,17 @@ struct UmbraChatThreadView: View {
                 }
                 rightButton
             }
-            // 输入栏下不放任何提示文字（用户点名两轮删干净）——
-            // 落区怎么用的说明在按住后的浮层里，那里才是需要它的时刻。
+            // 输入栏下不放**常驻**提示文字（用户点名两轮删干净）——
+            // 落区怎么用的说明在按住后的浮层里。唯一的例外是挂芯片的瞬时态：
+            // 批次 005 稿在这里给一行 faint 说明灰字占位是什么、芯片怎么删。
+            if chat.chipAction != nil, !voiceMode {
+                Text("灰字是要说清的东西，敲字即替换。点芯片去掉它。")
+                    .font(UmbraFont.sans(11.5, .w400))
+                    .foregroundColor(UmbraColor.faint)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 4)
+                    .padding(.top, 7)
+            }
         }
         .padding(.horizontal, UmbraMetric.sp4)
         .padding(.top, 8)
@@ -718,33 +820,43 @@ struct UmbraChatThreadView: View {
         }
     }
 
-    /// 模式切换：系统 Menu 锚定在 chip 上（v2 原型的 modeMenu 就是个小弹框，
-    /// 不是全宽底部弹层 —— ≤6 项纯选择用锚定弹框，交接清单第 4 条）。
-    private var modeChip: some View {
-        Menu {
-            ForEach(ChatMode.allCases, id: \.self) { m in
-                Button {
-                    chat.mode = m
-                } label: {
-                    if chat.mode == m { Label(m.label, systemImage: "checkmark") } else { Text(m.label) }
-                }
+    /// 灵感带过来的来源横幅：贴在输入条上方，说明芯片和草稿是替用户填好的。
+    /// 「知道了」手动收；直接发送也会随 send() 一起消失 —— 两条路都不留残影。
+    private func ideaBannerView(_ text: String) -> some View {
+        HStack(spacing: 8) {
+            UmbraIcon(d: UmbraIconPath.bulb, size: 14, strokeWidth: 1.9)
+            Text(text)
+                .font(UmbraFont.sans(12.5, .w400))
+                .lineSpacing(12.5 * 0.45)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button { chat.ideaBanner = nil } label: {
+                Text("知道了")
+                    .font(UmbraFont.sans(12.5, .w600))
+                    .padding(.horizontal, 4)
+                    .frame(minHeight: 32)
+                    .contentShape(Rectangle())
             }
-        } label: {
-            HStack(spacing: 5) {
-                Text(chat.mode.label).font(UmbraFont.sans(13, .w560))
-                UmbraIcon(d: UmbraIconPath.chevronDown, size: 12, strokeWidth: 2.4)
-            }
-            .foregroundColor(UmbraColor.text)
-            .padding(.horizontal, 11)
-            .frame(height: 36)
-            .background(Capsule().fill(UmbraColor.chip))
-            .overlay(Capsule().strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+            .buttonStyle(.plain)
         }
+        .foregroundColor(UmbraColor.orangeText)
+        .padding(.horizontal, 11)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(UmbraColor.orangeSoft))
+        .padding(.bottom, 8)
+    }
+
+    /// 芯片占位 > 会话占位：挂着动作时灰字提示该补什么参数（稿：「金额 分类 备注」这类）。
+    private var placeholderText: String {
+        if let a = chat.chipAction { return a.params }
+        return isAssistant ? "说点什么，敲 / 用快捷动作" : "对「\(title)」说点什么，敲 / 用快捷动作"
     }
 
     private var textField: some View {
-        HStack(spacing: 8) {
-            TextField(isAssistant ? "跟秘书说点什么" : "对「\(title)」说点什么",
+        HStack(spacing: 7) {
+            if let a = chat.chipAction {
+                SlashChipView(action: a) { chat.chipAction = nil }
+            }
+            TextField(placeholderText,
                       text: $chat.draft, axis: .vertical)
                 .font(UmbraFont.sans(15.5, .w400))
                 .foregroundColor(UmbraColor.text)
