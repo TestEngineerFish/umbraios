@@ -342,12 +342,16 @@ struct UmbraMoneyRecurEditView: View {
     private var basicCard: some View {
         VStack(spacing: 0) {
             // 记在哪边（批次 004）：SegmentedControl 与「多久一次」同一个控件（稿）。
+            // 标签「记在哪边」是词表定稿（记一笔、周期记账、新增分类三处同词）。
             // 收入侧默认选「工资」（服务端顺序第一个），并给一行说明这是干什么的。
+            UmbraFieldLabel(text: "记在哪边")
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14).padding(.top, 12)
             UmbraSegmentedControl(items: [
                 .init(value: "expense", label: "支出"),
                 .init(value: "income", label: "收入"),
             ], selection: $dir)
-            .padding(.horizontal, 14).padding(.top, 12)
+            .padding(.horizontal, 14).padding(.top, 7)
             .padding(.bottom, dir == "income" ? 7 : 12)
             .onChange(of: dir) { d in
                 cat = money.enabledCats(d).first?.slug ?? (d == "income" ? "other_in" : "other")

@@ -158,12 +158,26 @@ struct UmbraSheetItem: Identifiable {
     var action: () -> Void = {}
 }
 
+/// 底部选择器里的一格图标（批次 006「换图标」这类**挑形状**的场景）。
+/// 独立于 UmbraSheetItem：图标格是网格排布、选中态是描边不是对勾，硬塞进行模型
+/// 只会让两边都变形。选中即收 sheet（挑完就是完成，不需要再点取消）。
+struct UmbraSheetIcon: Identifiable {
+    let id = UUID()
+    /// UmbraIcon 的 path（M/L/C/Z 绝对方言）。
+    let d: String
+    /// 当前生效的那一格：橙描边 + 橙底。
+    var on: Bool = false
+    var action: () -> Void = {}
+}
+
 /// 一层底部选择器。**支持多层**（设计稿里「移动到分组」会从一层进到下一层），
 /// 所以 UmbraRouter 里存的是数组而不是单个值。
 struct UmbraSheet: Identifiable {
     let id = UUID()
     let title: String
     var subtitle: String? = nil
+    /// 图标网格（可空）。有值时渲染在 items 之前 —— 「换图标」sheet 整层只有网格。
+    var icons: [UmbraSheetIcon] = []
     var items: [UmbraSheetItem] = []
 }
 

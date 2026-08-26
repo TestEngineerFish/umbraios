@@ -52,6 +52,35 @@ struct UmbraSheetLayer: View {
             .padding(.top, UmbraMetric.sp5)
             .padding(.bottom, UmbraMetric.sp4)
 
+            // 图标网格（批次 006 稿：56×56 圆角 16，当前项橙描边 + 橙底 + 橙字）。
+            // 自适应网格而不是写死两行四列 —— 候选目录会增长，跟斜杠面板同一个道理。
+            if !sheet.icons.isEmpty {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 56, maximum: 56), spacing: 9)], spacing: 9) {
+                    ForEach(sheet.icons) { ic in
+                        Button {
+                            onClose()
+                            ic.action()
+                        } label: {
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .fill(ic.on ? UmbraColor.orangeSoft : UmbraColor.card)
+                                .frame(width: 56, height: 56)
+                                .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                    .strokeBorder(ic.on ? UmbraColor.orange : UmbraColor.border,
+                                                  lineWidth: UmbraMetric.borderW))
+                                .overlay(UmbraIcon(d: ic.d, size: 22, strokeWidth: 1.9)
+                                    .foregroundColor(ic.on ? UmbraColor.orangeText : UmbraColor.muted))
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, UmbraMetric.pagePadX)
+                .padding(.vertical, UmbraMetric.sp4)
+                .overlay(alignment: .top) {
+                    Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW)
+                }
+            }
+
             // 项：最小高 52。玻璃底上不再画整片白卡，行与行之间用发丝线。
             ForEach(sheet.items) { item in
                 Button {
@@ -151,12 +180,15 @@ struct UmbraToastView: View {
 struct UmbraOverlayHost: ViewModifier {
     @ObservedObject var router: UmbraRouter
 
-    /// sheet 高度：头部 + 每项 52 + 取消胶囊。系统 detent 需要一个具体值 ——
+    /// sheet 高度：头部 + 图标网格 + 每项 52 + 取消胶囊。系统 detent 需要一个具体值 ——
     /// 给 .medium 的话矮内容会浮在半屏中间，下面一大截空玻璃。
+    /// 网格行数按每行 4 格**保守**估：detent 给矮了会裁内容，给高了只是底下多点空。
     private var sheetHeight: CGFloat {
         guard let top = router.sheets.last else { return 200 }
         let header: CGFloat = top.subtitle == nil ? 52 : 72
-        return header + CGFloat(top.items.count) * 52 + 84
+        let iconRows = (top.icons.count + 3) / 4
+        let grid: CGFloat = iconRows > 0 ? CGFloat(iconRows) * 65 + 22 : 0
+        return header + grid + CGFloat(top.items.count) * 52 + 84
     }
 
     func body(content: Content) -> some View {

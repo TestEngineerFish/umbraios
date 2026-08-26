@@ -155,9 +155,11 @@ final class MoneyStore: ObservableObject {
         return true
     }
 
-    /// 改分类（改名 / 停用启用）。slug 不可改 —— 它是流水指过来的稳定标识。
-    func updateCat(slug: String, name: String? = nil, enabled: Bool? = nil) async -> Bool {
-        guard await HTTPService.shared.updateMoneyCat(slug: slug, name: name, enabled: enabled) != nil
+    /// 改分类（改名 / 停用启用 / 换图标）。slug 不可改 —— 它是流水指过来的稳定标识。
+    func updateCat(slug: String, name: String? = nil, enabled: Bool? = nil,
+                   icon: String? = nil) async -> Bool {
+        guard await HTTPService.shared.updateMoneyCat(slug: slug, name: name,
+                                                      enabled: enabled, icon: icon) != nil
         else { return false }
         await reload(silent: true)
         return true

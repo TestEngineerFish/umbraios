@@ -233,8 +233,10 @@ struct UmbraMoneyAddView: View {
 
     /// 方向切换放内容区第一行（稿放在导航栏中间，但系统导航栏塞不下一个像样的
     /// 分段控件 —— principal 位在小屏上会被两侧按钮挤到只剩几十点宽）。
+    /// 标签「记在哪边」是词表定稿：记一笔、周期记账、新增分类三处同词。
     private var recentRow: some View {
         VStack(alignment: .leading, spacing: 9) {
+            UmbraFieldLabel(text: "记在哪边")
             UmbraSegmentedControl(items: [
                 .init(value: "expense", label: "支出"),
                 .init(value: "income", label: "收入"),

@@ -70,8 +70,25 @@ struct UmbraMoneyCatsView: View {
             Button("取消", role: .cancel) { addingDir = nil }
             Button("创建分类") { commitAdd() }
         } message: {
-            Text("先起个名字，子类可以之后在分类里加。")
+            // 批次 006 拍板：iOS 新建**不加图标步**（建分类常在记账中途发生，两步是上限），
+            // 图标收进「换图标」；这句副文案要把「没丢东西，只是挪了地方」说出来。
+            Text("先起个名字。图标和子类都能之后在分类管理里改。")
         }
+    }
+
+    /// 「换图标」sheet（批次 006 稿）：八格网格，当前项橙描边；选中即换、就地生效。
+    /// 列表页左滑和 money.cat 右上菜单共用这一个入口。
+    private func askIcon(_ c: MoneyCatDTO) {
+        router.present(UmbraSheet(
+            title: "换图标",
+            subtitle: "只换样子，名字和已记的账不动。",
+            icons: MoneyCatArt.pickList.map { p in
+                UmbraSheetIcon(d: p.d, on: p.k == (c.icon ?? "")) {
+                    run(toast: "已换成「\(p.label)」") {
+                        await money.updateCat(slug: c.slug, icon: p.k)
+                    }
+                }
+            }))
     }
 
     // MARK: 分组
@@ -122,6 +139,9 @@ struct UmbraMoneyCatsView: View {
                 Button { confirmDisable(c) } label: { Label("停用", systemImage: "nosign") }
                     .tint(UmbraColor.danger)
             }
+            // 换图标（批次 006）：图标不进新建流程，入口就在这（和 money.cat 右上菜单）。
+            Button { askIcon(c) } label: { Label("换图标", systemImage: "photo") }
+                .tint(UmbraColor.orange)
             Button { startRename(c) } label: { Label("改名", systemImage: "pencil") }
                 .tint(UmbraColor.warning)
         }
@@ -433,6 +453,12 @@ struct UmbraMoneyCatDetailView: View {
                 catNameText = c.name
                 renamingCat = true
             },
+            // 换图标（批次 006）。sheet 里再开 sheet 要等上一层的收起动画走完 ——
+            // 系统 sheet 在 dismiss 进行中收到新 present 会**静默丢弃**（真机踩过的类坑），
+            // 所以延迟一拍再开，稿的原型里也是这么做的。
+            UmbraSheetItem(label: "换图标", note: "只换样子，历史不变") {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.45) { askIcon(c) }
+            },
         ]
         if !c.locked {
             items.append(UmbraSheetItem(label: "停用这个分类", note: "选择器里不再出现，历史不变",
@@ -441,6 +467,20 @@ struct UmbraMoneyCatDetailView: View {
             })
         }
         router.present(UmbraSheet(title: c.name, items: items))
+    }
+
+    /// 「换图标」（批次 006，和列表页左滑同一张 sheet；用本页的 run 收尾）。
+    private func askIcon(_ c: MoneyCatDTO) {
+        router.present(UmbraSheet(
+            title: "换图标",
+            subtitle: "只换样子，名字和已记的账不动。",
+            icons: MoneyCatArt.pickList.map { p in
+                UmbraSheetIcon(d: p.d, on: p.k == (c.icon ?? "")) {
+                    run(toast: "已换成「\(p.label)」") {
+                        await money.updateCat(slug: slug, icon: p.k)
+                    }
+                }
+            }))
     }
 
     private func confirmDisableCat(_ c: MoneyCatDTO) {

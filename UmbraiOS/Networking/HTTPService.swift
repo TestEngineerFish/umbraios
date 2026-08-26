@@ -247,11 +247,14 @@ class HTTPService {
 
     /// 改分类（改名 / 停用启用；iOS 一期不管色槽，色槽在 PC 的设置里改）。
     /// slug 不可改 —— 它是流水指过来的稳定标识。
-    func updateMoneyCat(slug: String, name: String? = nil, enabled: Bool? = nil) async -> MoneyCatDTO? {
+    func updateMoneyCat(slug: String, name: String? = nil, enabled: Bool? = nil,
+                        icon: String? = nil) async -> MoneyCatDTO? {
         guard let url = URL(string: "\(baseUrl)/money/categories/\(slug)") else { return nil }
         var body: [String: Any] = [:]
         if let name { body["name"] = name }
         if let enabled { body["enabled"] = enabled }
+        // icon 是图标语义名（批次 006「换图标」）；传空串 = 清掉回 slug 兜底。
+        if let icon { body["icon"] = icon }
         return await sendJSONReturning(url, method: "PATCH", body: body, as: MoneyCatDTO.self)
     }
 
