@@ -32,7 +32,8 @@ struct UmbraImageViewer: View {
     @Environment(\.dismiss) private var dismiss
 
     /// 双指缩放：steady 是上次手势结束后的稳定倍率，pinch 是本次手势的增量。
-    /// 手势进行中允许越界（有橡皮筋感），松手时钳回 1…4 —— 直接在进行中钳会顿。
+    /// 手势进行中允许越界（有橡皮筋感），松手时钳回 1…3（批次 006 稿定的档）——
+    /// 直接在进行中钳会顿。稿里另有一条滚轮缩放，是稿内电脑预览专用，**不实现**。
     @State private var steady: CGFloat = 1
     @GestureState private var pinch: CGFloat = 1
     /// 放大后的平移。只在 steady > 1 时有意义；缩回 1 时清零，
@@ -44,7 +45,8 @@ struct UmbraImageViewer: View {
         VStack(spacing: 0) {
             topBar
             imageArea
-            Text("双指放大 · 点空白关闭")
+            // 脚注跟行为走（批次 006 答复原话照抄）：补了平移，脚注就得说出来。
+            Text("双指放大 · 放大后单指拖动 · 点空白关闭")
                 .font(UmbraFont.sans(11.5, .w400))
                 .foregroundColor(.white.opacity(0.5))
                 .frame(maxWidth: .infinity)
@@ -127,7 +129,7 @@ struct UmbraImageViewer: View {
         MagnificationGesture()
             .updating($pinch) { value, state, _ in state = value }
             .onEnded { value in
-                let next = min(max(steady * value, 1), 4)
+                let next = min(max(steady * value, 1), 3)
                 withAnimation(UmbraMotion.tint) {
                     steady = next
                     if next <= 1 { panSteady = .zero }
