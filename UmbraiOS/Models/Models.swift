@@ -68,6 +68,10 @@ struct TaskStep: Codable, Identifiable {
     let device_id: String?
     let elapsed_ms: Int?
     let error: StepError?
+    /// 结构化结果 {summary, artifacts, device_results}（JSON 文本，原样透传）。
+    /// 步骤产出的可点链接（截图 url 等）藏在 device_results 里 —— 详情页的
+    /// 内联截图靠它。解析放界面：脏数据只该影响那一块，不该让整个详情解码失败。
+    let result_json: String?
 }
 
 struct TaskEvent: Codable, Identifiable {
