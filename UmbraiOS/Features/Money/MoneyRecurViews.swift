@@ -3,7 +3,9 @@
 // 到点写流水、停机补记都是服务端看门狗的事 —— 这两页没有任何「生成」逻辑。
 //
 // 编辑器一期照稿只有 每天/每周/每月/每年 四档（every_n 是服务端备用列，
-// 「每 N 个」等设计补稿再放开）、只建支出规则（稿的分类芯片就没画收入侧）。
+// 「每 N 个」等设计补稿再放开）。批次 004 补上收入侧：编辑器顶部「记在哪边」
+// SegmentedControl（和「多久一次」同一个控件，稿），切了整组换分类芯片、不混排 ——
+// 服务端只校 direction 本身合法，「分类属于该方向」这道门就由这个选择器挡。
 import SwiftUI
 
 // MARK: - 展示工具
@@ -162,7 +164,7 @@ struct UmbraMoneyRecurListView: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(r.paused ? UmbraColor.chip : UmbraColor.orangeSoft)
                     .frame(width: 34, height: 34)
-                    .overlay(UmbraIcon(d: MoneyCatArt.icon(r.cat), size: 17, strokeWidth: 1.9)
+                    .overlay(UmbraIcon(d: money.catArt(r.cat), size: 17, strokeWidth: 1.9)
                         .foregroundColor(r.paused ? UmbraColor.faint : UmbraColor.orangeText))
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 6) {
@@ -262,7 +264,12 @@ struct UmbraMoneyRecurEditView: View {
     @State private var name = ""
     @State private var amount = ""
     @State private var merchant = ""
+    /// 记在哪边（批次 004）。切方向时分类跳到那一侧第一个、sub 清空 ——
+    /// sub 挂在旧分类名下，跟着过去就是脏数据。
+    @State private var dir = "expense"
     @State private var cat = "housing"
+    /// 编辑时保住原规则的 sub（编辑器没画 sub，不该因为没画就抹掉）；切方向清空。
+    @State private var sub = ""
     @State private var cycle = "month"
     @State private var weekDay = 0
     @State private var firstDate = Calendar.current.date(byAdding: .day, value: 1, to: Date()) ?? Date()
@@ -312,7 +319,9 @@ struct UmbraMoneyRecurEditView: View {
         name = r.name
         amount = String(format: "%.2f", Double(r.cents) / 100)
         merchant = r.merchant
+        dir = r.direction
         cat = r.cat
+        sub = r.sub
         cycle = r.cycle
         weekDay = r.week_day
         let df = DateFormatter()
@@ -332,6 +341,26 @@ struct UmbraMoneyRecurEditView: View {
 
     private var basicCard: some View {
         VStack(spacing: 0) {
+            // 记在哪边（批次 004）：SegmentedControl 与「多久一次」同一个控件（稿）。
+            // 收入侧默认选「工资」（服务端顺序第一个），并给一行说明这是干什么的。
+            UmbraSegmentedControl(items: [
+                .init(value: "expense", label: "支出"),
+                .init(value: "income", label: "收入"),
+            ], selection: $dir)
+            .padding(.horizontal, 14).padding(.top, 12)
+            .padding(.bottom, dir == "income" ? 7 : 12)
+            .onChange(of: dir) { d in
+                cat = money.enabledCats(d).first?.slug ?? (d == "income" ? "other_in" : "other")
+                sub = ""
+            }
+            if dir == "income" {
+                Text("收入侧的周期规则，比如工资每月 10 号自动入账。")
+                    .font(UmbraFont.sans(11.5)).foregroundColor(UmbraColor.faint)
+                    .lineSpacing(11.5 * 0.55)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 14).padding(.bottom, 10)
+            }
+            UmbraRowDivider()
             HStack(spacing: 10) {
                 Text("名字").font(UmbraFont.sans(15)).foregroundColor(UmbraColor.text)
                 TextField("例如「房租」", text: $name)
@@ -361,14 +390,15 @@ struct UmbraMoneyRecurEditView: View {
             }
             .padding(.horizontal, 14).frame(minHeight: 48)
             UmbraRowDivider()
-            // 分类芯片：照稿只有支出侧（收入周期要不要，已发设计确认）。
+            // 分类芯片跟着「记在哪边」整组换（批次 004）：数据驱动，含兜底分类 ——
+            // 记一笔的选择器就是这个口径，周期编辑器没有理由更窄。
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 7) {
-                    ForEach(money.enabledCats("expense")) { c in
+                    ForEach(money.enabledCats(dir)) { c in
                         let on = cat == c.slug
                         Button { cat = c.slug } label: {
                             HStack(spacing: 5) {
-                                UmbraIcon(d: MoneyCatArt.icon(c.slug), size: 13, strokeWidth: 1.9)
+                                UmbraIcon(d: MoneyCatArt.icon(c.slug, stored: c.icon), size: 13, strokeWidth: 1.9)
                                     .foregroundColor(on ? UmbraColor.orangeText : MoneyCatArt.slotColor(c.slot))
                                 Text(c.name).font(UmbraFont.sans(13, .w560))
                                     .foregroundColor(on ? UmbraColor.orangeText : UmbraColor.muted)
@@ -566,10 +596,9 @@ struct UmbraMoneyRecurEditView: View {
         let body: [String: Any] = [
             "name": n,
             "cents": c,
-            "direction": "expense",
+            "direction": dir,
             "cat": cat,
-            // 编辑时保住原规则的 sub（编辑器没画 sub，不该因为没画就抹掉）。
-            "sub": editing?.sub ?? "",
+            "sub": sub,
             "merchant": merchant.trimmingCharacters(in: .whitespacesAndNewlines),
             "cycle": cycle,
             "every_n": editing?.every_n ?? 1,

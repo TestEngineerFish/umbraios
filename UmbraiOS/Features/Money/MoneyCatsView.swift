@@ -94,7 +94,7 @@ struct UmbraMoneyCatsView: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(MoneyCatArt.tint(c.slot))
                     .frame(width: 34, height: 34)
-                    .overlay(UmbraIcon(d: MoneyCatArt.icon(c.slug), size: 18, strokeWidth: 1.9)
+                    .overlay(UmbraIcon(d: MoneyCatArt.icon(c.slug, stored: c.icon), size: 18, strokeWidth: 1.9)
                         .foregroundColor(MoneyCatArt.slotColor(c.slot)))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 7) {

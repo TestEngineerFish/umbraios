@@ -79,6 +79,13 @@ final class MoneyStore: ObservableObject {
         cats.first { $0.slug == slug }?.slot ?? 0
     }
 
+    /// 图标 path：**存储的语义名优先**（批次 004，用户在 PC 新增分类挑的图标要
+    /// 跨端一致），slug 兜底。只有 slug 的调用方（流水行 / 排行 / 规则行）用它，
+    /// 手里有 MoneyCatDTO 的直接 MoneyCatArt.icon(slug, stored:) 少一次查表。
+    func catArt(_ slug: String) -> String {
+        MoneyCatArt.icon(slug, stored: cats.first { $0.slug == slug }?.icon)
+    }
+
     /// 「最近用过」：本月流水里同方向、按时间新→旧去重后的前三个分类。
     /// 最近用过（批次 003 定稿）：按方向从流水新→旧去重取 3 个；该方向还没记过
     /// 就用分类表前几个兜底；**该方向分类总数 ≤ 3 时返回空** —— 那时「最近用过」
@@ -102,10 +109,11 @@ final class MoneyStore: ObservableObject {
 
     // MARK: 写操作（都走服务端，成功后静默重拉对齐）
 
-    /// 记一笔 / 改一笔。id 为 nil 时新建（客户端生成 uuid）。成功回 true。
+    /// 记一笔 / 改一笔。id 为 nil 时新建（客户端生成 uuid）。
+    /// 成功回**这笔账的 id**（新建时调用方要拿它挂「先攒在本地」的附件），失败回 nil。
     func save(id: String?, cents: Int, direction: String, cat: String, sub: String,
               merchant: String, atMs: Int64, src: String?,
-              ruleId: String, batchId: String, orderNo: String) async -> Bool {
+              ruleId: String, batchId: String, orderNo: String) async -> String? {
         let dto = MoneyEntryDTO(
             id: id ?? UUID().uuidString.lowercased(),
             cents: cents,
@@ -126,7 +134,16 @@ final class MoneyStore: ObservableObject {
             // 服务端不会动这笔已有的附件 —— 附件只走截图记账与附件接口那两条路。
             atts: nil
         )
-        guard await HTTPService.shared.putMoneyEntry(dto) != nil else { return false }
+        guard await HTTPService.shared.putMoneyEntry(dto) != nil else { return nil }
+        await reload(silent: true)
+        return dto.id
+    }
+
+    /// 给一笔账挂上已上传的文件（加图第二步：/files/upload 拿 file_id 后记引用）。
+    /// 服务端限一笔 4 张、原图不可删；成功后重拉让 attList 对齐。
+    func addAtt(entryId: String, fileId: String, label: String) async -> Bool {
+        guard await HTTPService.shared.addMoneyAtt(entryId: entryId, fileId: fileId, label: label)
+        else { return false }
         await reload(silent: true)
         return true
     }

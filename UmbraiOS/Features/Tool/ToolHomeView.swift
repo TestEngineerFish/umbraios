@@ -49,14 +49,12 @@ struct UmbraToolHomeView: View {
             bigCard(
                 label: "记账",
                 sub: moneySub,
-                icon: UmbraIconPath.wallet,
-                accent: true
+                icon: UmbraIconPath.wallet
             ) { router.go(.moneyHome) }
             bigCard(
                 label: "密码保险箱",
                 sub: vaultSub,
-                icon: UmbraIconPath.lockKeyhole,
-                accent: false
+                icon: UmbraIconPath.lockKeyhole
             ) { router.go(.vaultHome) }
         }
     }
@@ -73,19 +71,20 @@ struct UmbraToolHomeView: View {
         return vault.recordExists || vault.hasSecretKey ? "已锁定" : "还没创建"
     }
 
-    /// 大卡不做「强调卡」：稿给记账画了橙底橙框的 accent 态，实机上看着像
-    /// 「被选中了」（老板验收点名 —— iOS 上点了就进，没有选中这回事）。
-    /// 两张卡统一用普通卡面，记账的身份感只靠橙色图标块（已记回流台账，要改稿）。
-    private func bigCard(label: String, sub: String, icon: String, accent: Bool,
+    /// 大卡不做「强调卡」（批次 004 稿已吃进这条实现侧偏离并定稿）：iOS 没有
+    /// 「选中」概念，橙底整卡会被读成选中态。两张卡统一普通卡面（--card 底 +
+    /// --border-soft 描边），**身份感交给橙色图标块**（橙实底 + 白图标，36×36 圆角 11）——
+    /// 两张都给，原来只给记账的那版让保险箱看着像二等公民。
+    private func bigCard(label: String, sub: String, icon: String,
                          action: @escaping () -> Void) -> some View {
         Button(action: action) {
             VStack(alignment: .leading, spacing: 8) {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(accent ? UmbraColor.orange : UmbraColor.chip)
+                    .fill(UmbraColor.orange)
                     .frame(width: 36, height: 36)
                     .overlay(
                         UmbraIcon(d: icon, size: 18, strokeWidth: 1.9)
-                            .foregroundColor(accent ? .white : UmbraColor.muted)
+                            .foregroundColor(.white)
                     )
                 Text(label)
                     .font(UmbraFont.sans(15.5, .w600))
@@ -100,7 +99,7 @@ struct UmbraToolHomeView: View {
             .background(RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(UmbraColor.card))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+                .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

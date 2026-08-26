@@ -1,13 +1,18 @@
-// 记一笔 / 编辑账目（money.add，对齐稿 2521–2636）。
+// 记一笔 / 编辑账目（money.add，对齐稿 2521–2636 + 批次 004 附件区正式形态）。
 //
-// 第二批起补齐了原来的两处取舍：「新增分类」「管理子类」入口（服务端有接口了），
-// 以及编辑态的**附件区**（截图快捷记账的原图落在这，origin 不可删）。
-// iOS 一期附件只展示 / 删，不从相册加图 —— 加图的入口形态要等设计出稿
-// （已记回流台账，批次 004 一并发）。
+// 附件区（批次 004 定稿）：缩略 78 / 圆角 13，一笔最多 4 张、满了收起「加图」
+// 不给禁用态，计数写在标题旁 N / 4；原始截图 = 凭证不可删，手动加的右上 × 可删。
+// 「加图」先出**来源选择**（从相册选择 / 拍照 / 从「文件」选择）——
+// 相册走 PhotosPicker（系统有限授权流程在它里面），拍照包一层
+// UIImagePickerController（SwiftUI 没有原生相机），文件走 fileImporter。
+// 新建时账还没落库，图先攒在本地，保存成功后逐张上传挂接（服务端只认已存在的账）。
 //
 // 保存失败的文案说真话：「检查网络后再点一次保存」，不说「已排队自动重试」——
 // 离线队列要等整体同步模型拍板（05 的 E15），没有队列就不许诺队列。
 import SwiftUI
+import PhotosUI
+import UIKit
+import UniformTypeIdentifiers
 
 struct UmbraMoneyAddView: View {
     /// nil = 新建；非 nil = 编辑 store.entries 里的这一条。
@@ -34,6 +39,15 @@ struct UmbraMoneyAddView: View {
     @State private var seeded = false
     /// 附件缩略图点开的应用内预览器（批次 005：和步骤截图/产出图片同一个组件）。
     @State private var viewerItem: UmbraViewerItem?
+    /// 新建这一笔时先攒在本地的图（账没落库，服务端没地方挂）；保存成功后逐张上传。
+    @State private var pending: [(id: UUID, data: Data, label: String)] = []
+    /// 加图的三个来源开关 + 相册选中项。
+    @State private var showPhotos = false
+    @State private var photoItem: PhotosPickerItem?
+    @State private var showCamera = false
+    @State private var showFiles = false
+    /// 附件上传中（与 busy 分开：传图不该把「记下这笔」也锁住）。
+    @State private var attBusy = false
     @FocusState private var amountFocused: Bool
 
     /// 编辑的原条目（身份字段 src / rule_id / batch_id / order_no 要原样带回去）。
@@ -66,6 +80,35 @@ struct UmbraMoneyAddView: View {
         .navigationBarTitleDisplayMode(.inline)
         .navigationBarBackButtonHidden(true)
         .umbraImageViewer(item: $viewerItem)
+        // 加图的三个来源（批次 004）。相册的有限授权、权限弹窗都在 PhotosPicker 里，
+        // 我们不碰 PHPhotoLibrary；文件要先拿安全作用域，不拿在真机上必读不出来。
+        .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)
+        .onChange(of: photoItem) { item in
+            guard let item else { return }
+            photoItem = nil
+            Task { @MainActor in
+                if let d = try? await item.loadTransferable(type: Data.self) {
+                    addImage(data: d, label: "")
+                } else {
+                    router.showToast("这张图读不出来，换一张试试")
+                }
+            }
+        }
+        .fullScreenCover(isPresented: $showCamera) {
+            CameraPicker { img in
+                if let d = img.jpegData(compressionQuality: 0.85) { addImage(data: d, label: "") }
+            }
+            .ignoresSafeArea()
+        }
+        .fileImporter(isPresented: $showFiles, allowedContentTypes: [.image]) { result in
+            guard case .success(let url) = result else { return }
+            let scoped = url.startAccessingSecurityScopedResource()
+            defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+            guard let d = try? Data(contentsOf: url) else {
+                router.showToast("这张图读不出来，换一张试试"); return
+            }
+            addImage(data: d, label: url.lastPathComponent)
+        }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("取消") { router.back() }.tint(UmbraColor.muted)
@@ -225,7 +268,7 @@ struct UmbraMoneyAddView: View {
         } label: {
             HStack(spacing: 6) {
                 // 记一笔只给图标上色、不铺色底（批次 003 定稿）；选中态整体归橙。
-                UmbraIcon(d: MoneyCatArt.icon(slug), size: 14, strokeWidth: 1.9)
+                UmbraIcon(d: money.catArt(slug), size: 14, strokeWidth: 1.9)
                     .foregroundColor(on ? UmbraColor.orangeText : MoneyCatArt.slotColor(money.catSlot(slug)))
                 Text(money.catName(slug)).font(UmbraFont.sans(13, .w560))
                     .foregroundColor(on ? UmbraColor.orangeText : UmbraColor.muted)
@@ -251,7 +294,7 @@ struct UmbraMoneyAddView: View {
                     VStack(spacing: 5) {
                         // 记一笔的分类格只给图标上色、不铺色底（批次 003 定稿）；
                         // 选中态整格归橙，图标转 orange-text。
-                        UmbraIcon(d: MoneyCatArt.icon(c.slug), size: 19, strokeWidth: 1.9)
+                        UmbraIcon(d: MoneyCatArt.icon(c.slug, stored: c.icon), size: 19, strokeWidth: 1.9)
                             .foregroundColor(on ? UmbraColor.orangeText : MoneyCatArt.slotColor(c.slot))
                         Text(c.name).font(UmbraFont.sans(12.5, .w560)).lineLimit(1)
                             .foregroundColor(on ? UmbraColor.orangeText : UmbraColor.text)
@@ -418,29 +461,39 @@ struct UmbraMoneyAddView: View {
         }
     }
 
-    // MARK: 附件（编辑态，截图快捷记账的原图落在这）
+    // MARK: 附件（批次 004 正式形态：缩略 78 / 圆角 13，最多 4 张，加图走来源选择）
 
-    /// 只在「编辑一笔已有附件的账」时出现。展示位是临时的（放时间卡下面）——
-    /// 正式的附件区形态等 ClaudeDesign 出稿（已记回流台账），先保证图看得到、
-    /// 普通附件删得掉、原图删不掉这三件事成立。
-    @ViewBuilder
+    /// 已挂在账上的 + 新建时先攒在本地的，加起来的总数（4 张上限按它算）。
+    private var attCount: Int { (editing?.attList.count ?? 0) + pending.count }
+
+    /// 新建、编辑都出现（新建时先攒本地、保存后上传）。满 4 张收起「加图」，
+    /// 不给禁用态 —— 稿的原话；计数写在标题旁。
     private var attsCard: some View {
-        if let e = editing, !e.attList.isEmpty {
-            VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text("附件").font(UmbraFont.sans(12, .w600)).foregroundColor(UmbraColor.faint)
-                ScrollView(.horizontal, showsIndicators: false) {
-                    HStack(spacing: 10) {
+                Text("\(attCount) / 4").font(UmbraFont.sans(11)).foregroundColor(UmbraColor.faint)
+                if attBusy {
+                    Text("上传中…").font(UmbraFont.sans(11)).foregroundColor(UmbraColor.faint)
+                }
+            }
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 10) {
+                    if let e = editing {
                         ForEach(e.attList, id: \.file_id) { a in attThumb(entry: e, att: a) }
                     }
+                    ForEach(pending, id: \.id) { p in pendingThumb(p) }
+                    if attCount < 4 { addTile }
                 }
-                Text(e.attList.contains(where: { $0.origin })
-                     ? "这笔是截图记的，原始截图一直留着，不能删。"
-                     : "小票、账单、转账截图都能放这儿，跟账目一起存。")
-                    .font(UmbraFont.sans(11.5)).foregroundColor(UmbraColor.faint)
             }
-            .padding(.horizontal, 16).padding(.vertical, 14)
-            .moneyCard()
+            Text(editing?.attList.contains(where: { $0.origin }) == true
+                 ? "这笔是截图记的，原始截图一直留着，不能删。其它图可以随时加减。"
+                 : "小票、账单、转账截图都能放这儿，跟账目一起存。")
+                .font(UmbraFont.sans(11.5)).foregroundColor(UmbraColor.faint)
+                .lineSpacing(11.5 * 0.55)
         }
+        .padding(.horizontal, 16).padding(.vertical, 14)
+        .moneyCard()
     }
 
     private func attThumb(entry e: MoneyEntryDTO, att a: MoneyAttDTO) -> some View {
@@ -450,15 +503,15 @@ struct UmbraMoneyAddView: View {
                 case .success(let img):
                     img.resizable().scaledToFill()
                 default:
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
                         .fill(UmbraColor.chip)
                         .overlay(UmbraIcon(d: UmbraIconPath.image, size: 18, strokeWidth: 1.8)
                             .foregroundColor(UmbraColor.faint))
                 }
             }
-            .frame(width: 92, height: 92)
-            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+            .frame(width: 78, height: 78)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
             // 点缩略图开应用内预览器（批次 005）。挂在删除 × 的 overlay **前面**：
             // × 在更上层，点它仍然走删除，不会先把预览器弹出来。
@@ -485,6 +538,93 @@ struct UmbraMoneyAddView: View {
                 .font(UmbraFont.sans(10.5)).foregroundColor(UmbraColor.faint)
                 .lineLimit(1)
         }
+    }
+
+    /// 本地攒着的图（新建态）：还没上传，随时可撤；保存时才逐张上传挂接。
+    private func pendingThumb(_ p: (id: UUID, data: Data, label: String)) -> some View {
+        VStack(spacing: 5) {
+            Group {
+                if let img = UIImage(data: p.data) {
+                    Image(uiImage: img).resizable().scaledToFill()
+                } else {
+                    RoundedRectangle(cornerRadius: 13, style: .continuous)
+                        .fill(UmbraColor.chip)
+                        .overlay(UmbraIcon(d: UmbraIconPath.image, size: 18, strokeWidth: 1.8)
+                            .foregroundColor(UmbraColor.faint))
+                }
+            }
+            .frame(width: 78, height: 78)
+            .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
+                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+            .overlay(alignment: .topTrailing) {
+                Button { pending.removeAll { $0.id == p.id } } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 17))
+                        .foregroundStyle(.white, Color.black.opacity(0.45))
+                        .padding(4)
+                }
+                .buttonStyle(.plain)
+            }
+            Text(p.label.isEmpty ? "待上传" : p.label)
+                .font(UmbraFont.sans(10.5)).foregroundColor(UmbraColor.faint)
+                .lineLimit(1)
+        }
+    }
+
+    /// 「加图」瓦片：虚线框，点了先出来源选择（稿：不直接塞空位）。
+    private var addTile: some View {
+        Button { askAddImage() } label: {
+            VStack(spacing: 4) {
+                UmbraIcon(d: UmbraIconPath.image, size: 18, strokeWidth: 1.9)
+                Text("加图").font(UmbraFont.sans(11, .w600))
+            }
+            .foregroundColor(UmbraColor.muted)
+            .frame(width: 78, height: 78)
+            .overlay(
+                RoundedRectangle(cornerRadius: 13, style: .continuous)
+                    .strokeBorder(UmbraColor.border, style: StrokeStyle(lineWidth: UmbraMetric.borderW, dash: [4, 3]))
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func askAddImage() {
+        guard attCount < 4 else { router.showToast("一笔最多留 4 张图"); return }
+        router.present(UmbraSheet(title: "加图", subtitle: "一笔最多 4 张，跟账目一起存。", items: [
+            UmbraSheetItem(label: "从相册选择") { showPhotos = true },
+            UmbraSheetItem(label: "拍照") {
+                // 模拟器/无摄像头设备直说，不给一个点了闪退的入口。
+                if UIImagePickerController.isSourceTypeAvailable(.camera) { showCamera = true }
+                else { router.showToast("这台设备没有可用的相机") }
+            },
+            UmbraSheetItem(label: "从「文件」选择") { showFiles = true },
+        ]))
+    }
+
+    /// 收下一张图：编辑态立刻上传挂接（账已存在）；新建态先攒着，保存后再传。
+    private func addImage(data: Data, label: String) {
+        guard attCount < 4 else { router.showToast("一笔最多留 4 张图"); return }
+        if let e = editing {
+            attBusy = true
+            Task { @MainActor in
+                let ok = await uploadOne(entryId: e.id, data: data, label: label)
+                attBusy = false
+                router.showToast(ok ? "已加上" : "没传上去，检查网络后再试")
+            }
+        } else {
+            pending.append((id: UUID(), data: data, label: label))
+        }
+    }
+
+    /// 传一张 + 挂引用。文件名带扩展名 —— /files/{id} 靠它带 .jpg 后缀，
+    /// 各端 <img>/AsyncImage 才按图片处理。
+    private func uploadOne(entryId: String, data: Data, label: String) async -> Bool {
+        let name = label.isEmpty ? "photo-\(Int(Date().timeIntervalSince1970)).jpg" : label
+        guard let up = try? await HTTPService.shared.uploadFile(name: name, data: data)
+        else { return false }
+        return await money.addAtt(entryId: entryId, fileId: up.file_id, label: label)
     }
 
     private func confirmDeleteAtt(entry e: MoneyEntryDTO, att a: MoneyAttDTO) {
@@ -549,15 +689,28 @@ struct UmbraMoneyAddView: View {
         failed = false
         let e = editing
         Task { @MainActor in
-            let ok = await money.save(
+            let savedId = await money.save(
                 id: e?.id, cents: c, direction: dir, cat: slug, sub: sub,
                 merchant: note.trimmingCharacters(in: .whitespacesAndNewlines),
                 atMs: atDate.umbraMs,
                 src: e?.src,
                 ruleId: e?.rule_id ?? "", batchId: e?.batch_id ?? "", orderNo: e?.order_no ?? ""
             )
+            guard let savedId else { busy = false; failed = true; return }
+            // 新建时攒下的图此刻才有地方挂：账落库了，逐张上传 + 挂接。
+            // 挂失败只点名那几张，账本身已经记上 —— 不因图把整次保存判失败。
+            if !pending.isEmpty {
+                attBusy = true
+                var lost = 0
+                for p in pending {
+                    let ok = await uploadOne(entryId: savedId, data: p.data, label: p.label)
+                    if !ok { lost += 1 }
+                }
+                attBusy = false
+                pending = []
+                if lost > 0 { router.showToast("有 \(lost) 张图没传上去，进这笔账里能补加") }
+            }
             busy = false
-            guard ok else { failed = true; return }
             if again {
                 // 连着记几笔外卖时分类和时间十有八九不变 —— 留着；金额和备注必换 —— 清掉。
                 expr = ""
@@ -568,6 +721,42 @@ struct UmbraMoneyAddView: View {
                 router.showToast(e == nil ? "已记下 \(MoneyFmt.yuan(c))" : "已保存")
                 router.back()
             }
+        }
+    }
+}
+
+// MARK: - 拍照取图
+
+/// SwiftUI 没有原生相机组件，包一层 UIImagePickerController（只用 .camera 源 ——
+/// 相册走 PhotosPicker，系统的有限授权流程都在那边，这里不碰 PHPhotoLibrary）。
+/// 权限文案在 Info.plist 的 NSCameraUsageDescription，早在语音一期就配好了。
+private struct CameraPicker: UIViewControllerRepresentable {
+    let onImage: (UIImage) -> Void
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let p = UIImagePickerController()
+        p.sourceType = .camera
+        p.delegate = context.coordinator
+        return p
+    }
+
+    func updateUIViewController(_ vc: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    final class Coordinator: NSObject, UIImagePickerControllerDelegate, UINavigationControllerDelegate {
+        private let parent: CameraPicker
+        init(_ parent: CameraPicker) { self.parent = parent }
+
+        func imagePickerController(_ picker: UIImagePickerController,
+                                   didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let img = info[.originalImage] as? UIImage { parent.onImage(img) }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
         }
     }
 }

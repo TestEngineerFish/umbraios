@@ -343,6 +343,13 @@ class HTTPService {
         return await sendJSON(url, method: "POST", body: ["file_id": fileId])
     }
 
+    /// 挂一张附件（批次 004 加图：文件先走 /files/upload 拿 file_id，这里只记引用）。
+    /// 一笔最多 4 张，超了服务端回 400 → false，界面按「没挂上」提示。
+    func addMoneyAtt(entryId: String, fileId: String, label: String) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/money/entries/\(entryId)/atts") else { return false }
+        return await sendJSON(url, method: "POST", body: ["file_id": fileId, "label": label])
+    }
+
     /// 附件图片的下载地址（GET /files/{id} 不鉴权，file_id 本身即凭证）。
     func moneyFileURL(_ fileId: String) -> URL? {
         URL(string: "\(baseUrl)/files/\(fileId)")

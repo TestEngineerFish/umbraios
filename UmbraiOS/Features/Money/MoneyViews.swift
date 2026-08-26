@@ -291,7 +291,7 @@ struct UmbraMoneyHomeView: View {
                 RoundedRectangle(cornerRadius: 6, style: .continuous)
                     .fill(MoneyCatArt.tint(money.catSlot(row.cat)))
                     .frame(width: 22, height: 22)
-                    .overlay(UmbraIcon(d: MoneyCatArt.icon(row.cat), size: 14, strokeWidth: 1.9)
+                    .overlay(UmbraIcon(d: money.catArt(row.cat), size: 14, strokeWidth: 1.9)
                         .foregroundColor(MoneyCatArt.slotColor(money.catSlot(row.cat))))
                 Text(money.catName(row.cat))
                     .font(UmbraFont.sans(14.5)).foregroundColor(UmbraColor.text)
@@ -430,7 +430,7 @@ struct UmbraMoneyHomeView: View {
                         RoundedRectangle(cornerRadius: 9, style: .continuous)
                             .fill(MoneyCatArt.tint(money.catSlot(e.cat)))
                             .frame(width: 30, height: 30)
-                            .overlay(UmbraIcon(d: MoneyCatArt.icon(e.cat), size: 15, strokeWidth: 1.9)
+                            .overlay(UmbraIcon(d: money.catArt(e.cat), size: 15, strokeWidth: 1.9)
                                 .foregroundColor(MoneyCatArt.slotColor(money.catSlot(e.cat))))
                         VStack(alignment: .leading, spacing: 2) {
                             Text(e.merchant.isEmpty ? money.catName(e.cat) : e.merchant)
@@ -663,7 +663,7 @@ struct UmbraMoneyListView: View {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(MoneyCatArt.tint(money.catSlot(e.cat)))
                     .frame(width: 32, height: 32)
-                    .overlay(UmbraIcon(d: MoneyCatArt.icon(e.cat), size: 16, strokeWidth: 1.9)
+                    .overlay(UmbraIcon(d: money.catArt(e.cat), size: 16, strokeWidth: 1.9)
                         .foregroundColor(MoneyCatArt.slotColor(money.catSlot(e.cat))))
                 VStack(alignment: .leading, spacing: 2) {
                     HStack(spacing: 6) {
