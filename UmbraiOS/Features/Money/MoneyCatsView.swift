@@ -262,7 +262,40 @@ struct UmbraMoneyCatDetailView: View {
     private var cat: MoneyCatDTO? { money.cats.first { $0.slug == slug } }
     private var subs: [String] { cat?.subList ?? [] }
 
+    // body 拆成小块不是洁癖：原来 List + 八个修饰符 + 三张带 TextField 的 alert
+    // 连成一条链，Swift 对整条链一次性做类型推导，编译器直接报「type-check 超时」。
+    // 列表一块、右上角按钮一块、每张 alert 的按钮各一块，每段都在编译器的能力圈内。
     var body: some View {
+        listBody
+            .navigationTitle(cat?.name ?? "分类")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) { trailingButtons }
+            }
+            .refreshable { await money.reload(silent: true); await loadUsed() }
+            .task { await loadUsed() }
+            .alert("新增子类", isPresented: $adding) {
+                addAlertButtons
+            } message: {
+                Text("加在「\(cat?.name ?? "")」下面。")
+            }
+            .alert("子类改名", isPresented: Binding(
+                get: { renamingSub != nil },
+                set: { if !$0 { renamingSub = nil } }
+            )) {
+                renameSubAlertButtons
+            } message: {
+                Text("只影响以后记账，已经记下的账目还写着「\(renamingSub ?? "")」。")
+            }
+            .alert("分类改名", isPresented: $renamingCat) {
+                renameCatAlertButtons
+            } message: {
+                Text("改名不影响历史数据。")
+            }
+    }
+
+    private var listBody: some View {
         List {
             if subs.isEmpty {
                 Section {
@@ -287,45 +320,33 @@ struct UmbraMoneyCatDetailView: View {
         .listStyle(.insetGrouped)
         .scrollContentBackground(.hidden)
         .background(UmbraColor.bg)
-        .navigationTitle(cat?.name ?? "分类")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                HStack(spacing: 2) {
-                    Button { addText = ""; adding = true } label: { Image(systemName: "plus") }
-                        .tint(UmbraColor.orange)
-                    Button { openMenu() } label: { Image(systemName: "ellipsis.circle") }
-                        .tint(UmbraColor.muted)
-                }
-            }
+    }
+
+    private var trailingButtons: some View {
+        HStack(spacing: 2) {
+            Button { addText = ""; adding = true } label: { Image(systemName: "plus") }
+                .tint(UmbraColor.orange)
+            Button { openMenu() } label: { Image(systemName: "ellipsis.circle") }
+                .tint(UmbraColor.muted)
         }
-        .refreshable { await money.reload(silent: true); await loadUsed() }
-        .task { await loadUsed() }
-        .alert("新增子类", isPresented: $adding) {
-            TextField("子类名，例如「夜宵」", text: $addText)
-            Button("取消", role: .cancel) { adding = false }
-            Button("加上") { commitAddSub() }
-        } message: {
-            Text("加在「\(cat?.name ?? "")」下面。")
-        }
-        .alert("子类改名", isPresented: Binding(
-            get: { renamingSub != nil },
-            set: { if !$0 { renamingSub = nil } }
-        )) {
-            TextField("新名字", text: $renameText)
-            Button("取消", role: .cancel) { renamingSub = nil }
-            Button("改名") { commitRenameSub() }
-        } message: {
-            Text("只影响以后记账，已经记下的账目还写着「\(renamingSub ?? "")」。")
-        }
-        .alert("分类改名", isPresented: $renamingCat) {
-            TextField("显示名", text: $catNameText)
-            Button("取消", role: .cancel) { renamingCat = false }
-            Button("保存") { commitRenameCat() }
-        } message: {
-            Text("改名不影响历史数据。")
-        }
+    }
+
+    @ViewBuilder private var addAlertButtons: some View {
+        TextField("子类名，例如「夜宵」", text: $addText)
+        Button("取消", role: .cancel) { adding = false }
+        Button("加上") { commitAddSub() }
+    }
+
+    @ViewBuilder private var renameSubAlertButtons: some View {
+        TextField("新名字", text: $renameText)
+        Button("取消", role: .cancel) { renamingSub = nil }
+        Button("改名") { commitRenameSub() }
+    }
+
+    @ViewBuilder private var renameCatAlertButtons: some View {
+        TextField("显示名", text: $catNameText)
+        Button("取消", role: .cancel) { renamingCat = false }
+        Button("保存") { commitRenameCat() }
     }
 
     /// 页脚照稿的意思，「N 笔账」带「本月」限定（手机上只有本月数据，同分类管理）。
@@ -394,6 +415,16 @@ struct UmbraMoneyCatDetailView: View {
     }
 
     // MARK: 分类级操作（右上角菜单，语义同列表页左滑）
+
+    /// 分类改名（补上原来只被 alert 引用、忘了写的定义）。
+    /// 校验口径与列表页 commitRename 一致：空名/没改不动；toast 同一句。
+    private func commitRenameCat() {
+        renamingCat = false
+        guard let c = cat else { return }
+        let name = catNameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, name != c.name else { return }
+        run(toast: "已改名为「\(name)」") { await money.updateCat(slug: slug, name: name) }
+    }
 
     private func openMenu() {
         guard let c = cat else { return }

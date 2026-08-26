@@ -121,7 +121,10 @@ final class MoneyStore: ObservableObject {
             batch_id: batchId,
             order_no: orderNo,
             updated_at_ms: Date.umbraNowMs,
-            deleted: false
+            deleted: false,
+            // 手动记/改一笔不带附件：nil 在上行时被整个省掉（encodeIfPresent），
+            // 服务端不会动这笔已有的附件 —— 附件只走截图记账与附件接口那两条路。
+            atts: nil
         )
         guard await HTTPService.shared.putMoneyEntry(dto) != nil else { return false }
         await reload(silent: true)
