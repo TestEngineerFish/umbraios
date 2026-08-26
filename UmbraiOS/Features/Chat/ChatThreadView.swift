@@ -456,10 +456,13 @@ struct UmbraChatThreadView: View {
             UmbraProgressBar(progress: Double(j.pct) / 100, color: st.bar)
 
             HStack(alignment: .firstTextBaseline, spacing: 8) {
+                // 服务端的步骤结论不再截断（时间线不省略，2026-08-26 拍板），这条 message
+                // 可能长达几百字 —— 聊天卡是概览，限 8 行兜底，全文看任务详情。
                 Text(j.message)
                     .font(UmbraFont.sans(13, .w400))
                     .foregroundColor(UmbraColor.muted)
                     .lineSpacing(13 * 0.5)
+                    .lineLimit(8)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 Text("\(j.pct)%")
                     .font(UmbraFont.mono(12, .w400))
