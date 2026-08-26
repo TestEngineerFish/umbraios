@@ -52,7 +52,7 @@ struct UmbraTaskLiveActivity: Widget {
                 ring(context.state, size: 16, lineWidth: 2.5)
             }
             // 点任意形态 → 直达这条任务的详情页。
-            .widgetURL(URL(string: "umbra://task/\(context.attributes.jobId)"))
+            .widgetURL(URL(string: "umbra://task/\(context.attributes.taskId)"))
             .keylineTint(WTheme.orange)
         }
     }
@@ -90,7 +90,7 @@ struct UmbraTaskLiveActivity: Widget {
         .padding(.vertical, 14)
         .activityBackgroundTint(WTheme.activityBg.opacity(0.85))
         .activitySystemActionForegroundColor(.white)
-        .widgetURL(URL(string: "umbra://task/\(context.attributes.jobId)"))
+        .widgetURL(URL(string: "umbra://task/\(context.attributes.taskId)"))
     }
 
     // MARK: 小件

@@ -113,7 +113,7 @@ struct UmbraTaskActivityAttributes: ActivityAttributes {
     }
 
     /// 固定属性：整个 Activity 生命周期不变。
-    var jobId: String
+    var taskId: String
     var goal: String
 }
 

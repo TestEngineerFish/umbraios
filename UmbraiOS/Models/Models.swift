@@ -18,12 +18,15 @@ struct ConversationRow: Codable {
     let count: Int
 }
 
-struct Job: Codable, Identifiable {
+/// 任务行（GET /tasks）。B 批改名：原来叫 Job —— 那是已删除的旧流水线的名字，
+/// 现在服务端从表到接口都叫任务（tasks），端上跟着改，别让两套名字打架。
+/// 不叫 `Task` 是因为会撞 Swift 并发的 `Task`，全项目都在用。
+struct TaskItem: Codable, Identifiable {
     let id: String
     /// 短标题（服务端 tasks.name，≤15 字，列表主展示）。
     /// **一期漏了这个字段**，于是列表、详情、小组件一律拿 goal 顶替标题位 ——
     /// PC 端显示的是「连连看网页游戏」，iOS 上却是整段需求描述（用户点名）。
-    /// 旧 Job（operate 流水线）没有 name，所以是可选，用 title 统一兜底。
+    /// 历史数据可能没有 name，所以是可选，用 title 统一兜底。
     let name: String?
     /// 详细描述（执行/验收/汇报都以它为准）。标题位不该放它。
     let goal: String
@@ -36,7 +39,7 @@ struct Job: Codable, Identifiable {
     var steps_total: Int? = nil
     var steps_done: Int? = nil
 
-    /// 显示用标题：有短标题就用短标题，没有（旧 Job）才退回描述。
+    /// 显示用标题：有短标题就用短标题，没有才退回描述。
     /// **凡是「标题位」一律用它**，别再直接写 goal。
     var title: String {
         let n = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
@@ -44,29 +47,45 @@ struct Job: Codable, Identifiable {
     }
 }
 
-struct Subtask: Codable, Identifiable {
+/// 一步失败时的结构化错误。kind: step_error(执行轮异常)/device_error(设备报错)/timeout(疑似卡住)。
+struct StepError: Codable, Hashable {
+    let kind: String?
+    let message: String?
+    let detail: String?
+}
+
+/// 任务的一步（详情里的 steps；原 Subtask）。
+/// 字段跟着服务端 _step_row 走：provider/skill/result_json 已随统一执行轮模型
+/// 从接口里消失，error 从自由文本变成了结构化对象 —— 旧声明 `error: String?`
+/// 会让**任何带失败步骤的任务**整个详情解码失败，界面上表现为详情永远转圈。
+struct TaskStep: Codable, Identifiable {
     let id: String
     let seq: Int
     let title: String?
-    let provider: String?
-    let skill: String?
     let status: String
-    let result_json: String?
-    let error: String?
+    /// 这一步实际干了什么（引擎写的人话说明，如「设备不在线，挂起等待」）。
+    let detail: String?
+    let device_id: String?
+    let elapsed_ms: Int?
+    let error: StepError?
 }
 
-struct JobEvent: Codable, Identifiable {
+struct TaskEvent: Codable, Identifiable {
     let id: Int
     let type: String
     let message: String?
-    let subtask_id: String?
+    /// 事件挂在哪一步上（可空：任务级事件不挂步）。原来声明成 subtask_id，
+    /// 服务端实际给的键一直是 step_id —— 那一列因此永远解出 nil。
+    let step_id: String?
     let created_at: String?
 }
 
-struct JobDetail: Codable {
-    let job: Job
-    let subtasks: [Subtask]
-    let events: [JobEvent]
+/// GET /tasks/{id} 的响应。键名跟服务端一致（B 批改名，原 {job, subtasks, events}），
+/// 字段名即 JSON 键，不用 CodingKeys —— 改字段时少一处能漏。
+struct TaskDetail: Codable {
+    let task: TaskItem
+    let steps: [TaskStep]
+    let events: [TaskEvent]
 }
 
 struct Capability: Codable {

@@ -37,7 +37,7 @@ struct UmbraToolHomeView: View {
         // 不拉就只能摆假的；顺带把记账页预热了（点进去秒开）。
         .onAppear {
             money.loadIfNeeded()
-            Task { await tasks.loadJobs() }
+            Task { await tasks.loadTasks() }
             Task { await inspirations.load() }
         }
     }
@@ -120,16 +120,18 @@ struct UmbraToolHomeView: View {
     }
 
     private var recordRows: [ToolRow] {
-        let running = tasks.jobs.filter { UmbraStatus(jobStatus: $0.status) == .running }.count
-        let taskAttn = tasks.jobs.filter { UmbraStatus(jobStatus: $0.status) == .awaitingReview }.count
+        let running = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .running }.count
+        // 「待确认」随旧代理状态一起删了（B 批）：现在要人来处理的是**失败**的任务
+        // （看一眼原因 → 重试或重新发起）。语义变化已记回流台账，待设计确认。
+        let taskAttn = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .failed }.count
         let undone = reminders.items.filter { !$0.done }.count
         let overdue = reminders.items.filter { !$0.done && $0.group == "已过期" }.count
         // 命名避开 open —— 它是 Swift 的访问级别关键字，检查器也会拦。
         let inspOpen = inspirations.list.filter { $0.status == "open" }.count
         return [
             ToolRow(id: "task", label: "任务",
-                    sub: tasks.jobs.isEmpty ? "还没有任务"
-                        : "\(running) 个执行中 · \(taskAttn) 个待确认",
+                    sub: tasks.items.isEmpty ? "还没有任务"
+                        : "\(running) 个执行中 · \(taskAttn) 个失败",
                     icon: UmbraIconPath.task,
                     count: taskAttn > 0 ? taskAttn : running, attn: taskAttn > 0) {
                 router.go(.taskList)

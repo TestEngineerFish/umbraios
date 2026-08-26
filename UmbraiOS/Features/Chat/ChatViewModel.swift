@@ -85,7 +85,7 @@ class ChatViewModel: ObservableObject {
     private final class ConvStore {
         var blocks: [ChatBlock] = []
         var assistantIdx: Int?
-        var jobMap: [String: Int] = [:]
+        var taskMap: [String: Int] = [:]
         var oldestId: Int?
         var hasMoreHistory = true
         var loaded = false
@@ -261,7 +261,7 @@ class ChatViewModel: ObservableObject {
             let newBlocks = messages.map { self.historyToBlock($0) }
             s.blocks.insert(contentsOf: newBlocks, at: 0)
             let shift = newBlocks.count
-            for key in s.jobMap.keys { s.jobMap[key]? += shift }
+            for key in s.taskMap.keys { s.taskMap[key]? += shift }
             s.assistantIdx? += shift
             reflect(conv)
         }
@@ -303,7 +303,7 @@ class ChatViewModel: ObservableObject {
         let s = store(conv)
         s.blocks.removeAll()
         s.assistantIdx = nil
-        s.jobMap.removeAll()
+        s.taskMap.removeAll()
         s.oldestId = nil
         s.hasMoreHistory = false
         s.loaded = true
@@ -316,7 +316,7 @@ class ChatViewModel: ObservableObject {
         let s = mainStore
         s.blocks.removeAll()
         s.assistantIdx = nil
-        s.jobMap.removeAll()
+        s.taskMap.removeAll()
         s.oldestId = nil
         s.hasMoreHistory = true
         ws.sendNewSession()
@@ -333,9 +333,9 @@ class ChatViewModel: ObservableObject {
         reflect(activeConv)
     }
 
-    func handleConfirm(taskId: String, approved: Bool) {
-        ws.sendConfirm(taskId: taskId, approved: approved)
-        resolveConfirm(taskId: taskId, approved: approved)
+    func handleConfirm(confirmId: String, approved: Bool) {
+        ws.sendConfirm(confirmId: confirmId, approved: approved)
+        resolveConfirm(confirmId: confirmId, approved: approved)
         confirmPending = nil
     }
 
@@ -418,42 +418,43 @@ class ChatViewModel: ObservableObject {
     }
 
     // 总是允许：打开自动批准（“我的”里同步）+ 批准本次。
-    func handleConfirmAlways(taskId: String) {
+    func handleConfirmAlways(confirmId: String) {
         NetworkConfig.shared.autoApproveOperate = true
-        handleConfirm(taskId: taskId, approved: true)
+        handleConfirm(confirmId: confirmId, approved: true)
     }
 
-    // ① 箭头指位：nx,ny 为箭头尖端归一化坐标(0-1000)。
-    func handleLocate(taskId: String, nx: Int, ny: Int) {
-        ws.sendLocate(taskId: taskId, nx: nx, ny: ny)
-        resolveLocate(taskId: taskId, status: .located)
+    // ① 箭头指位：nx,ny 为箭头尖端归一化坐标(0-1000)。ask_id 是这次求助的单号。
+    func handleLocate(askId: String, nx: Int, ny: Int) {
+        ws.sendLocate(askId: askId, nx: nx, ny: ny)
+        resolveLocate(askId: askId, status: .located)
     }
 
     // ② 文字纠偏：把「哪错了」发给 AI，让它自己调整步骤/判断。
-    func handleLocateFeedback(taskId: String, text: String) {
+    func handleLocateFeedback(askId: String, text: String) {
         let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !t.isEmpty else { return }
-        ws.sendLocate(taskId: taskId, feedback: t)
-        resolveLocate(taskId: taskId, status: .feedbackSent)
+        ws.sendLocate(askId: askId, feedback: t)
+        resolveLocate(askId: askId, status: .feedbackSent)
     }
 
-    // ③ 暂停我来：任务挂起，用户手动处理；卡片随后出现「继续」。
-    func handleLocatePause(taskId: String) {
-        ws.sendLocate(taskId: taskId, paused: true)
-        resolveLocate(taskId: taskId, status: .paused)
+    // ③ 暂停我来：这次操控挂起，用户手动处理；卡片随后出现「继续」。
+    func handleLocatePause(askId: String) {
+        ws.sendLocate(askId: askId, paused: true)
+        resolveLocate(askId: askId, status: .paused)
     }
 
-    // 用户手动处理完点「继续」：唤醒任务，AI 重新看屏接着干。
-    func handleResume(jobId: String, taskId: String) {
-        guard !jobId.isEmpty else { return }
-        ws.sendResume(jobId: jobId)
-        resolveLocate(taskId: taskId, status: .resumed)
+    // 用户手动处理完点「继续」：唤醒这次操控，AI 重新看屏接着干。
+    // 按 run_id 走，不是 ask_id —— 一次操控可能求助过好几次。
+    func handleResume(runId: String, askId: String) {
+        guard !runId.isEmpty else { return }
+        ws.sendResume(runId: runId)
+        resolveLocate(askId: askId, status: .resumed)
     }
 
-    private func resolveLocate(taskId: String, status: ChatBlock.LocateStatus) {
+    private func resolveLocate(askId: String, status: ChatBlock.LocateStatus) {
         let s = mainStore
         for i in s.blocks.indices {
-            if case .locate(var l) = s.blocks[i], l.taskId == taskId {
+            if case .locate(var l) = s.blocks[i], l.askId == askId {
                 // paused → resumed 允许再次更新；其它状态定型后不再改。
                 if l.resolved == nil || (l.resolved == .paused && status == .resumed) {
                     l.resolved = status
@@ -464,13 +465,13 @@ class ChatViewModel: ObservableObject {
         reflect(ChatViewModel.mainConv)
     }
 
-    private var autoApprovedTasks: Set<String> = []
-    // 满足自动批准就直接批准；返回是否已自动处理。
-    private func autoApproveIfEnabled(_ taskId: String) -> Bool {
-        guard NetworkConfig.shared.autoApproveOperate, !autoApprovedTasks.contains(taskId) else { return false }
-        autoApprovedTasks.insert(taskId)
-        ws.sendConfirm(taskId: taskId, approved: true)
-        resolveConfirm(taskId: taskId, approved: true)
+    private var autoApprovedConfirms: Set<String> = []
+    // 满足自动批准就直接批准；返回是否已自动处理。按确认单号（confirm_id）去重。
+    private func autoApproveIfEnabled(_ confirmId: String) -> Bool {
+        guard NetworkConfig.shared.autoApproveOperate, !autoApprovedConfirms.contains(confirmId) else { return false }
+        autoApprovedConfirms.insert(confirmId)
+        ws.sendConfirm(confirmId: confirmId, approved: true)
+        resolveConfirm(confirmId: confirmId, approved: true)
         return true
     }
 
@@ -528,8 +529,8 @@ class ChatViewModel: ObservableObject {
             // 拉完 ReminderStore 会顺手重排本机的本地通知（applyMerged 里做）。
             ReminderStore.shared.syncNow()
 
-        case "job_update":
-            handleJobUpdate(msg)
+        case "task_update":   // 引擎里程碑 + 电脑操控共用（B 批起旧事件名已死）
+            handleTaskUpdate(msg)
 
         case "device_message":
             let conv = msg.conversation ?? ChatViewModel.mainConv
@@ -544,25 +545,26 @@ class ChatViewModel: ObservableObject {
             reflect(conv)
 
         case "confirm_request":
-            if let taskId = msg.taskId {
+            // confirm_id 是这张确认卡的单号（B 批改名：原来叫 task_id，和真任务 id 打架）。
+            if let confirmId = msg.confirmId {
                 let conv = msg.conversation ?? ChatViewModel.mainConv
                 let s = store(conv)
-                let exists = s.blocks.contains { if case .confirm(let c) = $0 { return c.taskId == taskId } else { return false } }
+                let exists = s.blocks.contains { if case .confirm(let c) = $0 { return c.confirmId == confirmId } else { return false } }
                 if !exists {
-                    s.blocks.append(.confirm(ChatBlock.ConfirmBlock(taskId: taskId, summary: msg.confirmSummary ?? L("chat.status.confirmRequired"), resolved: nil)))
-                    confirmPending = ConfirmRequest(taskId: taskId, summary: msg.confirmSummary ?? "")
+                    s.blocks.append(.confirm(ChatBlock.ConfirmBlock(confirmId: confirmId, summary: msg.confirmSummary ?? L("chat.status.confirmRequired"), resolved: nil)))
+                    confirmPending = ConfirmRequest(confirmId: confirmId, summary: msg.confirmSummary ?? "")
                     reflect(conv)
                 }
-                _ = autoApproveIfEnabled(taskId)
+                _ = autoApproveIfEnabled(confirmId)
             }
 
         case "operate_locate_request":
-            if let taskId = msg.taskId, let img = msg.locateImageUrl {
+            if let askId = msg.askId, let img = msg.locateImageUrl {
                 let s = mainStore
-                let exists = s.blocks.contains { if case .locate(let l) = $0 { return l.taskId == taskId } else { return false } }
+                let exists = s.blocks.contains { if case .locate(let l) = $0 { return l.askId == askId } else { return false } }
                 if !exists {
                     s.blocks.append(.locate(ChatBlock.LocateBlock(
-                        taskId: taskId, jobId: msg.jobId ?? "", imageUrl: img,
+                        askId: askId, runId: msg.runId ?? "", imageUrl: img,
                         target: msg.locateTarget ?? "",
                         hint: msg.locateHint ?? L("operate.locate.hint"),
                         resolved: nil)))
@@ -601,7 +603,7 @@ class ChatViewModel: ObservableObject {
             let s = store(conv)
             s.blocks.removeAll()
             s.assistantIdx = nil
-            s.jobMap.removeAll()
+            s.taskMap.removeAll()
             s.oldestId = nil
             s.hasMoreHistory = false
             s.loaded = true
@@ -618,7 +620,7 @@ class ChatViewModel: ObservableObject {
             reflect(conv)
 
         case "confirm_resolved":
-            resolveConfirm(taskId: msg.taskId ?? "", approved: msg.confirmApproved ?? false)
+            resolveConfirm(confirmId: msg.confirmId ?? "", approved: msg.confirmApproved ?? false)
 
         case "chat_message":
             // 其它端发出的消息（跨端同步），落到它所属的会话。
@@ -661,57 +663,58 @@ class ChatViewModel: ObservableObject {
         reflect(conv)
     }
 
-    private func handleJobUpdate(_ msg: ChatMessage) {
-        guard let id = msg.jobId else { return }
+    // 任务进度卡按 task_id 建：操控落库就是一条单步任务，聊天卡和任务页指同一条。
+    private func handleTaskUpdate(_ msg: ChatMessage) {
+        guard let id = msg.taskId else { return }
         let conv = msg.conversation ?? ChatViewModel.mainConv
         let s = store(conv)
-        let overall = msg.jobOverall ?? (msg.jobStatus == "done" ? 1.0 : 0.0)
+        let overall = msg.taskOverall ?? (msg.taskStatus == "done" ? 1.0 : 0.0)
         let pct = min(100, max(0, Int(overall * 100)))
 
-        if let idx = s.jobMap[id] {
-            if case .job(var j) = s.blocks[idx] {
+        if let idx = s.taskMap[id] {
+            if case .task(var j) = s.blocks[idx] {
                 j.pct = pct
-                j.status = msg.jobStatus ?? j.status
-                j.message = msg.jobMessage ?? j.message
-                if let goal = msg.jobGoal { j.goal = goal }
-                if let confirmId = msg.jobConfirmTaskId, msg.jobNeedsConfirm == true {
-                    j.confirmTaskId = confirmId
-                    if autoApproveIfEnabled(confirmId) { j.confirmTaskId = nil }
+                j.status = msg.taskStatus ?? j.status
+                j.message = msg.taskMessage ?? j.message
+                if let goal = msg.taskGoal { j.goal = goal }
+                if let confirmId = msg.confirmId, msg.taskNeedsConfirm == true {
+                    j.confirmId = confirmId
+                    if autoApproveIfEnabled(confirmId) { j.confirmId = nil }
                 }
-                if let results = msg.jobResults { j.results = results }
-                s.blocks[idx] = .job(j)
-                if msg.jobStatus == "done" {
+                if let results = msg.taskResults { j.results = results }
+                s.blocks[idx] = .task(j)
+                if msg.taskStatus == "done" {
                     s.blocks.append(.done(id: UUID(), goal: j.goal, results: j.results ?? []))
                 }
             }
         } else {
-            let goal = msg.jobGoal ?? L("chat.status.task")
-            let block = ChatBlock.jobBlock(
-                jobId: id, goal: goal, pct: pct,
-                status: msg.jobStatus ?? "running",
-                message: msg.jobMessage ?? "",
-                confirmTaskId: msg.jobConfirmTaskId,
-                results: msg.jobResults
+            let goal = msg.taskGoal ?? L("chat.status.task")
+            let block = ChatBlock.taskBlock(
+                taskId: id, goal: goal, pct: pct,
+                status: msg.taskStatus ?? "running",
+                message: msg.taskMessage ?? "",
+                confirmId: msg.taskNeedsConfirm == true ? msg.confirmId : nil,
+                results: msg.taskResults
             )
-            s.jobMap[id] = s.blocks.count
+            s.taskMap[id] = s.blocks.count
             s.blocks.append(block)
         }
-        setPreview(conv, msg.jobMessage ?? msg.jobGoal ?? "", ISO8601DateFormatter().string(from: Date()))
+        setPreview(conv, msg.taskMessage ?? msg.taskGoal ?? "", ISO8601DateFormatter().string(from: Date()))
         reflect(conv)
     }
 
-    // 跨所有会话统一更新某确认的状态
-    private func resolveConfirm(taskId: String, approved: Bool) {
+    // 跨所有会话统一更新某张确认单的状态（任务卡内嵌授权 + 独立确认卡都认 confirm_id）
+    private func resolveConfirm(confirmId: String, approved: Bool) {
         for (conv, s) in stores {
             var changed = false
             for i in s.blocks.indices {
-                if case .job(var j) = s.blocks[i], j.confirmTaskId == taskId {
-                    j.confirmTaskId = nil
+                if case .task(var j) = s.blocks[i], j.confirmId == confirmId {
+                    j.confirmId = nil
                     j.message = approved ? L("chat.status.approved") : L("chat.status.denied")
-                    s.blocks[i] = .job(j)
+                    s.blocks[i] = .task(j)
                     changed = true
                 }
-                if case .confirm(var c) = s.blocks[i], c.taskId == taskId {
+                if case .confirm(var c) = s.blocks[i], c.confirmId == confirmId {
                     c.resolved = approved ? .approved : .denied
                     s.blocks[i] = .confirm(c)
                     changed = true
@@ -742,7 +745,7 @@ enum ChatBlock: Identifiable {
     case user(id: UUID, text: String, ts: String?)
     case assistant(AssistantBlock)
     case device(id: UUID, text: String, ts: String?)
-    case job(JobBlock)
+    case task(TaskBlock)
     case done(id: UUID, goal: String, results: [[String: String]])
     case confirm(ConfirmBlock)
     case locate(LocateBlock)
@@ -757,7 +760,7 @@ enum ChatBlock: Identifiable {
         case .user(let id, _, _): return id.uuidString
         case .assistant(let a): return a.id.uuidString
         case .device(let id, _, _): return id.uuidString
-        case .job(let j): return j.id.uuidString
+        case .task(let j): return j.id.uuidString
         case .done(let id, _, _): return id.uuidString
         case .confirm(let c): return c.id.uuidString
         case .locate(let l): return l.id.uuidString
@@ -779,20 +782,22 @@ extension ChatBlock {
         var ts: String?
     }
 
-    struct JobBlock: Hashable {
+    /// 任务进度卡（task_update）。taskId 就是任务 id；confirmId 是嵌在卡里的
+    /// 授权单号（operate 的 confirm_id），不是任务 id —— B 批把这两个概念拆开了。
+    struct TaskBlock: Hashable {
         let id = UUID()
-        var jobId: String
+        var taskId: String
         var goal: String
         var pct: Int
         var status: String
         var message: String
-        var confirmTaskId: String?
+        var confirmId: String?
         var results: [[String: String]]?
     }
 
     struct ConfirmBlock: Hashable {
         let id = UUID()
-        var taskId: String
+        var confirmId: String
         var summary: String
         var resolved: ConfirmStatus?
     }
@@ -800,8 +805,8 @@ extension ChatBlock {
     // operate 人工求助：显示截图；用户可①拖箭头指位 ②文字纠偏 ③暂停我来（之后可继续）。
     struct LocateBlock: Hashable {
         let id = UUID()
-        var taskId: String
-        var jobId: String
+        var askId: String          // 这次求助的单号（回答用它）；一次操控可能求助多次
+        var runId: String          // 这次操控运行的编号（「暂停后继续」用它）
         var imageUrl: String       // 服务端相对路径（如 /files/<id>），显示时拼 baseUrl
         var target: String
         var hint: String
@@ -883,8 +888,8 @@ extension ChatBlock {
         .assistant(data)
     }
 
-    static func jobBlock(jobId: String, goal: String, pct: Int, status: String, message: String, confirmTaskId: String?, results: [[String: String]]?) -> ChatBlock {
-        .job(JobBlock(jobId: jobId, goal: goal, pct: pct, status: status, message: message, confirmTaskId: confirmTaskId, results: results))
+    static func taskBlock(taskId: String, goal: String, pct: Int, status: String, message: String, confirmId: String?, results: [[String: String]]?) -> ChatBlock {
+        .task(TaskBlock(taskId: taskId, goal: goal, pct: pct, status: status, message: message, confirmId: confirmId, results: results))
     }
 }
 
@@ -893,8 +898,8 @@ struct ConfirmRequest: Identifiable {
     let id: String
     let summary: String
 
-    init(taskId: String, summary: String) {
-        self.id = taskId
+    init(confirmId: String, summary: String) {
+        self.id = confirmId
         self.summary = summary
     }
 }

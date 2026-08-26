@@ -32,15 +32,16 @@ struct UmbraShell: View {
 
     /// 底栏角标，两个都是真实数据：
     ///   聊天 = 有新消息的**会话数**（服务端没给条数，不编）；
-    ///   工具 = 已逾期的提醒 + 待确认的任务（稿原话：一级 tab 上的数字要能让人
-    ///   立刻决定要不要点 —— 「今天晚些时候」的提醒不该顶个红点催人）。
+    ///   工具 = 已逾期的提醒 + 失败的任务（稿原话：一级 tab 上的数字要能让人
+    ///   立刻决定要不要点）。「待确认」那档随旧代理状态删了（B 批），失败是
+    ///   现在唯一需要人来处理的任务终态 —— 语义变化已记回流台账，待设计确认。
     private func badge(_ tab: UmbraTab) -> Int {
         switch tab {
         case .chat:
             return chat.unread.count
         case .tool:
             let overdue = reminders.items.filter { !$0.done && $0.group == "已过期" }.count
-            let attn = tasks.jobs.filter { UmbraStatus(jobStatus: $0.status) == .awaitingReview }.count
+            let attn = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .failed }.count
             return overdue + attn
         case .me:
             return 0

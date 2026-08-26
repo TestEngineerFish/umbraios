@@ -86,29 +86,32 @@ class ChatWebSocket: ObservableObject {
         sendJSON(msg)
     }
 
-    func sendConfirm(taskId: String, approved: Bool) {
+    // B 批改名：确认单号叫 confirm_id，不再冒充任务 id（原 job_confirm_response + task_id）。
+    func sendConfirm(confirmId: String, approved: Bool) {
         guard let task = webSocketTask, task.state == .running else { return }
         let msg: [String: Any] = [
-            "type": "job_confirm_response",
-            "task_id": taskId,
+            "type": "confirm_response",
+            "confirm_id": confirmId,
             "approved": approved
         ]
         sendJSON(msg)
     }
 
-    func sendOperateStop(jobId: String? = nil) {
+    // 不带 runId = 停掉所有正在跑的操控（服务端语义）。
+    func sendOperateStop(runId: String? = nil) {
         guard let task = webSocketTask, task.state == .running else { return }
         var msg: [String: Any] = ["type": "operate_stop"]
-        if let jobId { msg["job_id"] = jobId }
+        if let runId { msg["run_id"] = runId }
         sendJSON(msg)
     }
 
     // operate 人工求助回传，三选一：
     //   箭头指位 nx,ny(归一化0-1000) / 文字纠偏 feedback / 暂停我来 paused。
-    func sendLocate(taskId: String, nx: Int? = nil, ny: Int? = nil,
+    // ask_id 是这次求助的单号（B 批改名，原 task_id）—— 一次操控可能求助多次。
+    func sendLocate(askId: String, nx: Int? = nil, ny: Int? = nil,
                     feedback: String? = nil, paused: Bool = false) {
         guard let task = webSocketTask, task.state == .running else { return }
-        var msg: [String: Any] = ["type": "operate_locate_response", "task_id": taskId]
+        var msg: [String: Any] = ["type": "operate_locate_response", "ask_id": askId]
         if paused {
             msg["paused"] = true
         } else if let feedback, !feedback.isEmpty {
@@ -120,10 +123,11 @@ class ChatWebSocket: ObservableObject {
         sendJSON(msg)
     }
 
-    // operate 暂停后「继续」：让服务端重新看屏、从当前状态接着干。
-    func sendResume(jobId: String) {
+    // operate 暂停后「继续」：让服务端重新看屏、从当前状态接着干。按 run_id 走 ——
+    // 服务端等的是「这次运行能接着跑了」，不是某张求助单。
+    func sendResume(runId: String) {
         guard let task = webSocketTask, task.state == .running else { return }
-        sendJSON(["type": "operate_resume", "job_id": jobId])
+        sendJSON(["type": "operate_resume", "run_id": runId])
     }
 
     func sendNewSession() {
@@ -231,24 +235,26 @@ struct ChatMessage {
     // tool_result
     var toolResultPreview: String? { json["preview"] as? String }
 
-    // job_update
-    var jobId: String? { json["job_id"] as? String }
-    var jobGoal: String? { json["goal"] as? String }
-    var jobStatus: String? { json["status"] as? String }
-    var jobMessage: String? { json["message"] as? String }
-    var jobOverall: Double? { json["overall"] as? Double }
-    var jobResults: [[String: String]]? { json["results"] as? [[String: String]] }
-    var jobEvent: String? { json["event"] as? String }
-    var jobNeedsConfirm: Bool? { json["needs_confirm"] as? Bool }
-    var jobConfirmTaskId: String? { json["confirm_task_id"] as? String }
-
-    // confirm
+    // task_update（引擎里程碑 + 电脑操控共用；B 批起 job_update 已死）
     var taskId: String? { json["task_id"] as? String }
+    var taskGoal: String? { json["goal"] as? String }
+    var taskStatus: String? { json["status"] as? String }
+    var taskMessage: String? { json["message"] as? String }
+    var taskOverall: Double? { json["overall"] as? Double }
+    var taskResults: [[String: String]]? { json["results"] as? [[String: String]] }
+    var taskEvent: String? { json["event"] as? String }
+    var taskNeedsConfirm: Bool? { json["needs_confirm"] as? Bool }
+    /// 这次操控运行的编号（operate 的 task_update / locate_request 带；停止与继续按它走）。
+    var runId: String? { json["run_id"] as? String }
+
+    // confirm_request / confirm_resolved（B 批改名：单号叫 confirm_id，不再冒充任务 id）
+    var confirmId: String? { json["confirm_id"] as? String }
     var confirmSummary: String? { json["summary"] as? String }
     var confirmDetail: Any? { json["detail"] }
     var confirmApproved: Bool? { json["approved"] as? Bool }
 
-    // operate_locate_request（人工箭头指位）
+    // operate_locate_request（人工箭头指位）。ask_id = 这次求助的单号。
+    var askId: String? { json["ask_id"] as? String }
     var locateImageUrl: String? { json["image_url"] as? String }
     var locateTarget: String? { json["target"] as? String }
     var locateHint: String? { json["hint"] as? String }
@@ -265,7 +271,7 @@ struct ChatMessage {
     /// **不再补默认值** —— 客户端自己猜默认值会和服务端的规整规则慢慢分叉。
     var cardQuestions: [[String: Any]]? { json["questions"] as? [[String: Any]] }
 
-    // 会话归属（job_update 带 'device:<id>'；无则视为主会话 'assistant'）
+    // 会话归属（task_update 带 'device:<id>'；无则视为主会话 'assistant'）
     var conversation: String? { json["conversation"] as? String }
 
     /// history_cleared：发起这次清空的客户端 id（服务端把 /history/clear 收到的

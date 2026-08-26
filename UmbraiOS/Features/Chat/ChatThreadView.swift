@@ -234,7 +234,7 @@ struct UmbraChatThreadView: View {
                 plainLeftBubble(text, fill: UmbraColor.deviceBubble)
             }
 
-        case .job(let j):
+        case .task(let j):
             taskCard(j)
 
         case .done(_, let goal, let results):
@@ -250,10 +250,10 @@ struct UmbraChatThreadView: View {
             // 复用既有实现（ChatView.swift）。等这块出了 iOS 设计稿再按新语言重做。
             LocateCard(
                 data: l,
-                onLocate: { nx, ny in chat.handleLocate(taskId: l.taskId, nx: nx, ny: ny) },
-                onFeedback: { chat.handleLocateFeedback(taskId: l.taskId, text: $0) },
-                onPause: { chat.handleLocatePause(taskId: l.taskId) },
-                onResume: { chat.handleResume(jobId: l.jobId, taskId: l.taskId) }
+                onLocate: { nx, ny in chat.handleLocate(askId: l.askId, nx: nx, ny: ny) },
+                onFeedback: { chat.handleLocateFeedback(askId: l.askId, text: $0) },
+                onPause: { chat.handleLocatePause(askId: l.askId) },
+                onResume: { chat.handleResume(runId: l.runId, askId: l.askId) }
             )
 
         case .note(_, let text):
@@ -428,8 +428,8 @@ struct UmbraChatThreadView: View {
 
     // MARK: 任务进度卡（TaskProgressCard）
 
-    private func taskCard(_ j: ChatBlock.JobBlock) -> some View {
-        let st = UmbraStatus(jobStatus: j.status)
+    private func taskCard(_ j: ChatBlock.TaskBlock) -> some View {
+        let st = UmbraStatus(taskStatus: j.status)
         let finished = j.status != "running" && j.status != "pending"
         return VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .top, spacing: UmbraMetric.sp3) {
@@ -467,13 +467,13 @@ struct UmbraChatThreadView: View {
             }
 
             // 任务卡上顺带要确认：批准/总是允许/拒绝，和确认卡同一套动作。
-            if let taskId = j.confirmTaskId {
-                confirmActions(taskId: taskId)
+            if let confirmId = j.confirmId {
+                confirmActions(confirmId: confirmId)
             }
 
             if finished {
                 UmbraButton(title: st == .failed ? "重试任务" : "查看结果", kind: .secondary, height: 44) {
-                    router.go(.taskDetail(id: j.jobId))
+                    router.go(.taskDetail(id: j.taskId))
                 }
             }
         }
@@ -574,7 +574,7 @@ struct UmbraChatThreadView: View {
                     .foregroundColor(UmbraColor.text)
                     .lineSpacing(14.5 * 0.55)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                if c.resolved == nil { confirmActions(taskId: c.taskId) }
+                if c.resolved == nil { confirmActions(confirmId: c.confirmId) }
             }
             .padding(.horizontal, 13)
             .padding(.vertical, UmbraMetric.sp4)
@@ -591,17 +591,17 @@ struct UmbraChatThreadView: View {
 
     /// 批准 / 总是允许 / 拒绝。「拒绝」是描边红不是实心红 ——
     /// 实心红全 App 只出现在确认弹窗的最终动作上。
-    private func confirmActions(taskId: String) -> some View {
+    private func confirmActions(confirmId: String) -> some View {
         VStack(spacing: 7) {
             UmbraButton(title: "批准", kind: .primary, height: 44) {
-                chat.handleConfirm(taskId: taskId, approved: true)
+                chat.handleConfirm(confirmId: confirmId, approved: true)
             }
             HStack(spacing: 7) {
                 UmbraButton(title: "总是允许", kind: .secondary, height: 44) {
-                    chat.handleConfirmAlways(taskId: taskId)
+                    chat.handleConfirmAlways(confirmId: confirmId)
                 }
                 UmbraButton(title: "拒绝", kind: .dangerOutline, height: 44) {
-                    chat.handleConfirm(taskId: taskId, approved: false)
+                    chat.handleConfirm(confirmId: confirmId, approved: false)
                 }
             }
         }
@@ -986,13 +986,13 @@ struct UmbraBlinkCaret: View {
 // MARK: - 任务状态映射
 
 extension UmbraStatus {
-    /// 服务端 job status 字符串 → 状态枚举。认不出来的一律当「执行中」，
+    /// 服务端任务/操控 status 字符串 → 状态枚举。认不出来的一律当「执行中」，
     /// 不要新造一档 —— 界面上多一个没人认识的状态比暂时显示执行中更糟。
-    init(jobStatus: String) {
-        switch jobStatus {
+    init(taskStatus: String) {
+        switch taskStatus {
         case "done", "succeeded", "success": self = .done
         case "failed", "error": self = .failed
-        case "awaiting_review", "needs_confirm": self = .awaitingReview
+        case "awaiting_confirm": self = .awaitingReview   // 操控停下来等你授权（进度卡琥珀档）
         case "suspended", "paused": self = .suspended
         case "pending", "queued": self = .pending
         case "cancelled", "canceled", "stopped": self = .cancelled

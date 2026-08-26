@@ -18,12 +18,12 @@ enum UmbraWidgetBridge {
     // MARK: 任务
 
     @MainActor
-    static func syncTasks(_ jobs: [Job]) {
-        let running = jobs.first { $0.status == "running" }
-        let todayDone = jobs.filter { $0.status == "done" && UmbraShared.isToday($0.updated_at) }.count
+    static func syncTasks(_ items: [TaskItem]) {
+        let running = items.first { $0.status == "running" }
+        let todayDone = items.filter { $0.status == "done" && UmbraShared.isToday($0.updated_at) }.count
         UmbraShared.save(UmbraTaskSnapshot(
             runningId: running?.id,
-            // 存短标题：小组件那块地方放不下整段描述（Job.title 会在没有短标题时退回 goal）。
+            // 存短标题：小组件那块地方放不下整段描述（TaskItem.title 会在没有短标题时退回 goal）。
             runningTitle: running?.title,
             stepsDone: running?.steps_done ?? 0,
             stepsTotal: running?.steps_total ?? 0,
@@ -31,7 +31,7 @@ enum UmbraWidgetBridge {
             savedAt: Date()))
         print("[UmbraWidget] 任务快照已写：appGroup生效=\(UmbraShared.appGroupReady) 执行中=\(running?.id ?? "无") 今天完成=\(todayDone)")
         WidgetCenter.shared.reloadTimelines(ofKind: UmbraShared.taskWidgetKind)
-        UmbraLiveActivityController.shared.sync(with: jobs)
+        UmbraLiveActivityController.shared.sync(with: items)
     }
 
     // MARK: 提醒
@@ -68,15 +68,15 @@ final class UmbraLiveActivityController {
 
     private var activity: Activity<UmbraTaskActivityAttributes>?
 
-    func sync(with jobs: [Job]) {
-        if let job = jobs.first(where: { $0.status == "running" }) {
+    func sync(with items: [TaskItem]) {
+        if let task = items.first(where: { $0.status == "running" }) {
             let state = UmbraTaskActivityAttributes.ContentState(
-                stepsDone: job.steps_done ?? 0,
-                stepsTotal: job.steps_total ?? 0,
-                statusLine: line(for: job),
+                stepsDone: task.steps_done ?? 0,
+                stepsTotal: task.steps_total ?? 0,
+                statusLine: line(for: task),
                 finished: false, failed: false)
 
-            if let act = activity, act.attributes.jobId == job.id {
+            if let act = activity, act.attributes.taskId == task.id {
                 Task { await act.update(ActivityContent(state: state, staleDate: nil)) }
             } else {
                 // 换了任务：结束旧的（不留收尾帧，旧任务的状态在列表里看）。
@@ -84,12 +84,12 @@ final class UmbraLiveActivityController {
                 // 用户在系统设置里关了实况就不请求 —— 请求也只会抛错。
                 guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
                 activity = try? Activity.request(
-                    attributes: UmbraTaskActivityAttributes(jobId: job.id, goal: job.goal),
+                    attributes: UmbraTaskActivityAttributes(taskId: task.id, goal: task.goal),
                     content: ActivityContent(state: state, staleDate: nil))
             }
         } else if let act = activity {
             // 没有执行中任务了：找到刚跟丢的那条，推收尾帧（完成绿勾/失败）再结束。
-            let ended = jobs.first { $0.id == act.attributes.jobId }
+            let ended = items.first { $0.id == act.attributes.taskId }
             let failed = ended?.status == "failed"
             let final = UmbraTaskActivityAttributes.ContentState(
                 stepsDone: ended?.steps_done ?? 0,
@@ -115,9 +115,9 @@ final class UmbraLiveActivityController {
     }
 
     /// 「第 3/5 步」；服务端没给步骤数就用状态词，不编进度。
-    private func line(for job: Job) -> String {
-        if let t = job.steps_total, t > 0 {
-            return "第 \(min((job.steps_done ?? 0) + 1, t))/\(t) 步"
+    private func line(for task: TaskItem) -> String {
+        if let t = task.steps_total, t > 0 {
+            return "第 \(min((task.steps_done ?? 0) + 1, t))/\(t) 步"
         }
         return "执行中"
     }

@@ -16,7 +16,7 @@ import Foundation
 // MARK: - 线格式（对齐服务端 /reminders 的 JSON）
 
 /// 服务端的一条提醒。字段名刻意用 snake_case 直接对齐服务端 JSON
-/// （跟 Models.swift 里的 Job 一样），省掉一层 CodingKeys，改字段时少一处能漏。
+/// （跟 Models.swift 里的 TaskItem 一样），省掉一层 CodingKeys，改字段时少一处能漏。
 struct ReminderDTO: Codable {
     let id: String
     let text: String

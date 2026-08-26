@@ -54,11 +54,11 @@ class HTTPService {
         _ = try? await APISession.shared.data(for: req)
     }
 
-    // MARK: - Jobs
+    // MARK: - Tasks（B 批改名：/jobs → /tasks，模型 Job → TaskItem）
     /// 失败返回 nil 而不是空数组 —— 「拉失败了」和「真的没有任务」是两回事，
     /// 混成一个值的话，断网时每次轮询都会把列表清成空的（真踩过）。
-    func fetchJobs(limit: Int = 30, status: String? = nil) async -> [Job]? {
-        var components = URLComponents(string: "\(baseUrl)/jobs")
+    func fetchTasks(limit: Int = 30, status: String? = nil) async -> [TaskItem]? {
+        var components = URLComponents(string: "\(baseUrl)/tasks")
         var items = [URLQueryItem(name: "limit", value: String(limit))]
         if let status { items.append(URLQueryItem(name: "status", value: status)) }
         components?.queryItems = items
@@ -66,15 +66,15 @@ class HTTPService {
         return await request(components?.url)
     }
 
-    func fetchJobDetail(id: String) async -> JobDetail? {
-        guard let url = URL(string: "\(baseUrl)/jobs/\(id)") else { return nil }
+    func fetchTaskDetail(id: String) async -> TaskDetail? {
+        guard let url = URL(string: "\(baseUrl)/tasks/\(id)") else { return nil }
         return await request(url)
     }
 
-    // 强制结束一个正在跑/暂停中的 operate 任务（任务列表「结束任务」）。
+    // 强制结束一个正在跑/挂起中的任务（电脑操控任务也认：服务端先唤醒它的等待再收尾）。
     @discardableResult
-    func stopJob(id: String) async -> Bool {
-        guard let url = URL(string: "\(baseUrl)/jobs/\(id)/stop") else { return false }
+    func stopTask(id: String) async -> Bool {
+        guard let url = URL(string: "\(baseUrl)/tasks/\(id)/stop") else { return false }
         var req = URLRequest(url: url)
         req.httpMethod = "POST"
         for (k, v) in headers { req.setValue(v, forHTTPHeaderField: k) }
@@ -89,7 +89,7 @@ class HTTPService {
     // MARK: - Reminders（提醒跨端同步）
 
     /// 拉提醒增量。since=0 是全量。
-    /// 失败返回 nil（同 fetchJobs 的取向）—— 「拉失败了」和「服务端真的没有提醒」
+    /// 失败返回 nil（同 fetchTasks 的取向）—— 「拉失败了」和「服务端真的没有提醒」
     /// 是两回事，混成一个值的话断网时会把本地缓存合并成空的。
     func fetchReminders(since: Int64) async -> ReminderListDTO? {
         var components = URLComponents(string: "\(baseUrl)/reminders")
@@ -137,7 +137,7 @@ class HTTPService {
     }
 
     // MARK: - Inspirations（灵感速记）
-    /// 同 fetchJobs：失败返回 nil，别把列表清空。
+    /// 同 fetchTasks：失败返回 nil，别把列表清空。
     func fetchInspirations(status: String? = nil) async -> [Inspiration]? {
         var components = URLComponents(string: "\(baseUrl)/inspirations")
         if let status, !status.isEmpty {
@@ -234,7 +234,7 @@ class HTTPService {
     //
     // 字段名照抄服务端 JSON（拍板 D2），DTO 在 Features/Money/MoneySync.swift。
     // 取数失败一律回 nil 而不是空值 —— 「拉失败了」和「这个月真的没记账」是两回事，
-    // 混成一个值的话断网会被渲染成「这个月还没有记账」（fetchJobs 的同一条教训）。
+    // 混成一个值的话断网会被渲染成「这个月还没有记账」（fetchTasks 的同一条教训）。
 
     /// 分类列表。includeDisabled 只给分类管理页用：停用的要能看见、能开回来。
     func fetchMoneyCats(includeDisabled: Bool = false) async -> [MoneyCatDTO]? {
@@ -388,7 +388,7 @@ class HTTPService {
     }
 
     /// 所有已知设备（含离线），聊天页的联系人列表。
-    /// 同 fetchJobs：失败返回 nil，联系人列表保持旧数据。
+    /// 同 fetchTasks：失败返回 nil，联系人列表保持旧数据。
     func fetchAllDevices() async -> [KnownDevice]? {
         guard let url = URL(string: "\(baseUrl)/devices/all") else { return nil }
         return await request(url)

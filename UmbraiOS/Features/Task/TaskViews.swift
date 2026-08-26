@@ -1,10 +1,10 @@
 // 任务 · 列表（task.list）与详情（task.detail）。
 //
-// 数据来自既有的 TasksViewModel / HTTPService（GET /jobs、GET /jobs/{id}、POST 停止）。
-// 设计稿里有、服务端还没有的三块，这里**不画**，而不是画个空壳：
-//   · 「验收清单」—— Job 结构里没有这个字段；
-//   · 「生成结果 / 下载结果」—— 服务端只回一个 result_summary 字符串，没有文件清单；
-//   · 「重试任务」—— 没有重试接口（只有停止）。
+// 数据来自 TasksViewModel / HTTPService（GET /tasks、GET /tasks/{id}、POST 停止）。
+// 设计稿里有、iOS 还没接的三块，这里**不画**，而不是画个空壳（都记在回流台账）：
+//   · 「验收清单」—— 服务端已回 checklist 字段，iOS 一期未接；
+//   · 「生成结果 / 下载结果」—— 步骤 artifacts 已有，iOS 未画文件清单；
+//   · 「重试任务」—— 服务端已有 /tasks/{id}/retry（PC 已接），iOS 未接。
 // 「计划」分段是设计稿自己标了「二期 · 待服务端」的，这里如实说明，不放假数据。
 import SwiftUI
 import UIKit
@@ -48,22 +48,22 @@ struct UmbraTaskListView: View {
         // 点内容区任意空白收键盘。simultaneousGesture 不吞行内按钮的点击；
         // 只在真有焦点时动手，避免和「点图标展开搜索」抢同一下点击。
         .simultaneousGesture(TapGesture().onEnded { if searchFocused { searchFocused = false } })
-        .refreshable { await tasks.refreshJobs() }
+        .refreshable { await tasks.refreshTasks() }
         .onAppear { tasks.startPolling() }
         .onDisappear { tasks.stopPolling() }
     }
 
     private var counts: String {
-        let running = tasks.jobs.filter { UmbraStatus(jobStatus: $0.status) == .running }.count
-        return "共 \(tasks.jobs.count) 个 · \(running) 个执行中"
+        let running = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .running }.count
+        return "共 \(tasks.items.count) 个 · \(running) 个执行中"
     }
 
     // MARK: 历史
 
-    private var filtered: [Job] {
+    private var filtered: [TaskItem] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return tasks.jobs.filter { j in
-            if let f = filter, UmbraStatus(jobStatus: j.status) != f { return false }
+        return tasks.items.filter { j in
+            if let f = filter, UmbraStatus(taskStatus: j.status) != f { return false }
             if !q.isEmpty && !(j.title + j.goal + (j.result_summary ?? "")).localizedCaseInsensitiveContains(q) { return false }
             return true
         }
@@ -73,10 +73,11 @@ struct UmbraTaskListView: View {
     /// 比拿字符串当 key 少一层「中文标签 ↔ 状态」的翻译，也就少一处能对不上的地方。
     private var chipItems: [UmbraFilterChips<OptionalStatus>.Item] {
         var out: [UmbraFilterChips<OptionalStatus>.Item] = [
-            .init(value: OptionalStatus(nil), label: "全部", count: tasks.jobs.count)
+            .init(value: OptionalStatus(nil), label: "全部", count: tasks.items.count)
         ]
-        for st in [UmbraStatus.running, .awaitingReview, .pending, .done, .failed] {
-            let n = tasks.jobs.filter { UmbraStatus(jobStatus: $0.status) == st }.count
+        // 待确认（awaitingReview）那档随旧代理状态一起删了：任务行只有服务端那六个状态。
+        for st in [UmbraStatus.running, .pending, .done, .failed] {
+            let n = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == st }.count
             out.append(.init(value: OptionalStatus(st), label: st.label, count: n))
         }
         return out
@@ -102,8 +103,8 @@ struct UmbraTaskListView: View {
                     hint: emptyBody)
             } else {
                 VStack(spacing: 9) {
-                    ForEach(filtered) { job in
-                        taskRow(job)
+                    ForEach(filtered) { t in
+                        taskRow(t)
                     }
                 }
                 .padding(.horizontal, UmbraMetric.pagePadX)
@@ -123,19 +124,19 @@ struct UmbraTaskListView: View {
         return filter == nil ? "在聊天里描述目标，Umbra 会自动建任务。" : "清掉筛选就能看到全部。"
     }
 
-    private func taskRow(_ job: Job) -> some View {
-        let st = UmbraStatus(jobStatus: job.status)
-        let total = job.steps_total ?? 0
-        let done = job.steps_done ?? 0
+    private func taskRow(_ task: TaskItem) -> some View {
+        let st = UmbraStatus(taskStatus: task.status)
+        let total = task.steps_total ?? 0
+        let done = task.steps_done ?? 0
         return Button {
-            router.go(.taskDetail(id: job.id))
+            router.go(.taskDetail(id: task.id))
         } label: {
             // 不再单画一个状态图标方块：标题下面那行 UmbraStatusBadge 已经是
             // 图标 + 文字的完整状态表达，再来一个就是同一信息说两遍（用户点名去掉）。
             VStack(alignment: .leading, spacing: 7) {
                 // 标题位放**短标题**，描述降为副行 —— 与 PC 端一致。
                 // 原来这里直接写 goal，整段需求描述占着标题位，两端看着像两个东西。
-                Text(job.title)
+                Text(task.title)
                     .font(UmbraFont.sans(16, .w400))
                     .foregroundColor(UmbraColor.text)
                     .lineSpacing(16 * 0.4)
@@ -143,10 +144,10 @@ struct UmbraTaskListView: View {
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                // 有短标题时才补一行描述；旧 Job 没有 name，title 已经是 goal，
+                // 有短标题时才补一行描述；旧数据没有 name，title 已经是 goal，
                 // 再画一遍就是同一句话说两遍。
-                if job.name?.isEmpty == false {
-                    Text(job.goal)
+                if task.name?.isEmpty == false {
+                    Text(task.goal)
                         .font(UmbraFont.sans(13.5, .w400))
                         .foregroundColor(UmbraColor.muted)
                         .lineSpacing(13.5 * 0.4)
@@ -157,12 +158,12 @@ struct UmbraTaskListView: View {
 
                 HStack(spacing: 7) {
                     UmbraStatusBadge(status: st)
-                    if let ch = job.channel, !ch.isEmpty {
+                    if let ch = task.channel, !ch.isEmpty {
                         Text("来自 \(ch)")
                             .font(UmbraFont.sans(13, .w400))
                             .foregroundColor(UmbraColor.faint)
                     }
-                    Text("· \(UmbraTime.relative(job.updated_at))")
+                    Text("· \(UmbraTime.relative(task.updated_at))")
                         .font(UmbraFont.sans(13, .w400))
                         .foregroundColor(UmbraColor.faint)
                     Spacer(minLength: 0)
@@ -228,7 +229,7 @@ struct UmbraTaskDetailView: View {
 
     @State private var showRawError = false
 
-    private var detail: JobDetail? { tasks.jobDetail?.job.id == id ? tasks.jobDetail : nil }
+    private var detail: TaskDetail? { tasks.detail?.task.id == id ? tasks.detail : nil }
 
     var body: some View {
         UmbraScreen(content: {
@@ -247,32 +248,32 @@ struct UmbraTaskDetailView: View {
         })
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
-        .onAppear { Task { await tasks.loadJobDetail(id: id) } }
-        .onDisappear { tasks.closeJobDetail() }
+        .onAppear { Task { await tasks.loadTaskDetail(id: id) } }
+        .onDisappear { tasks.closeTaskDetail() }
     }
 
     /// 顶栏标题：优先用任务短标题，拿不到详情时退回短 ID。
     /// 原来固定显示短 ID —— 一串 06731c54 谁也读不出这是哪个任务，
     /// 而完整 ID 在下面的详情表里本来就有一行（不会丢）。
     private var navTitle: String {
-        if let t = detail?.job.title, !t.isEmpty { return t }
+        if let t = detail?.task.title, !t.isEmpty { return t }
         return String(id.prefix(8))
     }
 
     @ViewBuilder
-    private func content(_ d: JobDetail) -> some View {
-        let st = UmbraStatus(jobStatus: d.job.status)
+    private func content(_ d: TaskDetail) -> some View {
+        let st = UmbraStatus(taskStatus: d.task.status)
 
         // 目标 + 状态
         VStack(alignment: .leading, spacing: 11) {
             // 同列表：标题位是短标题，整段描述放下面一行。
-            Text(d.job.title)
+            Text(d.task.title)
                 .font(UmbraFont.sans(19, .w560))
                 .foregroundColor(UmbraColor.text)
                 .lineSpacing(19 * 0.45)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            if d.job.name?.isEmpty == false {
-                Text(d.job.goal)
+            if d.task.name?.isEmpty == false {
+                Text(d.task.goal)
                     .font(UmbraFont.sans(15, .w400))
                     .foregroundColor(UmbraColor.muted)
                     .lineSpacing(15 * 0.5)
@@ -281,7 +282,7 @@ struct UmbraTaskDetailView: View {
             }
             HStack(spacing: 8) {
                 UmbraStatusBadge(status: st, compact: false)
-                if let ch = d.job.channel, !ch.isEmpty {
+                if let ch = d.task.channel, !ch.isEmpty {
                     Text("来自 \(ch)")
                         .font(UmbraFont.sans(13, .w400))
                         .foregroundColor(UmbraColor.faint)
@@ -297,7 +298,7 @@ struct UmbraTaskDetailView: View {
             HStack(alignment: .firstTextBaseline) {
                 UmbraFieldLabel(text: "总进度")
                 Spacer(minLength: 0)
-                Text("\(doneCount(d)) / \(d.subtasks.count)")
+                Text("\(doneCount(d)) / \(d.steps.count)")
                     .font(UmbraFont.mono(13, .w560))
                     .foregroundColor(UmbraColor.text)
             }
@@ -326,11 +327,11 @@ struct UmbraTaskDetailView: View {
         .sectionDivider()
 
         // 步骤
-        if !d.subtasks.isEmpty {
+        if !d.steps.isEmpty {
             VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
-                UmbraFieldLabel(text: "步骤 · \(d.subtasks.count)")
+                UmbraFieldLabel(text: "步骤 · \(d.steps.count)")
                 VStack(spacing: 2) {
-                    ForEach(d.subtasks) { s in stepRow(s) }
+                    ForEach(d.steps) { s in stepRow(s) }
                 }
             }
             .padding(UmbraMetric.pagePadX)
@@ -350,7 +351,7 @@ struct UmbraTaskDetailView: View {
         }
 
         // 结果摘要 / 错误三段式
-        if let summary = d.job.result_summary, !summary.isEmpty {
+        if let summary = d.task.result_summary, !summary.isEmpty {
             if st == .failed {
                 errorBlock(summary)
             } else {
@@ -369,31 +370,31 @@ struct UmbraTaskDetailView: View {
         }
     }
 
-    private func doneCount(_ d: JobDetail) -> Int {
-        d.subtasks.filter { UmbraStatus(jobStatus: $0.status) == .done }.count
+    private func doneCount(_ d: TaskDetail) -> Int {
+        d.steps.filter { UmbraStatus(taskStatus: $0.status) == .done }.count
     }
 
-    private func progress(_ d: JobDetail) -> Double {
-        if d.job.status == "done" { return 1 }
-        guard !d.subtasks.isEmpty else { return 0 }
-        return Double(doneCount(d)) / Double(d.subtasks.count)
+    private func progress(_ d: TaskDetail) -> Double {
+        if d.task.status == "done" { return 1 }
+        guard !d.steps.isEmpty else { return 0 }
+        return Double(doneCount(d)) / Double(d.steps.count)
     }
 
     /// 概要字段只列**服务端真给了的**。给不了的（预计耗时、执行设备汇总）不占位。
-    private func stats(_ d: JobDetail) -> [(String, String)] {
+    private func stats(_ d: TaskDetail) -> [(String, String)] {
         var out: [(String, String)] = []
-        out.append(("任务 ID", d.job.id))
-        if let ch = d.job.channel, !ch.isEmpty { out.append(("来源", ch)) }
-        out.append(("创建", UmbraTime.absolute(d.job.created_at)))
-        out.append(("更新", UmbraTime.absolute(d.job.updated_at)))
-        out.append(("步骤", "\(doneCount(d)) / \(d.subtasks.count)"))
-        let failed = d.subtasks.filter { UmbraStatus(jobStatus: $0.status) == .failed }.count
+        out.append(("任务 ID", d.task.id))
+        if let ch = d.task.channel, !ch.isEmpty { out.append(("来源", ch)) }
+        out.append(("创建", UmbraTime.absolute(d.task.created_at)))
+        out.append(("更新", UmbraTime.absolute(d.task.updated_at)))
+        out.append(("步骤", "\(doneCount(d)) / \(d.steps.count)"))
+        let failed = d.steps.filter { UmbraStatus(taskStatus: $0.status) == .failed }.count
         if failed > 0 { out.append(("失败步骤", "\(failed)")) }
         return out
     }
 
-    private func stepRow(_ s: Subtask) -> some View {
-        let st = UmbraStatus(jobStatus: s.status)
+    private func stepRow(_ s: TaskStep) -> some View {
+        let st = UmbraStatus(taskStatus: s.status)
         return HStack(alignment: .top, spacing: 10) {
             ZStack {
                 RoundedRectangle(cornerRadius: 6, style: .continuous).fill(st.soft)
@@ -411,12 +412,16 @@ struct UmbraTaskDetailView: View {
                     .font(UmbraFont.sans(15, .w400))
                     .foregroundColor(UmbraColor.text)
                     .lineSpacing(15 * 0.45)
-                if let p = s.provider, !p.isEmpty {
-                    Text("能力：\(p)\(s.skill.map { " · \($0)" } ?? "")")
+                // provider/skill 已随统一执行轮模型从接口消失，原来那行「能力：…」
+                // 换成这一步的人话说明（detail，如「设备不在线，挂起等待」）——
+                // 这层信息 PC 一直在显示，iOS 原来因为没声明字段而整层看不见。
+                if let note = s.detail, !note.isEmpty, s.error == nil {
+                    Text(note)
                         .font(UmbraFont.sans(12.5, .w400))
                         .foregroundColor(UmbraColor.faint)
+                        .lineSpacing(12.5 * 0.45)
                 }
-                if let err = s.error, !err.isEmpty {
+                if let err = s.error?.message, !err.isEmpty {
                     Text(err)
                         .font(UmbraFont.sans(13, .w400))
                         .foregroundColor(UmbraColor.muted)
@@ -435,7 +440,7 @@ struct UmbraTaskDetailView: View {
         }
     }
 
-    private func eventRow(_ e: JobEvent) -> some View {
+    private func eventRow(_ e: TaskEvent) -> some View {
         HStack(alignment: .top, spacing: 11) {
             VStack(spacing: 0) {
                 Circle()
@@ -464,7 +469,7 @@ struct UmbraTaskDetailView: View {
         switch type {
         case "error", "failed": return UmbraColor.danger
         case "done", "finished", "succeeded": return UmbraColor.success
-        case "warning", "awaiting_review": return UmbraColor.warning
+        case "warning": return UmbraColor.warning
         default: return UmbraColor.faint
         }
     }
@@ -473,9 +478,9 @@ struct UmbraTaskDetailView: View {
     /// 第一段取失败步骤的名字（服务端给得出），第二段是它的错误信息，
     /// 第三段是可点的按钮。三段缺一不可 —— 这条是文案硬规则。
     private func errorBlock(_ summary: String) -> some View {
-        let failedStep = detail?.subtasks.first { UmbraStatus(jobStatus: $0.status) == .failed }
+        let failedStep = detail?.steps.first { UmbraStatus(taskStatus: $0.status) == .failed }
         let what = failedStep.map { "第 \($0.seq) 步中断：\($0.title ?? "未命名步骤")" } ?? "任务失败"
-        let why = failedStep?.error ?? summary
+        let why = failedStep?.error?.message ?? summary
         return VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
             HStack(spacing: 7) {
                 UmbraIcon(d: UmbraIconPath.xCircle, size: 15, strokeWidth: 2.1)
@@ -519,11 +524,11 @@ struct UmbraTaskDetailView: View {
         .padding(UmbraMetric.pagePadX)
     }
 
-    /// 底部动作条。**没有「重试任务」**——服务端没有重试接口，
-    /// 摆一个点了没反应的按钮比不摆更糟。
-    private func bottomBar(_ d: JobDetail) -> some View {
+    /// 底部动作条。**还没有「重试任务」**——服务端已有 /tasks/{id}/retry（PC 已接），
+    /// iOS 待接（记在回流台账）；在接上之前不摆一个点了没反应的按钮。
+    private func bottomBar(_ d: TaskDetail) -> some View {
         UmbraBottomBar {
-            if TasksViewModel.isActive(d.job.status) {
+            if TasksViewModel.isActive(d.task.status) {
                 UmbraButton(title: "停止任务", kind: .dangerOutline) {
                     router.confirm(UmbraAlert(
                         title: "停止这个任务？",
@@ -532,8 +537,8 @@ struct UmbraTaskDetailView: View {
                         confirmDestructive: true,
                         onConfirm: {
                             Task {
-                                await tasks.stopJob(id: d.job.id)
-                                await tasks.loadJobDetail(id: d.job.id)
+                                await tasks.stopTask(id: d.task.id)
+                                await tasks.loadTaskDetail(id: d.task.id)
                             }
                             router.showToast("已发出停止")
                         }))
@@ -546,17 +551,17 @@ struct UmbraTaskDetailView: View {
         }
     }
 
-    private func plainText(_ d: JobDetail) -> String {
-        var lines = ["任务 \(d.job.id)", d.job.title, d.job.goal,
-                     "状态：\(UmbraStatus(jobStatus: d.job.status).label)"]
-        if let ch = d.job.channel { lines.append("来源：\(ch)") }
-        lines.append("创建：\(UmbraTime.absolute(d.job.created_at))")
+    private func plainText(_ d: TaskDetail) -> String {
+        var lines = ["任务 \(d.task.id)", d.task.title, d.task.goal,
+                     "状态：\(UmbraStatus(taskStatus: d.task.status).label)"]
+        if let ch = d.task.channel { lines.append("来源：\(ch)") }
+        lines.append("创建：\(UmbraTime.absolute(d.task.created_at))")
         lines.append("")
-        for s in d.subtasks {
-            lines.append("\(s.seq). [\(UmbraStatus(jobStatus: s.status).label)] \(s.title ?? "")")
-            if let e = s.error, !e.isEmpty { lines.append("   错误：\(e)") }
+        for s in d.steps {
+            lines.append("\(s.seq). [\(UmbraStatus(taskStatus: s.status).label)] \(s.title ?? "")")
+            if let e = s.error?.message, !e.isEmpty { lines.append("   错误：\(e)") }
         }
-        if let sum = d.job.result_summary, !sum.isEmpty {
+        if let sum = d.task.result_summary, !sum.isEmpty {
             lines.append("")
             lines.append("结果：\(sum)")
         }
