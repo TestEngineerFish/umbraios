@@ -100,6 +100,35 @@ struct UmbraReminder: Codable, Identifiable, Equatable {
         repeatRule == "自定义" ? "每 \(max(1, customN)) \(customFreq)一次" : repeatRule
     }
 
+    /// 选「指定日期」那一刻给的默认结束日 —— **跨端统一规则**（2026-08-27 拍板，PC 先落，
+    /// 正本在 doc/提醒同步与消息送达-设计草案.md「结束重复的默认值」一节，PC 实现是
+    /// reminderKit.defaultRepeatEnd，两端必须逐字一致）：
+    /// 按重复类型往后铺一段「像一个周期」的长度 —— 每天/工作日 +1 个月；每周 +3 个月；
+    /// 每月 +1 年；自定义按单位放大（小时 +7 天、天 +min(n,6) 个月、周 +3×min(n,4) 个月、
+    /// 月 +min(n,3) 年、年 +5×min(n,2) 年）。起点取「提醒时刻」和「现在」里更晚的那个 ——
+    /// 编辑老提醒时默认不该落在今天以前。落点取当天 23:59:59（触发推进判 `at > end`，含当天）。
+    /// 原来这里是一刀切 +30 天，与 PC 对不上，验收拍板对齐。
+    var defaultRepeatEnd: Date {
+        let cal = Calendar.current
+        let base = max(at, Date())
+        let n = max(1, customN)
+        let end: Date
+        switch repeatRule {
+        case "每周": end = cal.date(byAdding: .month, value: 3, to: base) ?? base
+        case "每月": end = cal.date(byAdding: .year, value: 1, to: base) ?? base
+        case "自定义":
+            switch customFreq {
+            case "小时": end = cal.date(byAdding: .day, value: 7, to: base) ?? base
+            case "周": end = cal.date(byAdding: .month, value: 3 * min(n, 4), to: base) ?? base
+            case "月": end = cal.date(byAdding: .year, value: min(n, 3), to: base) ?? base
+            case "年": end = cal.date(byAdding: .year, value: 5 * min(n, 2), to: base) ?? base
+            default: end = cal.date(byAdding: .month, value: min(n, 6), to: base) ?? base   // 天
+            }
+        default: end = cal.date(byAdding: .month, value: 1, to: base) ?? base   // 每天 / 工作日
+        }
+        return cal.date(bySettingHour: 23, minute: 59, second: 59, of: end) ?? end
+    }
+
     var overdue: Bool { !done && at < Date() }
 
     /// 列表分组。**过期在最前** —— 过期的提醒最需要被看见。
@@ -762,7 +791,7 @@ struct UmbraReminderDetailView: View {
         .umbraWheelPicker(isPresented: $pickTime, title: "选择时间", mode: .time,
                           date: Binding(get: { draft?.at ?? Date() }, set: { draft?.at = $0 }))
         .umbraWheelPicker(isPresented: $pickEndDate, title: "结束日期", mode: .date,
-                          date: Binding(get: { draft?.repeatEnd ?? Date().addingTimeInterval(30 * 86400) },
+                          date: Binding(get: { draft?.repeatEnd ?? draft?.defaultRepeatEnd ?? Date() },
                                         set: { draft?.repeatEnd = $0 }))
     }
 
@@ -949,7 +978,7 @@ struct UmbraReminderEditView: View {
         .umbraWheelPicker(isPresented: $pickDate, title: "选择日期", mode: .date, date: $draft.at)
         .umbraWheelPicker(isPresented: $pickTime, title: "选择时间", mode: .time, date: $draft.at)
         .umbraWheelPicker(isPresented: $pickEndDate, title: "结束日期", mode: .date,
-                          date: Binding(get: { draft.repeatEnd ?? Date().addingTimeInterval(30 * 86400) },
+                          date: Binding(get: { draft.repeatEnd ?? draft.defaultRepeatEnd },
                                         set: { draft.repeatEnd = $0 }))
         .onAppear {
             guard !loaded else { return }
@@ -1051,7 +1080,8 @@ struct UmbraReminderForm: View {
                                 options: ["永不", "指定日期"],
                                 current: draft.repeatEnd == nil ? "永不" : "指定日期") { v in
                             if v == "永不" { draft.repeatEnd = nil }
-                            else if draft.repeatEnd == nil { draft.repeatEnd = Date().addingTimeInterval(30 * 86400) }
+                            // 默认结束日按跨端统一规则给（defaultRepeatEnd 的注释），不再一刀切 +30 天。
+                            else if draft.repeatEnd == nil { draft.repeatEnd = draft.defaultRepeatEnd }
                         }
                         if draft.repeatEnd != nil {
                             divider(inset: 32)
