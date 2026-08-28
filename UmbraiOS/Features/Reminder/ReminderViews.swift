@@ -20,6 +20,14 @@ import UserNotifications
 
 // MARK: - 模型与本机存储
 
+/// 一张附件的引用（文件本体在服务端 /files/{fileId}）。附件跟着**整条提醒** last-write-wins
+/// 同步（服务端是 reminders.atts 行内 JSON），不单独走同步 —— wire 契约见 ReminderSync.swift。
+struct ReminderAtt: Codable, Identifiable, Equatable {
+    var fileId: String
+    var label: String
+    var id: String { fileId }
+}
+
 struct UmbraReminder: Codable, Identifiable, Equatable {
     var id: String
     var text: String
@@ -45,6 +53,8 @@ struct UmbraReminder: Codable, Identifiable, Equatable {
     /// 本地改过、还没成功推给服务端。联网后补推；拉取合并时「本地 dirty 且更新」则本地赢，
     /// 否则断网期间的修改会被服务端旧值覆盖掉。
     var dirty: Bool
+    /// 附件（≤ maxAtts，一期只收图片）。2026-08-27 补齐，老缓存没有这个键，解码时给 []。
+    var atts: [ReminderAtt]
 
     static let repeatOptions = ["不重复", "每天", "每周", "每月", "工作日", "自定义"]
     static let customFreqOptions = ["小时", "天", "周", "月", "年"]
@@ -52,17 +62,26 @@ struct UmbraReminder: Codable, Identifiable, Equatable {
         ("无", 0), ("5 分钟", 5), ("15 分钟", 15), ("1 小时", 60), ("1 天", 1440)
     ]
 
+    /// 一条提醒最多几张附件。与 PC（reminderKit.MAX_ATTS）、服务端（reminders.MAX_ATTS）同一个数。
+    static let maxAtts = 4
+    /// 字数上限 —— **做在客户端、服务端刻意不限**（2026-08-27 拍板，正本在
+    /// doc/提醒同步与消息送达-设计草案.md §10.1）：服务端一限，还没跟上的端写了长文本，
+    /// 那条提醒每轮 PUT 都 400、永远同步失败。数值抄 PC（reminderKit.TEXT_MAX / NOTE_MAX）。
+    static let textMax = 200
+    static let noteMax = 1000
+
     init(id: String, text: String, at: Date, repeatRule: String = "不重复",
          customFreq: String = "天", customN: Int = 1, repeatEnd: Date? = nil,
          aheadMinutes: Int = 0, note: String = "", done: Bool = false,
          source: String = "手动添加", createdAt: Date = Date(),
-         updatedAtMs: Int64 = 0, dirty: Bool = true) {
+         updatedAtMs: Int64 = 0, dirty: Bool = true, atts: [ReminderAtt] = []) {
         self.id = id; self.text = text; self.at = at; self.repeatRule = repeatRule
         self.customFreq = customFreq; self.customN = customN; self.repeatEnd = repeatEnd
         self.aheadMinutes = aheadMinutes; self.note = note; self.done = done
         self.source = source; self.createdAt = createdAt
         self.updatedAtMs = updatedAtMs == 0 ? Date.umbraNowMs : updatedAtMs
         self.dirty = dirty
+        self.atts = atts
     }
 
     /// 手写解码：v1 存量数据没有 customFreq / repeatEnd / source 这些键，
@@ -89,6 +108,8 @@ struct UmbraReminder: Codable, Identifiable, Equatable {
         // 每次读缓存都盖新戳的话，它会永远比服务端新，服务端的修改就再也进不来了。
         updatedAtMs = try c.decodeIfPresent(Int64.self, forKey: .updatedAtMs) ?? createdAt.umbraMs
         dirty = try c.decodeIfPresent(Bool.self, forKey: .dirty) ?? true
+        // 附件是 2026-08-27 补的键：老缓存没有，缺键给空数组，别让整批存量解不出来。
+        atts = try c.decodeIfPresent([ReminderAtt].self, forKey: .atts) ?? []
     }
 
     var aheadLabel: String {
@@ -130,6 +151,40 @@ struct UmbraReminder: Codable, Identifiable, Equatable {
     }
 
     var overdue: Bool { !done && at < Date() }
+
+    /// 「再等 10 分钟 / 稍后提醒」只对**今天（含已过期）**的提醒有意义：明天的提醒
+    /// 推迟到「现在 + 10 分钟」等于把它**提前**到今天 —— PC 验收第一轮抓到的问题，两端同规则。
+    /// 已完成的也不给：它已经不会响了。
+    var canSnoozeNow: Bool {
+        guard !done else { return false }
+        let cal = Calendar.current
+        let endOfToday = cal.date(bySettingHour: 23, minute: 59, second: 59, of: Date()) ?? Date()
+        return at <= endOfToday
+    }
+
+    /// 「结束重复」的校验，与 PC（reminderKit.repeatEndError）同一套：早于提醒当天 / 早于今天
+    /// 都不许保存 —— 原来什么都能存，存出去的是一条永远不响或立刻完结的规则。
+    /// nil = 合法（含「永不」）。iOS 的结束日期从滚轮来，不存在「不完整」这一档。
+    var repeatEndProblem: String? {
+        guard repeatRule != "不重复", let end = repeatEnd else { return nil }
+        let cal = Calendar.current
+        if cal.startOfDay(for: end) < cal.startOfDay(for: at) { return "结束日期不能早于提醒日期" }
+        if cal.startOfDay(for: end) < cal.startOfDay(for: Date()) { return "结束日期已经过去了" }
+        return nil
+    }
+
+    /// 「再来一条」：拿这条（通常是已完成的）当模板起一条新的 —— 内容、备注、重复、提前量照抄，
+    /// 时间回到默认（一小时后）、结束日期按规则重新给默认。
+    /// **附件不抄**（与 PC 同规则）：文件 id 在服务端是「谁引用谁负责清」，
+    /// 两条提醒共用同一个 id，删其中一条就会把另一条的图也清掉。
+    func cloneAsNew() -> UmbraReminder {
+        var c = UmbraReminder(id: UUID().uuidString, text: text,
+                              at: Date().addingTimeInterval(3600),
+                              repeatRule: repeatRule, customFreq: customFreq, customN: customN,
+                              aheadMinutes: aheadMinutes, note: note)
+        if repeatRule != "不重复", repeatEnd != nil { c.repeatEnd = c.defaultRepeatEnd }
+        return c
+    }
 
     /// 列表分组。**过期在最前** —— 过期的提醒最需要被看见。
     var group: String {
@@ -293,6 +348,17 @@ final class ReminderStore: ObservableObject {
     }
 
     func item(_ id: String) -> UmbraReminder? { items.first { $0.id == id } }
+
+    /// 「再来一条」的模板通道：路由只认 id（.remEdit(id:)），传不了一个还没保存的草稿 ——
+    /// 详情页把克隆放这儿再跳新建页，新建页 onAppear 取走。取走即清，不会污染下一次普通新建。
+    private var cloneTemplate: UmbraReminder?
+
+    func stashCloneTemplate(_ r: UmbraReminder) { cloneTemplate = r }
+
+    func takeCloneTemplate() -> UmbraReminder? {
+        defer { cloneTemplate = nil }
+        return cloneTemplate
+    }
 
     func save(_ r: UmbraReminder) {
         commit(r)
@@ -661,9 +727,22 @@ struct UmbraReminderListView: View {
                                 .background(Capsule().fill(UmbraColor.dangerSoft))
                         }
                         if r.repeatRule != "不重复" {
+                            // 徽章配色对齐 PC（验收第一轮 #9 / 006 的 orangeOnSoft 规则）：
+                            // soft 底上的文字与图标一律 orangeText；有结束日期时带「· 到 8月30日」。
                             HStack(spacing: 4) {
                                 UmbraIcon(d: UmbraIconPath.repeatArrows, size: 10, strokeWidth: 2.4)
-                                Text(r.repeatLabel).font(UmbraFont.sans(11, .w600))
+                                Text(r.repeatLabel + repeatEndSuffix(r)).font(UmbraFont.sans(11, .w600))
+                            }
+                            .foregroundColor(UmbraColor.orangeText)
+                            .padding(.horizontal, 7)
+                            .padding(.vertical, 2)
+                            .background(Capsule().fill(UmbraColor.orangeSoft))
+                        }
+                        if !r.atts.isEmpty {
+                            // 附件数：图标 + 数字（状态不只靠颜色），中性灰 chip，与 PC 同形态。
+                            HStack(spacing: 4) {
+                                UmbraIcon(d: UmbraIconPath.image, size: 10, strokeWidth: 2.2)
+                                Text("\(r.atts.count)").font(UmbraFont.sans(11, .w600))
                             }
                             .foregroundColor(UmbraColor.muted)
                             .padding(.horizontal, 7)
@@ -700,14 +779,29 @@ struct UmbraReminderListView: View {
             }
             .tint(UmbraColor.danger)
 
-            Button {
-                withAnimation { store.snooze(id: r.id) }
-                router.showToast("好，10 分钟后再叫你")
-            } label: {
-                Label("再等 10 分钟", systemImage: "clock")
+            // 「再等 10 分钟」只给今天（含已过期）的：明天的提醒推迟到「现在+10 分钟」
+            // 等于把它提前（PC 验收第一轮抓到的，两端同规则）；已完成的也不给。
+            if r.canSnoozeNow {
+                Button {
+                    withAnimation { store.snooze(id: r.id) }
+                    router.showToast("好，10 分钟后再叫你")
+                } label: {
+                    Label("再等 10 分钟", systemImage: "clock")
+                }
+                .tint(UmbraColor.warning)
             }
-            .tint(UmbraColor.warning)
         }
+    }
+
+    /// 重复徽章的「· 到 8月30日」后缀。没有结束日期给空串。
+    private func repeatEndSuffix(_ r: UmbraReminder) -> String {
+        guard r.repeatRule != "不重复", let end = r.repeatEnd else { return "" }
+        let cal = Calendar.current
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "zh_CN")
+        df.dateFormat = cal.component(.year, from: end) == cal.component(.year, from: Date())
+            ? "M月d日" : "yyyy年M月d日"
+        return " · 到 \(df.string(from: end))"
     }
 
     /// 勾选动画：圈立即变绿画勾 → 停一拍（0.9s）→ 数据真正翻转，行随分组变化收走。
@@ -741,6 +835,10 @@ struct UmbraReminderDetailView: View {
 
     /// 编辑草稿。nil = 预览态。**就地编辑**：同一页切换，不推新页。
     @State private var draft: UmbraReminder?
+    /// 编辑时新加、还没上传的图。取消编辑一起丢（什么都没发生，不会留孤儿文件）。
+    @State private var pending: [ReminderPendingImage] = []
+    /// 保存进行中（上传附件是异步的）。挡连点 —— 连点会把同一张图传两遍。
+    @State private var saving = false
     @State private var pickDate = false
     @State private var pickTime = false
     @State private var pickEndDate = false
@@ -752,6 +850,7 @@ struct UmbraReminderDetailView: View {
         UmbraScreen(content: {
             if let d = draft {
                 UmbraReminderForm(draft: Binding(get: { d }, set: { draft = $0 }),
+                                  pending: $pending, creating: false,
                                   pickDate: $pickDate, pickTime: $pickTime, pickEndDate: $pickEndDate)
             } else if let r = item {
                 preview(r)
@@ -770,19 +869,30 @@ struct UmbraReminderDetailView: View {
         .toolbar {
             if editing {
                 ToolbarItem(placement: .topBarLeading) {
-                    Button("取消") { draft = nil }
+                    Button("取消") { draft = nil; pending = [] }
                         .tint(UmbraColor.text)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button { saveEdit() } label: {
-                        Text("保存").font(UmbraFont.sans(16, .w600))
+                        Text(saving ? "保存中…" : "保存").font(UmbraFont.sans(16, .w600))
                     }
                     .tint(UmbraColor.orange)
+                    .disabled(saving)
                 }
             } else if let r = item {
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("编辑") { draft = r }
+                    if r.done {
+                        // 已完成的没有「编辑」——改它只会让历史对不上；想再提醒一次就是一条新的
+                        //（PC 验收第一轮 #2，两端同规则）。附件不带，见 cloneAsNew 的注释。
+                        Button("再来一条") {
+                            store.stashCloneTemplate(r.cloneAsNew())
+                            router.go(.remEdit(id: nil))
+                        }
                         .tint(UmbraColor.orange)
+                    } else {
+                        Button("编辑") { draft = r }
+                            .tint(UmbraColor.orange)
+                    }
                 }
             }
         }
@@ -838,6 +948,16 @@ struct UmbraReminderDetailView: View {
             UmbraSettingRow(label: "提前提醒", value: r.aheadLabel)
         ]))
 
+        // 附件（只看；改在编辑态）。没有就整块不出现 —— 空态不值得占一行。
+        if !r.atts.isEmpty {
+            VStack(alignment: .leading, spacing: UmbraMetric.sp2) {
+                UmbraFieldLabel(text: "附件")
+                ReminderAttsPreviewRow(atts: r.atts)
+            }
+            .padding(.horizontal, UmbraMetric.pagePadX)
+            .padding(.top, 14)
+        }
+
         // 来源与创建时间是「偶尔想确认一下」的信息，从字段卡降为一行脚注。
         Text("来自\(r.source) · 创建于 \(r.createdLabel)")
             .font(UmbraFont.sans(12, .w400))
@@ -866,11 +986,15 @@ struct UmbraReminderDetailView: View {
                     router.showToast("已完成「\(r.text)」")
                     router.back()
                 }
-                snoozeButton(r)
-                Text("长按「稍后提醒」可以换时间")
-                    .font(UmbraFont.sans(11, .w400))
-                    .foregroundColor(UmbraColor.faint)
-                    .frame(maxWidth: .infinity)
+                // 「稍后提醒」只给今天（含已过期）的 —— 明天的提醒「延后 10 分钟」是把它提前，
+                // PC 验收第一轮抓到的，两端同规则（canSnoozeNow）。
+                if r.canSnoozeNow {
+                    snoozeButton(r)
+                    Text("长按「稍后提醒」可以换时间")
+                        .font(UmbraFont.sans(11, .w400))
+                        .foregroundColor(UmbraColor.faint)
+                        .frame(maxWidth: .infinity)
+                }
             }
         }
         .padding(.horizontal, UmbraMetric.pagePadX)
@@ -924,14 +1048,33 @@ struct UmbraReminderDetailView: View {
         router.back()
     }
 
+    /// 保存：先把攒着的图逐张传上去，全部成功才落库（附件是整行的一部分，跟提醒一起 PUT）。
+    /// 哪张失败点名哪张，已传成功的记回草稿 —— 再点一次保存只补传剩下的，不会传两遍。
     private func saveEdit() {
-        guard var d = draft else { return }
+        guard var d = draft, !saving else { return }
         d.text = d.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !d.text.isEmpty else { router.showToast("提醒内容不能是空的"); return }
+        // 结束日期的闸（与 PC 同规则）：表单里已经就地标红，这里再拦一道 ——
+        // 「控件挡得住」和「状态里没有脏值」是两回事。
+        if let bad = d.repeatEndProblem { router.showToast(bad); return }
         d.note = d.note.trimmingCharacters(in: .whitespacesAndNewlines)
-        store.save(d)
-        draft = nil
-        router.showToast("已保存")
+        saving = true
+        Task { @MainActor in
+            defer { saving = false }
+            if !pending.isEmpty {
+                let up = await ReminderAttUploader.upload(pending, onto: d.atts)
+                d.atts = up.atts
+                pending.removeAll { up.uploaded.contains($0.id) }
+                if let f = up.failed {
+                    draft = d
+                    router.showToast("附件「\(f)」没传上，检查网络后再存一次")
+                    return
+                }
+            }
+            store.save(d)
+            draft = nil
+            router.showToast("已保存")
+        }
     }
 }
 
@@ -946,17 +1089,23 @@ struct UmbraReminderEditView: View {
 
     @State private var draft = UmbraReminder(id: UUID().uuidString, text: "",
                                              at: Date().addingTimeInterval(3600))
+    /// 新建时先攒在本地的图，保存才上传。
+    @State private var pending: [ReminderPendingImage] = []
+    /// 保存进行中（上传附件是异步的）。挡连点 —— 连点会把同一张图传两遍。
+    @State private var saving = false
     @State private var pickDate = false
     @State private var pickTime = false
     @State private var pickEndDate = false
     @State private var loaded = false
 
-    private var canSave: Bool { !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private var canSave: Bool {
+        !draft.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !saving
+    }
 
     var body: some View {
         UmbraScreen {
-            UmbraReminderForm(draft: $draft, pickDate: $pickDate,
-                              pickTime: $pickTime, pickEndDate: $pickEndDate)
+            UmbraReminderForm(draft: $draft, pending: $pending, creating: true,
+                              pickDate: $pickDate, pickTime: $pickTime, pickEndDate: $pickEndDate)
 
         }
         .navigationTitle(id == nil ? "新建提醒" : "编辑提醒")
@@ -970,9 +1119,10 @@ struct UmbraReminderEditView: View {
             }
             ToolbarItem(placement: .topBarTrailing) {
                 Button { save() } label: {
-                    Text("保存").font(UmbraFont.sans(16, .w600))
+                    Text(saving ? "保存中…" : "保存").font(UmbraFont.sans(16, .w600))
                 }
                 .tint(canSave ? UmbraColor.orange : UmbraColor.faint)
+                .disabled(saving)
             }
         }
         .umbraWheelPicker(isPresented: $pickDate, title: "选择日期", mode: .date, date: $draft.at)
@@ -983,7 +1133,9 @@ struct UmbraReminderEditView: View {
         .onAppear {
             guard !loaded else { return }
             loaded = true
-            if let rid = id, let r = store.item(rid) { draft = r }
+            // 「再来一条」的模板优先（详情页塞的克隆，见 stashCloneTemplate 的注释）。
+            if let t = store.takeCloneTemplate() { draft = t }
+            else if let rid = id, let r = store.item(rid) { draft = r }
         }
     }
 
@@ -992,12 +1144,30 @@ struct UmbraReminderEditView: View {
         guard canSave else { router.showToast("提醒内容还是空的，写一句才能存"); return }
         var d = draft
         d.text = d.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // 结束日期的闸（与 PC 同规则）：表单里已就地标红，这里再拦一道。
+        if let bad = d.repeatEndProblem { router.showToast(bad); return }
         d.note = d.note.trimmingCharacters(in: .whitespacesAndNewlines)
-        store.save(d)
-        // 第一次建提醒时才要权限 —— 这时候用户正想让它响，是最容易被同意的时机。
-        store.requestAuthorizationIfNeeded()
-        router.back()
-        router.showToast("已保存")
+        saving = true
+        Task { @MainActor in
+            defer { saving = false }
+            // 先传图再落库：附件是整行的一部分，跟提醒一起 PUT。失败点名、成功的记回草稿，
+            // 再点保存只补传剩下的（与详情页 saveEdit 同一套，别改一处漏一处）。
+            if !pending.isEmpty {
+                let up = await ReminderAttUploader.upload(pending, onto: d.atts)
+                d.atts = up.atts
+                pending.removeAll { up.uploaded.contains($0.id) }
+                if let f = up.failed {
+                    draft = d
+                    router.showToast("附件「\(f)」没传上，检查网络后再存一次")
+                    return
+                }
+            }
+            store.save(d)
+            // 第一次建提醒时才要权限 —— 这时候用户正想让它响，是最容易被同意的时机。
+            store.requestAuthorizationIfNeeded()
+            router.back()
+            router.showToast("已保存")
+        }
     }
 }
 
@@ -1007,6 +1177,11 @@ struct UmbraReminderEditView: View {
 // 标签 15 灰 —— 不换底色，靠缩进表达从属。选项字段用系统 Menu（锚定小弹框）。
 struct UmbraReminderForm: View {
     @Binding var draft: UmbraReminder
+    /// 新建/编辑时先攒在本地、保存才上传的图（附件区）。状态在容器视图手里 ——
+    /// 保存要用它，而保存按钮在容器的 toolbar 上。
+    @Binding var pending: [ReminderPendingImage]
+    /// 新建 = true：附件脚注提示「保存时才上传」。
+    var creating: Bool
     @Binding var pickDate: Bool
     @Binding var pickTime: Bool
     @Binding var pickEndDate: Bool
@@ -1026,6 +1201,17 @@ struct UmbraReminderForm: View {
                         RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous)
                             .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW)
                     )
+                    // 上限做在客户端（§10.1，与 PC 同数值）：超了就地截断；
+                    // 快到（≥80%）才显示计数 —— 常态下那个数字只是噪音。
+                    .onChange(of: draft.text) { v in
+                        if v.count > UmbraReminder.textMax { draft.text = String(v.prefix(UmbraReminder.textMax)) }
+                    }
+                if draft.text.count >= Int(Double(UmbraReminder.textMax) * 0.8) {
+                    Text("\(draft.text.count) / \(UmbraReminder.textMax)")
+                        .font(UmbraFont.sans(11))
+                        .foregroundColor(draft.text.count >= UmbraReminder.textMax ? UmbraColor.danger : UmbraColor.faint)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
 
             // 备注紧跟内容：它是内容的补充说明，层级要贴着内容走，
@@ -1044,6 +1230,15 @@ struct UmbraReminderForm: View {
                         RoundedRectangle(cornerRadius: UmbraMetric.radiusInput, style: .continuous)
                             .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW)
                     )
+                    .onChange(of: draft.note) { v in
+                        if v.count > UmbraReminder.noteMax { draft.note = String(v.prefix(UmbraReminder.noteMax)) }
+                    }
+                if draft.note.count >= Int(Double(UmbraReminder.noteMax) * 0.8) {
+                    Text("\(draft.note.count) / \(UmbraReminder.noteMax)")
+                        .font(UmbraFont.sans(11))
+                        .foregroundColor(draft.note.count >= UmbraReminder.noteMax ? UmbraColor.danger : UmbraColor.faint)
+                        .frame(maxWidth: .infinity, alignment: .trailing)
+                }
             }
 
             // 日期 / 时间：点击**整个字段区域**弹滚轮面板，不是点图标。
@@ -1086,6 +1281,15 @@ struct UmbraReminderForm: View {
                         if draft.repeatEnd != nil {
                             divider(inset: 32)
                             pickerRow(label: "结束日期", value: endDateText, sub: true) { pickEndDate = true }
+                            // 三段式出错（与 PC 同校验）：写清早于什么。保存那边也会拦，
+                            // 这里就地说，别让用户点了保存才知道。
+                            if let bad = draft.repeatEndProblem {
+                                Text(bad)
+                                    .font(UmbraFont.sans(12, .w560))
+                                    .foregroundColor(UmbraColor.danger)
+                                    .padding(.leading, 32).padding(.trailing, 14).padding(.bottom, 10)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
                         }
                     }
 
@@ -1103,6 +1307,8 @@ struct UmbraReminderForm: View {
                 )
             }
 
+            // 附件（一期图片，与 PC 同规则；形态暂借记账，批次 007 已请设计定稿）。
+            ReminderAttsSection(atts: $draft.atts, pending: $pending, creating: creating)
         }
         .padding(UmbraMetric.pagePadX)
     }

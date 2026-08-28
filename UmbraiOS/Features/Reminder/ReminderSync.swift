@@ -32,6 +32,16 @@ struct ReminderDTO: Codable {
     let tz: String
     let updated_at_ms: Int64
     let deleted: Bool
+    /// 附件（2026-08-27 提醒附件一期）。**上行永远带这个键**（哪怕是 []）：
+    /// 服务端把「没这个键 / null」当「没提附件、保留库里那份」，[] 才是明确清空 ——
+    /// iOS 想摘图就必须发差集后的完整数组。可选是为了兼容还没升级的服务端响应。
+    let atts: [ReminderAttDTO]?
+}
+
+/// 附件的线格式（snake_case 对齐服务端 reminders.atts 的行内 JSON）。
+struct ReminderAttDTO: Codable {
+    let file_id: String
+    let label: String
 }
 
 /// 一条删除墓碑。没有它，这台设备删掉的提醒会被另一台一推又复活。
@@ -130,7 +140,13 @@ extension UmbraReminder {
             source: ReminderWire.sourceToDisplay(dto.source),
             createdAt: Date(umbraMs: dto.at_ms),
             updatedAtMs: dto.updated_at_ms,
-            dirty: false
+            dirty: false,
+            // 服务端来的附件兜一次形状：空 id 丢掉、超上限截掉 —— 只可能是协议出了岔子，
+            // 兜成保守值比让整条提醒解析失败强（与 PC sync.attsFromWire 同口径）。
+            atts: (dto.atts ?? [])
+                .filter { !$0.file_id.trimmingCharacters(in: .whitespaces).isEmpty }
+                .prefix(UmbraReminder.maxAtts)
+                .map { ReminderAtt(fileId: $0.file_id, label: $0.label) }
         )
     }
 
@@ -150,7 +166,8 @@ extension UmbraReminder {
             source: ReminderWire.sourceToWire(source),
             tz: TimeZone.current.identifier,
             updated_at_ms: updatedAtMs,
-            deleted: false
+            deleted: false,
+            atts: atts.prefix(UmbraReminder.maxAtts).map { ReminderAttDTO(file_id: $0.fileId, label: $0.label) }
         )
     }
 }
