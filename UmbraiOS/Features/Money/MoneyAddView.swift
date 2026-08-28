@@ -27,8 +27,9 @@ struct UmbraMoneyAddView: View {
     @State private var sub = ""
     @State private var note = ""
     @State private var atDate = Date()
-    @State private var showDatePick = false
-    @State private var showTimePick = false
+    /// 「什么时候」面板（批次 007：日期+时间是一个瞬间、一个值，同一个面板两段切）。
+    /// 非 nil 即打开，值是落在哪一段上。
+    @State private var whenTab: UmbraDateTimePanel.Tab?
     @State private var busy = false
     @State private var failed = false
     /// 记账半路新增分类的名字弹层。
@@ -88,7 +89,7 @@ struct UmbraMoneyAddView: View {
             photoItem = nil
             Task { @MainActor in
                 if let d = try? await item.loadTransferable(type: Data.self) {
-                    addImage(data: d, label: "")
+                    addImage(data: d, label: "相册图片")
                 } else {
                     router.showToast("这张图读不出来，换一张试试")
                 }
@@ -96,7 +97,7 @@ struct UmbraMoneyAddView: View {
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { img in
-                if let d = img.jpegData(compressionQuality: 0.85) { addImage(data: d, label: "") }
+                if let d = img.jpegData(compressionQuality: 0.85) { addImage(data: d, label: "拍的照片") }
             }
             .ignoresSafeArea()
         }
@@ -107,7 +108,8 @@ struct UmbraMoneyAddView: View {
             guard let d = try? Data(contentsOf: url) else {
                 router.showToast("这张图读不出来，换一张试试"); return
             }
-            addImage(data: d, label: url.lastPathComponent)
+            // 标签存来源不存文件名（批次 007 答复，tokens.attachment；存量老标签照旧显示）。
+            addImage(data: d, label: "文件图片")
         }
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
@@ -127,8 +129,7 @@ struct UmbraMoneyAddView: View {
             // 运算符改放金额卡片里（见 amountCard），收键盘靠点空白 / 下拉。
         }
         .onAppear { seed() }
-        .umbraWheelPicker(isPresented: $showDatePick, title: "日期", mode: .date, date: $atDate)
-        .umbraWheelPicker(isPresented: $showTimePick, title: "时间", mode: .time, date: $atDate)
+        .umbraWhenPicker(tab: $whenTab, field: "什么时候", date: $atDate)
     }
 
     /// 进页灌初值：编辑态从原条目来；新建默认支出 + 当前时刻 + 该方向第一个分类。
@@ -397,8 +398,8 @@ struct UmbraMoneyAddView: View {
             HStack(spacing: 10) {
                 Text("时间").font(UmbraFont.sans(15)).foregroundColor(UmbraColor.text)
                 Spacer()
-                timeChip(icon: "M3.5,5L20.5,5L20.5,20.5L3.5,20.5ZM3.5,10L20.5,10M8,3.5L8,6.5M16,3.5L16,6.5", label: dateLabel) { showDatePick = true }
-                timeChip(icon: UmbraIconPath.clock, label: clockLabel, mono: true) { showTimePick = true }
+                timeChip(icon: "M3.5,5L20.5,5L20.5,20.5L3.5,20.5ZM3.5,10L20.5,10M8,3.5L8,6.5M16,3.5L16,6.5", label: dateLabel) { whenTab = .date }
+                timeChip(icon: UmbraIconPath.clock, label: clockLabel, mono: true) { whenTab = .time }
             }
             .padding(.horizontal, 14).frame(minHeight: 48)
             UmbraRowDivider()
@@ -623,7 +624,7 @@ struct UmbraMoneyAddView: View {
     /// 传一张 + 挂引用。文件名带扩展名 —— /files/{id} 靠它带 .jpg 后缀，
     /// 各端 <img>/AsyncImage 才按图片处理。
     private func uploadOne(entryId: String, data: Data, label: String) async -> Bool {
-        let name = label.isEmpty ? "photo-\(Int(Date().timeIntervalSince1970)).jpg" : label
+        let name = "photo-\(Int(Date().timeIntervalSince1970)).jpg"
         guard let up = try? await HTTPService.shared.uploadFile(name: name, data: data)
         else { return false }
         return await money.addAtt(entryId: entryId, fileId: up.file_id, label: label)

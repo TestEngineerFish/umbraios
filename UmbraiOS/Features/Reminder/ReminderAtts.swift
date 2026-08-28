@@ -14,10 +14,14 @@ import SwiftUI
 import UIKit
 
 /// 新建 / 编辑时先攒在本地、还没上传的一张图。
+/// label 存**来源**（相册图片 / 拍的照片 / 文件图片，批次 007 答复：72–78 宽的标签条里
+/// 文件名截成「IMG_2026…」没有信息量，来源才是用户当时唯一记得的线索）；
+/// filename 只给预览器标题用（相册 / 拍照没有文件名，空串就用来源顶上）。
 struct ReminderPendingImage: Identifiable, Equatable {
     let id: UUID
     let data: Data
     let label: String
+    var filename: String = ""
 }
 
 /// 逐张上传攒着的图。全部成功返回追加后的附件数组；哪张失败点名哪张 ——
@@ -31,10 +35,11 @@ enum ReminderAttUploader {
         var out = atts
         var done: [UUID] = []
         for p in pending {
-            // 文件名带扩展名 —— /files/{id} 靠它带 .jpg 后缀，各端 <img>/AsyncImage 才按图片处理。
-            let name = p.label.isEmpty ? "photo-\(Int(Date().timeIntervalSince1970)).jpg" : p.label
+            // 上传文件名带扩展名 —— /files/{id} 靠它带 .jpg 后缀，各端 <img>/AsyncImage 才按图片处理；
+            // 落到 label 的是**来源**（批次 007 答复），文件名只进预览器标题。
+            let name = p.filename.isEmpty ? "photo-\(Int(Date().timeIntervalSince1970)).jpg" : p.filename
             guard let up = try? await HTTPService.shared.uploadFile(name: name, data: p.data) else {
-                return (out, done, p.label.isEmpty ? "拍的照片" : p.label)
+                return (out, done, p.label)
             }
             out.append(ReminderAtt(fileId: up.file_id, label: p.label))
             done.append(p.id)
@@ -94,7 +99,7 @@ struct ReminderAttsSection: View {
             photoItem = nil
             Task { @MainActor in
                 if let d = try? await item.loadTransferable(type: Data.self) {
-                    take(data: d, label: "")
+                    take(data: d, label: "相册图片")
                 } else {
                     router.showToast("这张图读不出来，换一张试试")
                 }
@@ -102,7 +107,7 @@ struct ReminderAttsSection: View {
         }
         .fullScreenCover(isPresented: $showCamera) {
             CameraPicker { img in
-                if let d = img.jpegData(compressionQuality: 0.85) { take(data: d, label: "") }
+                if let d = img.jpegData(compressionQuality: 0.85) { take(data: d, label: "拍的照片") }
             }
             .ignoresSafeArea()
         }
@@ -113,7 +118,7 @@ struct ReminderAttsSection: View {
             guard let d = try? Data(contentsOf: url) else {
                 router.showToast("这张图读不出来，换一张试试"); return
             }
-            take(data: d, label: url.lastPathComponent)
+            take(data: d, label: "文件图片", filename: url.lastPathComponent)
         }
     }
 
@@ -187,7 +192,7 @@ struct ReminderAttsSection: View {
                 }
                 .buttonStyle(.plain)
             }
-            Text(p.label.isEmpty ? "待上传" : p.label)
+            Text("待上传 · \(p.label)")
                 .font(UmbraFont.sans(10.5)).foregroundColor(UmbraColor.faint)
                 .lineLimit(1)
         }
@@ -226,11 +231,11 @@ struct ReminderAttsSection: View {
         ]))
     }
 
-    private func take(data: Data, label: String) {
+    private func take(data: Data, label: String, filename: String = "") {
         guard count < UmbraReminder.maxAtts else {
             router.showToast("一条提醒最多留 \(UmbraReminder.maxAtts) 张图"); return
         }
-        pending.append(ReminderPendingImage(id: UUID(), data: data, label: label))
+        pending.append(ReminderPendingImage(id: UUID(), data: data, label: label, filename: filename))
     }
 }
 

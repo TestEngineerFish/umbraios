@@ -307,9 +307,13 @@ struct UmbraMoneyRecurEditView: View {
             }
         }
         .onAppear { seed() }
-        .umbraWheelPicker(isPresented: $showFirstPick, title: "首次日期", mode: .date, date: $firstDate)
-        .umbraWheelPicker(isPresented: $showTimePick, title: "时间", mode: .time, date: $timeDate)
-        .umbraWheelPicker(isPresented: $showEndPick, title: "结束日期", mode: .date, date: $endDate)
+        // 首次日期 / 时间是两个值（改时间不动日期），各自单开（批次 007：一个值 = 一个字段）。
+        .umbraDatePicker(isPresented: $showFirstPick, field: "首次日期", date: $firstDate)
+        .umbraTimePicker(isPresented: $showTimePick, field: "时间", date: $timeDate)
+        // 结束日期带下界：早于首次日期的日子在面板里就点不动，比事后标红省一步。
+        .umbraDatePicker(isPresented: $showEndPick, field: "结束重复", date: $endDate,
+                         minDay: firstDate,
+                         minNote: "早于首次日期 \(MoneyRecurFmt.fullDate(MoneyRecurFmt.dateString(firstDate))) 的日子选不了。含当天：当天该记的那笔照记。")
     }
 
     private func seed() {

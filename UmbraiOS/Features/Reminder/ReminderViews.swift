@@ -839,8 +839,9 @@ struct UmbraReminderDetailView: View {
     @State private var pending: [ReminderPendingImage] = []
     /// 保存进行中（上传附件是异步的）。挡连点 —— 连点会把同一张图传两遍。
     @State private var saving = false
-    @State private var pickDate = false
-    @State private var pickTime = false
+    /// 「什么时候」面板（批次 007：日期+时间是一个瞬间、一个值，同一个面板两段切）。
+    /// 非 nil 即打开，值是落在哪一段上。
+    @State private var whenTab: UmbraDateTimePanel.Tab?
     @State private var pickEndDate = false
 
     private var item: UmbraReminder? { store.item(id) }
@@ -851,7 +852,7 @@ struct UmbraReminderDetailView: View {
             if let d = draft {
                 UmbraReminderForm(draft: Binding(get: { d }, set: { draft = $0 }),
                                   pending: $pending, creating: false,
-                                  pickDate: $pickDate, pickTime: $pickTime, pickEndDate: $pickEndDate)
+                                  whenTab: $whenTab, pickEndDate: $pickEndDate)
             } else if let r = item {
                 preview(r)
             } else {
@@ -896,13 +897,15 @@ struct UmbraReminderDetailView: View {
                 }
             }
         }
-        .umbraWheelPicker(isPresented: $pickDate, title: "选择日期", mode: .date,
-                          date: Binding(get: { draft?.at ?? Date() }, set: { draft?.at = $0 }))
-        .umbraWheelPicker(isPresented: $pickTime, title: "选择时间", mode: .time,
-                          date: Binding(get: { draft?.at ?? Date() }, set: { draft?.at = $0 }))
-        .umbraWheelPicker(isPresented: $pickEndDate, title: "结束日期", mode: .date,
-                          date: Binding(get: { draft?.repeatEnd ?? draft?.defaultRepeatEnd ?? Date() },
-                                        set: { draft?.repeatEnd = $0 }))
+        .umbraWhenPicker(tab: $whenTab, field: "什么时候",
+                         date: Binding(get: { draft?.at ?? Date() }, set: { draft?.at = $0 }))
+        // 结束日期带下界：早于提醒日的日子在面板里就点不动（拦在前面比事后标红省一步）；
+        // 表单里的红字校验保留当兜底（「进来时值就已经不对」的情况）。
+        .umbraDatePicker(isPresented: $pickEndDate, field: "结束重复",
+                         date: Binding(get: { draft?.repeatEnd ?? draft?.defaultRepeatEnd ?? Date() },
+                                       set: { draft?.repeatEnd = $0 }),
+                         minDay: draft?.at,
+                         minNote: "早于提醒日 \(UmbraDateTimePanel.dayText(Calendar.current.startOfDay(for: draft?.at ?? Date()))) 的日子选不了。含当天：当天该响的那次照响。")
     }
 
     // 查看态信息层级（v2 重设计）：标题是主角，备注紧跟其下当补充；
@@ -1093,8 +1096,8 @@ struct UmbraReminderEditView: View {
     @State private var pending: [ReminderPendingImage] = []
     /// 保存进行中（上传附件是异步的）。挡连点 —— 连点会把同一张图传两遍。
     @State private var saving = false
-    @State private var pickDate = false
-    @State private var pickTime = false
+    /// 「什么时候」面板：非 nil 即打开，值是落在哪一段上。
+    @State private var whenTab: UmbraDateTimePanel.Tab?
     @State private var pickEndDate = false
     @State private var loaded = false
 
@@ -1105,7 +1108,7 @@ struct UmbraReminderEditView: View {
     var body: some View {
         UmbraScreen {
             UmbraReminderForm(draft: $draft, pending: $pending, creating: true,
-                              pickDate: $pickDate, pickTime: $pickTime, pickEndDate: $pickEndDate)
+                              whenTab: $whenTab, pickEndDate: $pickEndDate)
 
         }
         .navigationTitle(id == nil ? "新建提醒" : "编辑提醒")
@@ -1125,11 +1128,12 @@ struct UmbraReminderEditView: View {
                 .disabled(saving)
             }
         }
-        .umbraWheelPicker(isPresented: $pickDate, title: "选择日期", mode: .date, date: $draft.at)
-        .umbraWheelPicker(isPresented: $pickTime, title: "选择时间", mode: .time, date: $draft.at)
-        .umbraWheelPicker(isPresented: $pickEndDate, title: "结束日期", mode: .date,
-                          date: Binding(get: { draft.repeatEnd ?? draft.defaultRepeatEnd },
-                                        set: { draft.repeatEnd = $0 }))
+        .umbraWhenPicker(tab: $whenTab, field: "什么时候", date: $draft.at)
+        .umbraDatePicker(isPresented: $pickEndDate, field: "结束重复",
+                         date: Binding(get: { draft.repeatEnd ?? draft.defaultRepeatEnd },
+                                       set: { draft.repeatEnd = $0 }),
+                         minDay: draft.at,
+                         minNote: "早于提醒日 \(UmbraDateTimePanel.dayText(Calendar.current.startOfDay(for: draft.at))) 的日子选不了。含当天：当天该响的那次照响。")
         .onAppear {
             guard !loaded else { return }
             loaded = true
@@ -1182,8 +1186,8 @@ struct UmbraReminderForm: View {
     @Binding var pending: [ReminderPendingImage]
     /// 新建 = true：附件脚注提示「保存时才上传」。
     var creating: Bool
-    @Binding var pickDate: Bool
-    @Binding var pickTime: Bool
+    /// 「什么时候」面板：点日期行开在日期段、点时间行开在时间段（同一个面板，一次确定落两段）。
+    @Binding var whenTab: UmbraDateTimePanel.Tab?
     @Binding var pickEndDate: Bool
 
     var body: some View {
@@ -1244,9 +1248,9 @@ struct UmbraReminderForm: View {
             // 日期 / 时间：点击**整个字段区域**弹滚轮面板，不是点图标。
             field("时间") {
                 VStack(spacing: 0) {
-                    pickerRow(label: "日期", value: UmbraWheelPanel.dayLabel(offset: dayOffset)) { pickDate = true }
+                    pickerRow(label: "日期", value: UmbraDateTimePanel.dayLabel(offset: dayOffset)) { whenTab = .date }
                     divider(inset: 14)
-                    pickerRow(label: "时间", value: timeText) { pickTime = true }
+                    pickerRow(label: "时间", value: timeText) { whenTab = .time }
                 }
                 .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.card))
                 .overlay(
@@ -1347,6 +1351,7 @@ struct UmbraReminderForm: View {
                 Text(value)
                     .font(UmbraFont.sans(15, .w400))
                     .foregroundColor(UmbraColor.muted)
+                    .lineLimit(1)   // 值一长（「2027年8月31日 周二」）会折行，批次 007 答复点过这处
                 UmbraIcon(d: UmbraIconPath.chevronRight, size: 14, strokeWidth: 2.2)
                     .foregroundColor(UmbraColor.faint)
             }
@@ -1379,6 +1384,7 @@ struct UmbraReminderForm: View {
                 Text(value)
                     .font(UmbraFont.sans(15, .w400))
                     .foregroundColor(UmbraColor.muted)
+                    .lineLimit(1)
                 UmbraIcon(d: UmbraIconPath.chevronDown, size: 14, strokeWidth: 2.2)
                     .foregroundColor(UmbraColor.faint)
             }
@@ -1432,7 +1438,7 @@ struct UmbraReminderForm: View {
         let cal = Calendar.current
         let off = cal.dateComponents([.day], from: cal.startOfDay(for: Date()),
                                      to: cal.startOfDay(for: e)).day ?? 0
-        return UmbraWheelPanel.dayLabel(offset: off)
+        return UmbraDateTimePanel.dayLabel(offset: off)
     }
 }
 
