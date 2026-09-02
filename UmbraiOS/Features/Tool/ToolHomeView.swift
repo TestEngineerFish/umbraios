@@ -1,13 +1,19 @@
-// 工具页（Tab 2 根页，稿 tool.home）。
+// 工具页（Tab 3 根页，稿 tool.home）。
 //
-// TabBar 从五个减到三个（2026-08-23 稿）：任务和提醒都是「待办清单」，并列在
-// 一级 tab 上分不清该点哪个 —— 全部收进这一页，由「记录」组统一收口；
-// 记账和保险箱是最常进出的两个工具，给两张大卡放最上面。
+// 2026-09-02 稿重排：两张大卡取消，改成**三组、每组两张同尺寸卡片**的网格
+//（token iosToolGrid）。理由：这些入口通向的是不同类型的功能，彼此没有主次 ——
+// 长列表把它们读成「同一类数据的若干行」，大小卡混排又凭空造出一层主次；
+// 分类交给组标题承担，卡片一律同尺寸、同配色。
+//   · 图标块走 --chip 底 + --muted 描边图标，**不用橙底**：一屏六张橙卡等于
+//     没有重点，且 iOS 上橙底会被读成选中态（批次 004 已定过这条）。
+//   · 每张卡底部压一行当前状态（真数据），不写功能介绍。
+//   · 红角标只在「有需要人处理的项」时出现 —— 目前只有失败的任务。
+//   · 提醒 09-02 提回一级 tab，从这页移除（一个入口只有一个位置）；任务留下。
 //
 // 与稿的两处一期取舍（记回流台账）：
-//   · 记账大卡不带「N 笔待确认」标签 —— 待确认是四期截图导入的产物，现在没有；
-//   · 「小组件与轻点背面」一行不画 —— 那是一整屏教学页（稿 widgets），
-//     iOS 还没有这一屏，放一个点了没反应的入口比不放更糟。
+//   · 记账卡不带「N 笔待确认」—— 待确认是四期截图导入的产物，现在没有；
+//   · 常用语卡的状态行写「跨端同步」而不是稿里的「可在键盘上取」——
+//     iOS 还没有键盘扩展，写了就是许了个还不存在的愿。
 import SwiftUI
 
 struct UmbraToolHomeView: View {
@@ -16,25 +22,26 @@ struct UmbraToolHomeView: View {
     @EnvironmentObject private var vault: VaultStore
     @EnvironmentObject private var tasks: TasksViewModel
     @EnvironmentObject private var inspirations: InspirationsViewModel
-    @ObservedObject private var reminders = ReminderStore.shared
+    @ObservedObject private var phrases = PhraseStore.shared
 
     var body: some View {
         UmbraScreen {
+            // 组间距 18（= sp6，稿 margin-bottom:18）。
             VStack(alignment: .leading, spacing: UmbraMetric.sp6) {
                 // 稿在大标题下有一句定位说明 —— 它解释了这页的分区逻辑，照抄。
-                Text("每天用的两件在上面，其余按类收着")
-                    .font(UmbraFont.sans(12.5))
+                Text("按类收着，每个入口一张卡")
+                    .font(UmbraFont.sans(13))
                     .foregroundColor(UmbraColor.faint)
-                bigCards
-                group(name: "记录", rows: recordRows)
-                group(name: "输入辅助", rows: inputRows)
+                group(name: "记录", cards: recordCards)
+                group(name: "账目与安全", cards: moneyCards)
+                group(name: "输入辅助", cards: inputCards)
             }
             .padding(.horizontal, UmbraMetric.pagePadX)
             .padding(.top, 2)
         }
         .navigationTitle("工具")
-        // 进页就把三份清单静默拉起来 —— 大卡和行里的数字是真数据，
-        // 不拉就只能摆假的；顺带把记账页预热了（点进去秒开）。
+        // 进页就把清单静默拉起来 —— 卡底的状态行是真数据，不拉就只能摆假的；
+        // 顺带把记账页预热了（点进去秒开）。提醒 09-02 移出本页，不再从这里拉。
         .onAppear {
             money.loadIfNeeded()
             Task { await tasks.loadTasks() }
@@ -42,21 +49,64 @@ struct UmbraToolHomeView: View {
         }
     }
 
-    // MARK: 大卡（记账 + 保险箱）
+    // MARK: 卡片数据
 
-    private var bigCards: some View {
-        HStack(spacing: 9) {
-            bigCard(
-                label: "记账",
-                sub: moneySub,
-                icon: UmbraIconPath.wallet
-            ) { router.go(.moneyHome) }
-            bigCard(
-                label: "密码保险箱",
-                sub: vaultSub,
-                icon: UmbraIconPath.lockKeyhole
-            ) { router.go(.vaultHome) }
-        }
+    private struct ToolCard: Identifiable {
+        let id: String
+        let label: String
+        let sub: String
+        let icon: String
+        /// 右上角红角标 —— 只放「需要人来处理的数」，0 = 不显示。
+        var attn: Int = 0
+        let action: () -> Void
+    }
+
+    private var recordCards: [ToolCard] {
+        let running = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .running }.count
+        // 「待确认」随旧代理状态一起删了（B 批）：现在要人来处理的是**失败**的任务
+        // （看一眼原因 → 重试或重新发起）。语义变化已记回流台账，设计已在稿里采纳。
+        let failed = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .failed }.count
+        // 命名避开 open —— 它是 Swift 的访问级别关键字，检查器也会拦。
+        let inspOpen = inspirations.list.filter { $0.status == "open" }.count
+        return [
+            ToolCard(id: "task", label: "任务",
+                     sub: tasks.items.isEmpty ? "还没有任务"
+                         : "\(running) 个执行中 · \(failed) 个失败",
+                     icon: UmbraIconPath.task, attn: failed) {
+                router.go(.taskList)
+            },
+            ToolCard(id: "insp", label: "灵感",
+                     sub: inspirations.list.isEmpty ? "还没有灵感"
+                         : "\(inspirations.list.count) 条 · \(inspOpen) 条待整理",
+                     icon: UmbraIconPath.bulb) {
+                router.go(.inspList)
+            }
+        ]
+    }
+
+    private var moneyCards: [ToolCard] {
+        [
+            ToolCard(id: "money", label: "记账", sub: moneySub,
+                     icon: UmbraIconPath.wallet) { router.go(.moneyHome) },
+            ToolCard(id: "vault", label: "密码保险箱", sub: vaultSub,
+                     icon: UmbraIconPath.lockKeyhole) { router.go(.vaultHome) }
+        ]
+    }
+
+    private var inputCards: [ToolCard] {
+        [
+            ToolCard(id: "phrase", label: "常用语",
+                     sub: phrases.items.isEmpty ? "还没有常用语"
+                         : "\(phrases.items.count) 条 · 跨端同步",
+                     icon: UmbraIconPath.messageText) {
+                router.go(.mePhrases)
+            },
+            ToolCard(id: "widgets", label: "小组件与轻点背面",
+                     sub: "中号 + 小号 · 双击背面记一笔",
+                     icon: UmbraIconPath.layoutGrid) {
+                router.go(.toolWidgets)
+            }
+        ]
     }
 
     /// 本月支出。统计还没拉到时写「—」，不编一个 0（0 是「本月没花钱」，是数据）。
@@ -71,157 +121,62 @@ struct UmbraToolHomeView: View {
         return vault.recordExists || vault.hasSecretKey ? "已锁定" : "还没创建"
     }
 
-    /// 大卡不做「强调卡」（批次 004 稿已吃进这条实现侧偏离并定稿）：iOS 没有
-    /// 「选中」概念，橙底整卡会被读成选中态。两张卡统一普通卡面（--card 底 +
-    /// --border-soft 描边），**身份感交给橙色图标块**（橙实底 + 白图标，36×36 圆角 11）——
-    /// 两张都给，原来只给记账的那版让保险箱看着像二等公民。
-    private func bigCard(label: String, sub: String, icon: String,
-                         action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            VStack(alignment: .leading, spacing: 8) {
+    // MARK: 布局
+
+    /// 组标题（11.5-600 / 字距 .08em / --faint）+ 两列网格（列间距 11）。
+    /// 每组恒定两张卡，直接 HStack 摆 —— LazyVGrid 是给「不知道几个」的场合准备的。
+    private func group(name: String, cards: [ToolCard]) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            Text(name)
+                .font(UmbraFont.sans(11.5, .w600))
+                .kerning(11.5 * 0.08)
+                .foregroundColor(UmbraColor.faint)
+                .padding(.horizontal, 2)
+            HStack(alignment: .top, spacing: 11) {
+                ForEach(cards) { card in cardView(card) }
+            }
+        }
+    }
+
+    private func cardView(_ card: ToolCard) -> some View {
+        Button(action: card.action) {
+            VStack(alignment: .leading, spacing: 9) {
                 RoundedRectangle(cornerRadius: 11, style: .continuous)
-                    .fill(UmbraColor.orange)
+                    .fill(UmbraColor.chip)
                     .frame(width: 36, height: 36)
                     .overlay(
-                        UmbraIcon(d: icon, size: 18, strokeWidth: 1.9)
-                            .foregroundColor(.white)
+                        UmbraIcon(d: card.icon, size: 19, strokeWidth: 1.8)
+                            .foregroundColor(UmbraColor.muted)
                     )
-                Text(label)
+                Text(card.label)
                     .font(UmbraFont.sans(15.5, .w600))
                     .foregroundColor(UmbraColor.text)
-                Text(sub)
+                    .multilineTextAlignment(.leading)
+                // 状态行压卡底（稿 margin-top:auto）：中间的 Spacer 把它推下去，
+                // 两张卡高度由 minHeight 拉平，行数差异不会让它们参差。
+                Spacer(minLength: 0)
+                Text(card.sub)
                     .font(UmbraFont.sans(12.5))
                     .foregroundColor(UmbraColor.faint)
-                    .lineLimit(1)
+                    .lineSpacing(12.5 * 0.5)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(14)
+            // 先 padding 再 frame：稿的 min-height:126 是含内边距的盒高
+            // （box-sizing:border-box），倒过来会把卡撑到 152。
+            .padding(13)
+            .frame(maxWidth: .infinity, minHeight: 126, alignment: .topLeading)
             .background(RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .fill(UmbraColor.card))
             .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
                 .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW))
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: 分组行
-
-    private struct ToolRow: Identifiable {
-        let id: String
-        let label: String
-        let sub: String
-        let icon: String
-        /// 右侧数字胶囊。0 = 不显示。attn = true 时橙底白字（要人来处理的数）。
-        var count: Int = 0
-        var attn: Bool = false
-        let action: () -> Void
-    }
-
-    private var recordRows: [ToolRow] {
-        let running = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .running }.count
-        // 「待确认」随旧代理状态一起删了（B 批）：现在要人来处理的是**失败**的任务
-        // （看一眼原因 → 重试或重新发起）。语义变化已记回流台账，待设计确认。
-        let taskAttn = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .failed }.count
-        let undone = reminders.items.filter { !$0.done }.count
-        let overdue = reminders.items.filter { !$0.done && $0.group == "已过期" }.count
-        // 命名避开 open —— 它是 Swift 的访问级别关键字，检查器也会拦。
-        let inspOpen = inspirations.list.filter { $0.status == "open" }.count
-        return [
-            ToolRow(id: "task", label: "任务",
-                    sub: tasks.items.isEmpty ? "还没有任务"
-                        : "\(running) 个执行中 · \(taskAttn) 个失败",
-                    icon: UmbraIconPath.task,
-                    count: taskAttn > 0 ? taskAttn : running, attn: taskAttn > 0) {
-                router.go(.taskList)
-            },
-            ToolRow(id: "rem", label: "提醒",
-                    sub: reminders.items.isEmpty ? "还没有提醒"
-                        : (undone == 0 ? "都完成了" : "\(undone) 个未完成 · \(overdue) 个已逾期"),
-                    icon: UmbraIconPath.bell,
-                    count: overdue > 0 ? overdue : undone, attn: overdue > 0) {
-                router.go(.remList)
-            },
-            ToolRow(id: "insp", label: "灵感",
-                    sub: inspirations.list.isEmpty ? "还没有灵感"
-                        : "\(inspirations.list.count) 条 · \(inspOpen) 条待整理",
-                    icon: UmbraIconPath.bulb,
-                    count: inspOpen) {
-                router.go(.inspList)
+            // 催办数字 = 计数角标（系统底栏徽标同款红），右上角绝对定位（稿 top/right 12）。
+            // 中性数量不做角标 —— 「有多少条」已经写在状态行里，角标只留给催人的数。
+            .overlay(alignment: .topTrailing) {
+                UmbraCountBadge(count: card.attn)
+                    .padding(12)
             }
-        ]
-    }
-
-    private var inputRows: [ToolRow] {
-        [
-            ToolRow(id: "phrase", label: "常用语",
-                    sub: "跨端同步，聊天里随取随用",
-                    icon: UmbraIconPath.messageText) {
-                router.go(.mePhrases)
-            }
-        ]
-    }
-
-    private func group(name: String, rows: [ToolRow]) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(name)
-                .font(UmbraFont.sans(12, .w600))
-                .foregroundColor(UmbraColor.faint)
-                .padding(.horizontal, 2)
-            VStack(spacing: 0) {
-                ForEach(Array(rows.enumerated()), id: \.element.id) { i, row in
-                    if i > 0 { UmbraRowDivider() }
-                    rowView(row)
-                }
-            }
-            .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
-                .fill(UmbraColor.card))
-            .overlay(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
-                .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-        }
-    }
-
-    private func rowView(_ row: ToolRow) -> some View {
-        Button(action: row.action) {
-            HStack(spacing: 11) {
-                RoundedRectangle(cornerRadius: 9, style: .continuous)
-                    .fill(UmbraColor.chip)
-                    .frame(width: 32, height: 32)
-                    .overlay(
-                        UmbraIcon(d: row.icon, size: 16, strokeWidth: 1.9)
-                            .foregroundColor(UmbraColor.muted)
-                    )
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(row.label)
-                        .font(UmbraFont.sans(15, .w560))
-                        .foregroundColor(UmbraColor.text)
-                    Text(row.sub)
-                        .font(UmbraFont.sans(12))
-                        .foregroundColor(UmbraColor.faint)
-                        .lineLimit(1)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-                if row.count > 0 {
-                    if row.attn {
-                        // 催办数字 = 计数角标（系统底栏徽标同款红）。原来是橙胶囊 ——
-                        // 底栏徽标红、进到页里同一个数变橙，像两套系统，老板点名统一。
-                        UmbraCountBadge(count: row.count)
-                    } else {
-                        // 中性数量（没逾期没待办，只是「有多少条」）：灰 chip，
-                        // 不做成角标 —— 红角标只留给催人的数字。
-                        Text("\(row.count)")
-                            .font(UmbraFont.mono(11.5, .w600))
-                            .foregroundColor(UmbraColor.muted)
-                            .padding(.horizontal, 7).frame(minWidth: 20, minHeight: 19)
-                            .background(Capsule().fill(UmbraColor.chip))
-                    }
-                }
-                UmbraIcon(d: UmbraIconPath.chevronRight, size: 15, strokeWidth: 2)
-                    .foregroundColor(UmbraColor.faint)
-            }
-            .padding(.horizontal, 13)
-            .frame(minHeight: 58)
-            .contentShape(Rectangle())
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
         }
         .buttonStyle(.plain)
     }

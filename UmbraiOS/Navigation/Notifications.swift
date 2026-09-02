@@ -22,9 +22,11 @@ final class UmbraDeepLink: ObservableObject {
     @Published var route: UmbraRoute?
     private init() {}
 
-    /// 小组件 / 灵动岛 / 别的端点进来的 umbra:// 深链。目前四条：
+    /// 小组件 / 灵动岛 / 快捷指令 / 别的端点进来的 umbra:// 深链。目前五条：
     ///   umbra://tasks（任务列表）、umbra://task/<id>（任务详情）、
-    ///   umbra://reminders（提醒列表）、umbra://reminder/<id>（单条提醒详情）。
+    ///   umbra://reminders（提醒列表）、umbra://reminder/<id>（单条提醒详情）、
+    ///   umbra://money/add（记一笔 —— 给「轻点背面」的快捷指令用，2026-09-02 稿；
+    ///   不带 /add 的 umbra://money 落到记账首页）。
     /// 认不出的链接什么都不做 —— 宁可没反应也别跳到猜的页面。
     func handle(_ url: URL) {
         guard url.scheme == "umbra" else { return }
@@ -41,6 +43,10 @@ final class UmbraDeepLink: ObservableObject {
             // 从小组件或别的端发链接过来只能落到列表。补上，与 PC 端的深链契约对齐。
             let id = url.pathComponents.count > 1 ? url.pathComponents[1] : nil
             route = id.map { UmbraRoute.remDetail(id: $0) } ?? .remList
+        case "money":
+            // 轻点背面的场景是「掏出手机敲两下就记」，所以 /add 直落记一笔编辑页。
+            route = url.pathComponents.count > 1 && url.pathComponents[1] == "add"
+                ? .moneyAdd(id: nil) : .moneyHome
         default:
             break
         }

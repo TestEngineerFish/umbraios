@@ -13,6 +13,8 @@
 //   新建/编辑 = 独立推入页（名称 / 标签 chips / 内容大输入区），不再是系统输入弹窗 ——
 //   常用语内容常常是好几段话，alert 里那条单行输入框根本放不下。
 import SwiftUI
+// UIPasteboard 在 UIKit 里，SwiftUI 不转出口它 —— 复制钮（2026-09-02 稿）要用。
+import UIKit
 
 // MARK: - 本地存储 + 同步
 
@@ -125,6 +127,11 @@ struct UmbraPhrasesView: View {
     @EnvironmentObject private var router: UmbraRouter
     @ObservedObject private var store = PhraseStore.shared
 
+    /// 刚复制过的那条（2026-09-02 稿）：图标换勾 + 「已复制」，两秒后复位。
+    /// 只记 id 不记布尔 —— 连着复制两条时，前一条的勾要立刻让位给后一条。
+    @State private var copiedId: String?
+    @State private var copyResetTask: Task<Void, Never>?
+
     var body: some View {
         Group {
             if store.items.isEmpty {
@@ -225,35 +232,40 @@ struct UmbraPhrasesView: View {
         .disabled(store.syncing)
     }
 
-    /// 一行：名称 + 触发词胶囊 + 首行预览。点整行进编辑（设计稿的 openEdit）。
+    /// 一行：名称 + 触发词胶囊 + 首行预览 + 右侧常驻复制钮（2026-09-02 稿）。
+    /// 复制不藏在左滑里 —— 常用语八成的用法是「拿去粘到别处」，是行上的主动作；
+    /// 点标题区进编辑，点右侧图标复制全文，两块热区分开、互不误触。
     private func row(_ p: Phrase) -> some View {
-        Button {
-            router.go(.mePhraseEdit(id: p.id))
-        } label: {
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 7) {
-                    Text(p.name)
-                        .font(UmbraFont.sans(15.5, .w560))
-                        .foregroundColor(UmbraColor.text)
-                        .lineLimit(1)
-                    if let k = p.keyword, !k.isEmpty {
-                        Text(k)
-                            .font(UmbraFont.mono(11, .w600))
-                            .foregroundColor(UmbraColor.muted)
-                            .padding(.horizontal, 7)
-                            .padding(.vertical, 2)
-                            .background(Capsule().fill(UmbraColor.chip))
+        HStack(spacing: 4) {
+            Button {
+                router.go(.mePhraseEdit(id: p.id))
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 7) {
+                        Text(p.name)
+                            .font(UmbraFont.sans(15.5, .w560))
+                            .foregroundColor(UmbraColor.text)
+                            .lineLimit(1)
+                        if let k = p.keyword, !k.isEmpty {
+                            Text(k)
+                                .font(UmbraFont.mono(11, .w600))
+                                .foregroundColor(UmbraColor.muted)
+                                .padding(.horizontal, 7)
+                                .padding(.vertical, 2)
+                                .background(Capsule().fill(UmbraColor.chip))
+                        }
                     }
+                    Text(p.content.split(separator: "\n").first.map(String.init) ?? "")
+                        .font(UmbraFont.sans(13, .w400))
+                        .foregroundColor(UmbraColor.muted)
+                        .lineLimit(1)
                 }
-                Text(p.content.split(separator: "\n").first.map(String.init) ?? "")
-                    .font(UmbraFont.sans(13, .w400))
-                    .foregroundColor(UmbraColor.muted)
-                    .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            copyButton(p)
         }
-        .buttonStyle(.plain)
         .listRowBackground(UmbraColor.card)
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // 删除必进确认弹窗，所以不用 role: .destructive ——
@@ -281,6 +293,39 @@ struct UmbraPhrasesView: View {
         }
     }
 
+    /// 44×44 热区的无底图标钮（token phraseRow）：剪贴板图标，成功后换勾 +
+    /// 下方 9.5px「已复制」（--success），两秒复位 —— 和密码保险箱字段的
+    /// copyFeedback 同一套手感。内容是**明文**，不做 60 秒清剪贴板
+    /// （那条只管保险箱的敏感值）；toast 写「已复制「X」全文」，
+    /// 把复制的是全文还是首行预览说清楚。
+    private func copyButton(_ p: Phrase) -> some View {
+        let copied = copiedId == p.id
+        return Button {
+            UIPasteboard.general.string = p.content
+            withAnimation(.easeOut(duration: 0.12)) { copiedId = p.id }
+            router.showToast("已复制「\(p.name)」全文")
+            copyResetTask?.cancel()
+            copyResetTask = Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation { copiedId = nil }
+            }
+        } label: {
+            VStack(spacing: 2) {
+                UmbraIcon(d: copied ? UmbraIconPath.check : UmbraIconPath.copy,
+                          size: 19, strokeWidth: 1.9)
+                if copied {
+                    Text("已复制")
+                        .font(UmbraFont.sans(9.5, .w560))
+                }
+            }
+            .foregroundColor(copied ? UmbraColor.success : UmbraColor.muted)
+            .frame(width: 44, height: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+
     /// 明文警示 + 同步说明。放 Section footer：跟着卡片走、不参与滑动手势。
     private var footerNotes: some View {
         VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
@@ -296,7 +341,12 @@ struct UmbraPhrasesView: View {
             .padding(.vertical, 11)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(UmbraColor.warningSoft))
-            // 底下不再放同步/排序的说明文字（用户点名全删）；明文警示是安全事实，留着。
+            // 两块热区的用法说明（2026-09-02 稿的底部说明后半句）。稿里前半句是
+            // 同步机制的解释 —— 那段此前老板点名删过，不因换稿复活；明文警示照旧。
+            Text("点右侧图标复制全文，点条目改内容。")
+                .font(UmbraFont.sans(12, .w400))
+                .foregroundColor(UmbraColor.faint)
+                .padding(.horizontal, 2)
         }
         .padding(.top, UmbraMetric.sp3)
         // Section footer 自带的横向缩进去掉，跟卡片同宽。

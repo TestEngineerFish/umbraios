@@ -1,4 +1,4 @@
-// 应用外壳：系统 TabView（三个 Tab）+ 每个 Tab 一条系统 NavigationStack。
+// 应用外壳：系统 TabView（四个 Tab：聊天/提醒/工具/我）+ 每个 Tab 一条系统 NavigationStack。
 //
 // 底栏 = **真·系统 tab bar**（终稿②，2026-08-25）：iOS 26 液态玻璃浮动胶囊
 // 和它的果冻选中动效是系统私有渲染 —— 自绘复刻过一版（matchedGeometry +
@@ -30,19 +30,22 @@ struct UmbraShell: View {
     @ObservedObject private var deepLink = UmbraDeepLink.shared
     @Environment(\.scenePhase) private var scenePhase
 
-    /// 底栏角标，两个都是真实数据：
+    /// 底栏角标，全是真实数据，且只放**需要动手的数**（2026-09-02 稿）：
     ///   聊天 = 有新消息的**会话数**（服务端没给条数，不编）；
-    ///   工具 = 已逾期的提醒 + 失败的任务（稿原话：一级 tab 上的数字要能让人
-    ///   立刻决定要不要点）。「待确认」那档随旧代理状态删了（B 批），失败是
-    ///   现在唯一需要人来处理的任务终态 —— 语义变化已记回流台账，待设计确认。
+    ///   提醒 = 已逾期数 —— 一级 tab 上的数字要能让人立刻决定要不要点，
+    ///          待办总数不是这种数，不上一级；
+    ///   工具 = 失败的任务数（逾期提醒 09-02 起归提醒 tab，不再混算）。
+    /// ⚠️ 口径区分：App 图标角标 / 小组件走 ReminderStore.pendingCount
+    /// （已过期 + 今天到点，见 refreshBadge），那是「今天要看的」；
+    /// 这里的 tab 角标只算逾期，是「已经拖过头的」。两个数用途不同，别合并。
     private func badge(_ tab: UmbraTab) -> Int {
         switch tab {
         case .chat:
             return chat.unread.count
+        case .rem:
+            return reminders.items.filter { !$0.done && $0.group == "已过期" }.count
         case .tool:
-            let overdue = reminders.items.filter { !$0.done && $0.group == "已过期" }.count
-            let attn = tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .failed }.count
-            return overdue + attn
+            return tasks.items.filter { UmbraStatus(taskStatus: $0.status) == .failed }.count
         case .me:
             return 0
         }
@@ -101,19 +104,14 @@ struct UmbraShell: View {
         .onChange(of: pushed) { hidden in
             UmbraShell.setSystemTabBarHidden(hidden)
         }
-        // 通知里点开的那条提醒：切到工具 Tab、先垫上提醒列表再推详情 ——
-        // 这样返回是「详情 → 提醒列表 → 工具页」，而不是从详情一步掉回工具页
-        // （tab 减到三个之后提醒列表不再是根页，不垫这一层就没有回列表的路）。
+        // 通知里点开的那条提醒：切到目标 Tab 的根再推目标页。
+        // （08-23~09-01 期间这里要给 remDetail 先垫一层 .remList —— 当时提醒列表
+        //   不是根页，不垫就没有回列表的路。09-02 提醒提回一级 tab、列表就是根页，
+        //   垫层随之删掉：返回天然是「详情 → 提醒列表」。）
         .onChange(of: deepLink.route) { route in
             guard let route else { return }
             deepLink.route = nil
             router.root(route.tab)
-            switch route {
-            case .remDetail, .remEdit:
-                router.go(.remList)
-            default:
-                break
-            }
             postDeepLinkPush(route)
         }
     }
@@ -195,9 +193,11 @@ struct UmbraRouteView: View {
         case .chatThread(let conv):
             UmbraChatThreadView(conv: conv)
 
-        // ── 工具（Tab 2 根页）
+        // ── 工具（Tab 3 根页）
         case .toolHome:
             UmbraToolHomeView()
+        case .toolWidgets:
+            UmbraWidgetsGuideView()
 
         // ── 提醒
         case .remList:

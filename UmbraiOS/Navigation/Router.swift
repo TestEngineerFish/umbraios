@@ -18,12 +18,16 @@ enum UmbraRoute: Hashable {
     // Tab 1 聊天
     case chatContacts
     case chatThread(conv: String)
-    // Tab 2 工具（2026-08-23 稿：tab 从五个减到三个，任务/提醒/灵感/记账/保险箱
-    // 全部收进工具页 —— 它们都是「清单与工具」，并列在一级 tab 上分不清该点哪个）
-    case toolHome
+    // Tab 2 提醒（2026-09-02 稿：提醒提回一级 tab —— 一天要看好几次，
+    // 藏在工具页里每次都多点一下；任务留在工具页，两者不再并列，
+    // 任务是「交给电脑去做」，提醒是「到点叫我」）
     case remList
     case remDetail(id: String)
     case remEdit(id: String?)          // nil = 新建
+    // Tab 3 工具（2026-08-23 稿收编任务/灵感/记账/保险箱；提醒 09-02 提走）
+    case toolHome
+    /// 小组件与轻点背面的说明页（稿 widgets）。入口在工具页「输入辅助」组。
+    case toolWidgets
     case taskList
     case taskDetail(id: String)
     case inspList
@@ -79,8 +83,9 @@ enum UmbraRoute: Hashable {
         switch self {
         case .chatContacts, .chatThread:
             return .chat
-        case .toolHome,
-             .remList, .remDetail, .remEdit,
+        case .remList, .remDetail, .remEdit:
+            return .rem
+        case .toolHome, .toolWidgets,
              .taskList, .taskDetail,
              .inspList, .inspDetail, .inspEdit,
              .moneyHome, .moneyList, .moneyAdd, .moneyCats,
@@ -110,15 +115,18 @@ enum UmbraRoute: Hashable {
 
 // MARK: - Tab
 //
-// 顺序按主设计稿的 tabsVM()：聊天 / 工具 / 我。
-// 2026-08-23 稿把 tab 从五个减到三个：任务和提醒都是「待办清单」，并列在一级
-// tab 上分不清该点哪个 —— 一起收进工具页，由「记录」组统一收口。
+// 顺序按主设计稿的 tabsVM()：聊天 / 提醒 / 工具 / 我。
+// 2026-08-23 稿把 tab 从五个减到三个（任务/提醒并列分不清该点哪个，一起收进工具页）；
+// 2026-09-02 稿把**提醒**单独提回一级 —— 进 tab 的门槛是「一天要看好几次」，
+// 提醒符合，任务不符合（任务是「交给电脑去做」，提醒是「到点叫我」，不再并列）。
+// 上了一级 tab 的功能不在工具页重复出现：一个入口只有一个位置。
 enum UmbraTab: String, CaseIterable, Hashable {
-    case chat, tool, me
+    case chat, rem, tool, me
 
     var label: String {
         switch self {
         case .chat: return "聊天"
+        case .rem: return "提醒"
         case .tool: return "工具"
         case .me: return "我"
         }
@@ -126,10 +134,11 @@ enum UmbraTab: String, CaseIterable, Hashable {
     /// v2：tab bar 交给系统 TabView，图标用 SF Symbols ——
     /// 系统符号才吃得到 tab bar 的选中态渲染（iOS 26 上还有玻璃胶囊与动效）。
     /// 自绘 SVG 路径图标只在内容区继续用。稿的工具图标是个工具箱，
-    /// SF 里语义最近且 iOS 16 一定有的是扳手螺丝刀。
+    /// SF 里语义最近且 iOS 16 一定有的是扳手螺丝刀；提醒沿用铃铛。
     var sfSymbol: String {
         switch self {
         case .chat: return "bubble.left.and.bubble.right"
+        case .rem: return "bell"
         case .tool: return "wrench.and.screwdriver"
         case .me: return "person.crop.circle"
         }
@@ -137,6 +146,7 @@ enum UmbraTab: String, CaseIterable, Hashable {
     var root: UmbraRoute {
         switch self {
         case .chat: return .chatContacts
+        case .rem: return .remList
         case .tool: return .toolHome
         case .me: return .meHome
         }

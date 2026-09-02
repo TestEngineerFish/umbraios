@@ -144,6 +144,10 @@ enum UmbraIconPath {
     /// （已按本文件的规矩归一化成 M/L/C 绝对坐标：两个圆角用 κ=0.5523 的三次贝塞尔近似。）
     static let shareUp = "M12,15L12,3M8,6.5L12,2.5L16,6.5M5,14L5,19C5,20.105 5.895,21 7,21L17,21C18.105,21 19,20.105 19,19L19,14"
 
+    /// 2×2 方格（2026-09-02 稿新增）：工具页「小组件与轻点背面」卡的图标。
+    /// 原始 d：`M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z`（只有直线，无需弧转贝塞尔）。
+    static let layoutGrid = "M4,4L11,4L11,11L4,11ZM13,4L20,4L20,11L13,11ZM4,13L11,13L11,20L4,20ZM13,13L20,13L20,20L13,20Z"
+
     /// 原始 d：`M18 6 6 18M6 6l12 12`
     static let x = "M18,6L6,18M6,6L18,18"
     /// 原始 d：`M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M15 9l-6 6M9 9l6 6`
@@ -183,6 +187,7 @@ enum UmbraIconPath {
         "info": info,
         "key": key,
         "keyboard": keyboard,
+        "layoutGrid": layoutGrid,
         "link": link,
         "lock": lock,
         "lockKeyhole": lockKeyhole,
