@@ -271,6 +271,15 @@ final class UmbraRouter: ObservableObject {
         paths[tab] = []
     }
 
+    /// 跨 Tab 跳到某一页（聊天里那些「去看提醒 / 去看流水」的按钮）。
+    /// 必须先落到目标 Tab 的**根**再推：直接 go 会把目标页压进当前 Tab 的栈里，
+    /// 于是「聊天 › 提醒列表」，返回回到聊天 —— 用户按返回是想回提醒列表的。
+    /// 目标本身就是根页时不再推一层（不然会出现「提醒列表 › 提醒列表」）。
+    func jump(_ route: UmbraRoute) {
+        root(route.tab)
+        if route != route.tab.root { go(route) }
+    }
+
     // MARK: 瞬时 UI
 
     func present(_ sheet: UmbraSheet) { sheets.append(sheet) }

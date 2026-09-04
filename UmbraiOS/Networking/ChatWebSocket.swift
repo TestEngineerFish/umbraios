@@ -73,9 +73,12 @@ class ChatWebSocket: ObservableObject {
     /// （服务端会把「目标设备=这台」注入上下文，端侧任务直接派给它）。
     /// mode：三态 auto / chat / execution，对应输入框左侧的「自动 / 聊天 / 执行」切换。
     /// 服务端 app.py 读的就是这个字段，缺省 auto。
-    func sendMessage(_ content: String, conversation: String = "assistant", mode: String = "auto") {
-        guard let task = webSocketTask, task.state == .running else { return }
-        let msg: [String: Any] = [
+    /// quote：引用注脚（批次 011 ②）。服务端落进这条消息的 meta.quote 并随广播带给各端，
+    /// **不进正文** —— 模型看到的引用上下文由端侧自己拼进 content（发出去的是什么，用户看得见）。
+    @discardableResult
+    func sendMessage(_ content: String, conversation: String = "assistant", mode: String = "auto",
+                     quote: ChatQuote? = nil) -> Bool {
+        var msg: [String: Any] = [
             "type": "message",
             "content": content,
             "client_id": clientId,
@@ -83,18 +86,45 @@ class ChatWebSocket: ObservableObject {
             "conversation": conversation,
             "mode": mode
         ]
-        sendJSON(msg)
+        if let quote { msg["quote"] = quote.wire }
+        return sendJSON(msg)
+    }
+
+    /// 停掉正在处理的这次回复（批次 011 ①）。服务端取消该会话在跑的那条 process_message，
+    /// 收尾（半截落库 / 系统提示行 / 已执行的工具清单）由服务端做完后以 reply_cancelled 回来 ——
+    /// **本端不要自己抢着改气泡**，不然「停了但其实已经答完了」这种时序会两边打架。
+    @discardableResult
+    func sendCancelReply(conversation: String = "assistant") -> Bool {
+        sendJSON(["type": "chat_cancel", "conversation": conversation])
+    }
+
+    /// 删一条消息（批次 011 ②）。服务端软删进回收站（30 天），随后广播 message_deleted 给**所有端**
+    /// （包括发起端 —— 本端已经删了，重复收到时找不到 id 就当没事）。
+    @discardableResult
+    func sendDeleteMessage(id: Int) -> Bool {
+        sendJSON(["type": "message_delete", "id": id])
+    }
+
+    /// 图片消息（批次 011 ③）。文件已先走 POST /files/upload 拿到 file_id，这里只送 id 列表。
+    /// 服务端落库 + 跨端广播，**不触发秘书回复**（一期不识图）；回执是 message_saved（带消息 id）。
+    @discardableResult
+    func sendImageMessage(atts: [String], conversation: String = "assistant") -> Bool {
+        guard !atts.isEmpty else { return false }
+        return sendJSON([
+            "type": "message", "kind": "image", "atts": atts,
+            "client_id": clientId, "conversation": conversation
+        ])
     }
 
     // B 批改名：确认单号叫 confirm_id，不再冒充任务 id（原 job_confirm_response + task_id）。
-    func sendConfirm(confirmId: String, approved: Bool) {
-        guard let task = webSocketTask, task.state == .running else { return }
+    @discardableResult
+    func sendConfirm(confirmId: String, approved: Bool) -> Bool {
         let msg: [String: Any] = [
             "type": "confirm_response",
             "confirm_id": confirmId,
             "approved": approved
         ]
-        sendJSON(msg)
+        return sendJSON(msg)
     }
 
     // 不带 runId = 停掉所有正在跑的操控（服务端语义）。
@@ -130,29 +160,37 @@ class ChatWebSocket: ObservableObject {
         sendJSON(["type": "operate_resume", "run_id": runId])
     }
 
-    func sendNewSession() {
+    /// 开新话题。返回值 = 「/new 交出去了吗」—— 调用方要靠它决定该不该清本地历史。
+    @discardableResult
+    func sendNewSession() -> Bool {
         sendMessage("/new")
     }
 
     /// 问答卡一次性提交（多题一起交，和 PC 端同一个协议）。
     /// answers 的形状是「题目 id → 选中项数组」；自己填的内容作为**额外一项**追加进数组，
     /// 而不是替换掉选项 —— 用户总有你没想到的答案，两者并存服务端才拼得出完整上下文。
-    func sendAnswers(cardId: String, answers: [String: [String]]) {
-        guard let task = webSocketTask, task.state == .running else { return }
+    @discardableResult
+    func sendAnswers(cardId: String, answers: [String: [String]]) -> Bool {
         sendJSON(["type": "question_answer", "card_id": cardId, "answers": answers])
     }
 
     // MARK: - Private
-    private func sendJSON(_ json: [String: Any]) {
+    /// 返回值 = 「这一帧交出去了吗」。**不是**「服务端收到了吗」—— URLSession 的发送是异步的，
+    /// 真正的失败（连接半死）只能靠回调打印。但「离线时压根没发出去」这一种必须让调用方知道：
+    /// 不知道的话界面就会摆出一副发出去了的样子，然后干等到超时（批次 011 前的老毛病）。
+    @discardableResult
+    private func sendJSON(_ json: [String: Any]) -> Bool {
+        guard let task = webSocketTask, task.state == .running else { return false }
         // 必须发「文本帧」：服务端 chat_ws 用 receive_text() 只收文本帧；
         // 发 .data（二进制帧）会让服务端解析失败并关闭连接（表现为 Socket not connected / RST）。
         guard let data = try? JSONSerialization.data(withJSONObject: json),
-              let text = String(data: data, encoding: .utf8) else { return }
-        webSocketTask?.send(.string(text)) { error in
+              let text = String(data: data, encoding: .utf8) else { return false }
+        task.send(.string(text)) { error in
             if let error {
                 print("[ChatWebSocket] Send error: \(error)")
             }
         }
+        return true
     }
 
     private func startReceiving(task: URLSessionWebSocketTask) {
@@ -282,4 +320,81 @@ struct ChatMessage {
 
     // error
     var errorMessage: String? { json["message"] as? String }
+
+    // ── 批次 011 消息层：id / kind / atts / meta ────────────────────────────
+    // 服务端的一条消息现在有身份（id）和类型（kind），还能带附件与元信息。
+    // 端上的引用、删除、图片消息全指着这几个取值器 —— 老服务端不带就取到 nil，各处按「没有」处理。
+
+    /// 消息 id（chat_message 广播 / message_saved 回执 / message_deleted 都带）。
+    /// 服务端给的是整数；JSON 里可能被解析成 NSNumber，用 as? Int 取不到时兜一层。
+    var messageId: Int? {
+        if let n = json["id"] as? Int { return n }
+        if let n = json["id"] as? NSNumber { return n.intValue }
+        return nil
+    }
+    /// text / image / system。老服务端不带 → nil，调用方当 text。
+    var kind: String? { json["kind"] as? String }
+    /// 附件的 file_id 列表（kind=image；批次 013 起 kind=text 也可能带）。
+    var atts: [String]? { (json["atts"] as? [Any])?.compactMap { $0 as? String } }
+    /// 附加信息（quote / interrupted / cancelled / tools）。
+    var meta: [String: Any]? { json["meta"] as? [String: Any] }
+    /// 引用注脚：气泡顶部那块「引用 X」靠它渲染。
+    var metaQuote: ChatQuote? { ChatQuote(json: meta?["quote"] as? [String: Any]) }
+    /// 这条是「停在半截」的回复（reply_cancelled 的第一种收尾）：时间戳后缀「只写到这里」。
+    var metaInterrupted: Bool { (meta?["interrupted"] as? Bool) ?? false }
+    /// 这条是「一个字都没流出来就停了」的系统提示行（第二种收尾）。
+    var metaCancelled: Bool { (meta?["cancelled"] as? Bool) ?? false }
+    /// 停之前已经执行掉的工具（琥珀行「已经动过 X」靠它说得具体）。
+    var metaTools: [ChatToolRun] {
+        ((meta?["tools"] as? [[String: Any]]) ?? []).compactMap { ChatToolRun(json: $0) }
+    }
+    /// message_saved 的回执里也带 content（发起端拿它对齐乐观气泡）。
+    var savedContent: String? { json["content"] as? String }
+}
+
+// MARK: - 引用与工具留痕（批次 011）
+
+/// 消息的引用注脚。**只有三个字段**：被引消息的 id、谁说的、摘要 —— meta 是要进库的，
+/// 不给客户端塞任意结构的口子（服务端 app.py 也是这么收的，text 截 200）。
+struct ChatQuote: Equatable, Hashable {
+    var id: Int?
+    /// "user" / "assistant"：决定气泡顶部写「引用 我」还是「引用 秘书」。
+    var role: String
+    var text: String
+
+    init(id: Int?, role: String, text: String) {
+        self.id = id
+        self.role = role
+        self.text = String(text.prefix(200))
+    }
+
+    init?(json: [String: Any]?) {
+        guard let json, let text = json["text"] as? String, !text.isEmpty else { return nil }
+        self.id = (json["id"] as? Int) ?? (json["id"] as? NSNumber)?.intValue
+        self.role = (json["role"] as? String) ?? "user"
+        self.text = String(text.prefix(200))
+    }
+
+    var wire: [String: Any] {
+        var d: [String: Any] = ["role": role, "text": text]
+        if let id { d["id"] = id }
+        return d
+    }
+}
+
+/// 取消收尾里「已经跑掉的那些工具」。name 是工具名，args 是参数摘要（服务端已截到 200）。
+struct ChatToolRun: Equatable, Hashable {
+    let name: String
+    let args: String
+
+    init(name: String, args: String) {
+        self.name = name
+        self.args = args
+    }
+
+    init?(json: [String: Any]) {
+        guard let name = json["name"] as? String, !name.isEmpty else { return nil }
+        self.name = name
+        self.args = (json["args"] as? String) ?? ""
+    }
 }

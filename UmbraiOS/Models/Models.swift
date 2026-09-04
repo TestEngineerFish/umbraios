@@ -7,6 +7,32 @@ struct HistoryMessage: Codable, Identifiable {
     let content: String
     let created_at: String?
     let conversation: String?
+    /// text / image（atts 是文件 id）/ system（取消提示这类系统行）。老服务端不带 → 当 text。
+    let kind: String?
+    /// 附件的 file_id 列表（图片消息；批次 013 起带附件的文字消息也有）。
+    let atts: [String]?
+    /// 附加信息：引用注脚 quote、取消收尾的 interrupted / cancelled、已执行工具 tools。
+    /// 结构随服务端走，端上只挑认识的字段读，所以用 [String: AnyCodableValue] 而不是强类型。
+    let meta: HistoryMeta?
+}
+
+/// 历史行的 meta。只解码端上真的会用的那几个键 —— 服务端以后往里加东西不会把这一条解码搞崩。
+struct HistoryMeta: Codable {
+    let interrupted: Bool?
+    let cancelled: Bool?
+    let quote: HistoryQuote?
+    let tools: [HistoryTool]?
+}
+
+struct HistoryQuote: Codable {
+    let id: Int?
+    let role: String?
+    let text: String?
+}
+
+struct HistoryTool: Codable {
+    let name: String?
+    let args: String?
 }
 
 // 会话列表项：'assistant'=你↔秘书；'device:<id>'=服务端↔某设备（只读）。

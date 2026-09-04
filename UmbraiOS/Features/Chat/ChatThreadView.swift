@@ -92,8 +92,8 @@ struct UmbraChatThreadView: View {
                     // 「⋯」：系统 Menu 锚定弹出。清空是破坏性入口，红字 + 必进确认弹窗。
                     Menu {
                         Button {
-                            chat.newSession()
-                            router.showToast("已开始新会话")
+                            // 离线时 /new 出不去，本地历史也就不该清（清了服务端那边话题没断）。
+                            router.showToast(chat.newSession() ? "已开始新会话" : L("chat.notConnected"))
                         } label: {
                             Label("新会话", systemImage: "plus.bubble")
                         }
@@ -239,8 +239,8 @@ struct UmbraChatThreadView: View {
     @ViewBuilder
     private func row(_ block: ChatBlock, index: Int) -> some View {
         switch block {
-        case .user(_, let text, _):
-            userBubble(text)
+        case .user(let u):
+            userBubble(u)
 
         case .assistant(let a):
             VStack(alignment: .leading, spacing: 5) {
@@ -251,6 +251,10 @@ struct UmbraChatThreadView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     if !a.trace.isEmpty { traceCard(a, index: index) }
                     if !a.text.isEmpty || a.streaming { aiBubble(a) }
+                    // 停在半截的那条：气泡下一行小字（批次 011 ①）。
+                    // **不在正文里加「（已中断）」** —— 括号在气泡里会被读成秘书自己说的话。
+                    if a.interrupted, !a.text.isEmpty { interruptedFootnote }
+                    if let kept = ChatKeptTool.line(for: a.toolsRun) { keptToolsRow(kept) }
                 }
             }
 
@@ -282,13 +286,17 @@ struct UmbraChatThreadView: View {
                 onResume: { chat.handleResume(runId: l.runId, askId: l.askId) }
             )
 
-        case .note(_, let text):
-            Text(text)
-                .font(UmbraFont.sans(12, .w400))
-                .foregroundColor(UmbraColor.faint)
-                .padding(.horizontal, UmbraMetric.sp4)
-                .padding(.vertical, 6)
-                .background(Capsule().fill(UmbraColor.chip))
+        case .note(let n):
+            // 系统提示行不接长按菜单（`messageMenu.byKind.systemLine`）：它不是消息。
+            VStack(spacing: 8) {
+                Text(n.text)
+                    .font(UmbraFont.sans(12, .w400))
+                    .foregroundColor(UmbraColor.faint)
+                    .padding(.horizontal, UmbraMetric.sp4)
+                    .padding(.vertical, 6)
+                    .background(Capsule().fill(UmbraColor.chip))
+                if let kept = ChatKeptTool.line(for: n.toolsRun) { keptToolsRow(kept) }
+            }
 
         case .error(_, let text):
             errorCard(text)
@@ -296,8 +304,12 @@ struct UmbraChatThreadView: View {
     }
 
     /// 长按气泡复制。IM 的通行做法，textSelection 只能选不能一键复制整条。
-    /// 气泡长按菜单（系统 contextMenu）。设计稿还有「引用回复」和「删除」——
-    /// 服务端既没有引用消息的字段也没有删单条消息的接口，不摆点了没用的按钮。
+    ///
+    /// ⚠️ 这还是**批次 011 之前**的两项菜单。稿②要求按消息类型分档
+    ///（我发的 / 秘书的 / 失败的 / 图片 / 卡片），并补上引用、存为常用语、记为灵感、删除。
+    /// 引用与删除的数据层已经通了（`ChatViewModel.quoteMessage` / `deleteMessage`、
+    /// 服务端的 `message_delete` 与 meta.quote），**缺的只是这层菜单 UI**，留在 ② 那一批做 ——
+    /// 别再照着老注释重新判一次「服务端不支持」。
     @ViewBuilder
     private func copyMenu(_ text: String) -> some View {
         Button {
@@ -320,7 +332,7 @@ struct UmbraChatThreadView: View {
         }
     }
 
-    private func userBubble(_ text: String) -> some View {
+    private func userBubble(_ u: ChatBlock.UserBlock) -> some View {
         // ⚠️ 别用 `.frame(maxWidth: 270)` 给气泡限宽：SwiftUI 的 maxWidth 会让这个 frame
         // **撑满父级给的宽度直到上限**，于是「好的」两个字也画成 270 宽的一大块，
         // 看起来就是「消息永远一样长、文字缩在左边」（用户点名）。
@@ -328,7 +340,7 @@ struct UmbraChatThreadView: View {
         // 同时用 Spacer 的 minLength 留出对侧留白 —— 长文自然换行，短文自然收窄。
         HStack(spacing: 0) {
             Spacer(minLength: UmbraMetric.bubbleGutter)
-            Text(text)
+            Text(u.text)
                 .font(UmbraFont.sans(15.5, .w400))
                 .foregroundColor(UmbraColor.text)
                 .lineSpacing(15.5 * 0.5)
@@ -337,7 +349,37 @@ struct UmbraChatThreadView: View {
                 .padding(.horizontal, 13)
                 .padding(.vertical, 9)
                 .background(UmbraBubbleShape(mine: true).fill(UmbraColor.userBubble))
-                .contextMenu { copyMenu(text) }
+                .contextMenu { myMenu(u) }
+        }
+    }
+
+    /// 我方气泡的长按菜单。发**失败**的那条按稿②砍到三项、「重新发送」置顶
+    ///（`messageMenu.byKind.failed`：那条还没送出去，引用和存起来都无从谈起，
+    /// 而你右键它十次有九次就是为了重发）。这条路必须现在就通 —— 不然离线发一条，
+    /// 它就带着红叹号卡在那儿，既发不出去也删不掉。
+    /// 正常那条仍是老的两项，按类型分档的完整菜单留在 ② 那一批。
+    @ViewBuilder
+    private func myMenu(_ u: ChatBlock.UserBlock) -> some View {
+        if u.failed {
+            Button {
+                chat.resendFailed(blockId: u.id.uuidString)
+            } label: {
+                Label("重新发送", systemImage: "arrow.clockwise")
+            }
+            Button {
+                UIPasteboard.general.string = u.text
+                router.showToast("已复制")
+            } label: {
+                Label("复制", systemImage: "doc.on.doc")
+            }
+            // 服务端上根本没有这条，只是本地移除 —— 不走「移入回收站 30 天」那套确认。
+            Button(role: .destructive) {
+                chat.dropLocal(blockId: u.id.uuidString)
+            } label: {
+                Label("删除", systemImage: "trash")
+            }
+        } else {
+            copyMenu(u.text)
         }
     }
 
@@ -371,14 +413,98 @@ struct UmbraChatThreadView: View {
 
     private func aiBubble(_ a: ChatBlock.AssistantBlock) -> some View {
         // 外层再包一层 HStack + 右侧 Spacer：同 userBubble 的理由，宽度随内容。
-        HStack(spacing: 0) {
+        // 停止钮（批次 011 ①）**常显**在占位 / 流式气泡尾部，不做「按住才出现」——
+        // 等回复的那几秒正是最需要看见它的时候，藏起来等于让人先学会「原来这里能点」。
+        HStack(alignment: .bottom, spacing: 8) {
             aiBubbleBody(a)
-            Spacer(minLength: UmbraMetric.bubbleGutter)
+            if a.streaming { stopButton }
+            // 停止钮占掉「钮 32 + 间距 8」，从右侧留白里扣，气泡的可用宽度不变 ——
+            // 否则一有停止钮气泡就先窄一截、停完又变宽，正在读的那段会整体重排。
+            Spacer(minLength: a.streaming
+                   ? UmbraMetric.bubbleGutter - Self.stopDiameter - 8
+                   : UmbraMetric.bubbleGutter)
         }
+    }
+
+    /// 停止这次回复：视觉 32pt 圆钮，热区 44pt（`replyCancel.button`）。
+    /// 热区靠透明外框撑出来 —— 稿的规矩是「视觉可以小于 44，热区不许」。
+    private var stopButton: some View {
+        Button {
+            if !chat.cancelReply() { router.showToast(L("chat.notConnected")) }
+        } label: {
+            UmbraIcon(d: UmbraIconPath.stopSquare, size: 13, strokeWidth: 2)
+                .foregroundColor(UmbraColor.muted)
+                .frame(width: Self.stopDiameter, height: Self.stopDiameter)
+                .background(Circle().fill(UmbraColor.bg))
+                .overlay(Circle().stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+                .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)   // 热区
+                .contentShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L("chat.stopReply"))
+        // 热区比视觉大一圈，用负边距抵掉，免得把气泡行撑高。跟着 tapMin 走，
+        // 写死 -6 的话以后调 tapMin 这里会静默错位。
+        .padding(-(UmbraMetric.tapMin - Self.stopDiameter) / 2)
+    }
+
+    /// 停止钮的视觉直径（稿：32，热区 44）。热区走 `UmbraMetric.tapMin`。
+    private static let stopDiameter: CGFloat = 32
+
+    /// 半截回复下面那行小字。图标是同一颗停止方块 —— 让人一眼认出「这是你按的那个键干的」。
+    private var interruptedFootnote: some View {
+        HStack(spacing: 5) {
+            UmbraIcon(d: UmbraIconPath.stopSquare, size: 12, strokeWidth: 2)
+                .foregroundColor(UmbraColor.faint)
+            Text(L("chat.interruptedNote"))
+                .font(UmbraFont.sans(11.5, .w400))
+                .foregroundColor(UmbraColor.faint)
+                .fixedSize()
+        }
+    }
+
+    /// 取消收尾的琥珀行（`replyCancel.toolKept`）。只在真的跑过**会留下东西**的工具时出：
+    /// 只读查询停了就停了，说「不跟着撤销」反而吓人。文案具体到那一条，并给一个能去看的钮 ——
+    /// 笼统的「已执行的操作不会撤销」被稿方点名否掉了。
+    /// 收的是**已经解析好的那一行**（`ChatKeptTool.line`），不是原始工具清单：
+    /// 「一个会留下东西的工具都没有 → 这一行不出」的判断必须发生在 VStack 外面，
+    /// 不然 VStack 会给一个空 View 也留出一格间距。
+    private func keptToolsRow(_ kept: (text: String, route: UmbraRoute, button: String)) -> some View {
+        VStack(alignment: .leading, spacing: 9) {
+            HStack(alignment: .top, spacing: 9) {
+                UmbraIcon(d: UmbraIconPath.alertTriangle, size: 16, strokeWidth: 1.9)
+                    .foregroundColor(UmbraColor.warning)
+                    .padding(.top, 2)
+                Text(kept.text)
+                    .font(UmbraFont.sans(13, .w400))
+                    .foregroundColor(UmbraColor.warning)
+                    .lineSpacing(13 * 0.6)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            Button {
+                router.jump(kept.route)
+            } label: {
+                Text(kept.button)
+                    .font(UmbraFont.sans(14.5, .w600))
+                    .foregroundColor(UmbraColor.warning)
+                    .frame(maxWidth: .infinity, minHeight: UmbraMetric.tapMin)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(UmbraColor.warning, lineWidth: UmbraMetric.borderW))
+        }
+        .padding(.horizontal, 13)
+        .padding(.vertical, 11)
+        .frame(width: 300, alignment: .leading)   // 与同屏的轨迹卡 / 任务卡 / 确认卡同宽
+        .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(UmbraColor.warningSoft))
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+            .stroke(UmbraColor.warning, lineWidth: UmbraMetric.borderW))
     }
 
     private func aiBubbleBody(_ a: ChatBlock.AssistantBlock) -> some View {
         HStack(alignment: .bottom, spacing: 2) {
+            // 占位（一个字都还没流出来）：三点 —— 光标在空气泡里闪，看不出「它在想」。
+            if a.thinking, a.text.isEmpty { UmbraThinkingDots() }
             if !a.text.isEmpty {
                 // 秘书的回复里全是「**开发步骤**：」「1. 需求分析」这类 Markdown，
                 // 直接当纯文本画出来满屏星号井号（用户点名）——走块级渲染。
@@ -387,7 +513,8 @@ struct UmbraChatThreadView: View {
                     .textSelection(.enabled)
             }
             // 流式光标：7×16 橙块，1 秒硬闪一次（steps(1)，不是渐隐）。
-            if a.streaming { UmbraBlinkCaret() }
+            // 只在**已经有字**时闪：空气泡里一根光标看不出「它在想」，那一段归三点。
+            if a.streaming, !a.text.isEmpty { UmbraBlinkCaret() }
         }
         .padding(.horizontal, 13)
         .padding(.vertical, 10)
@@ -1037,10 +1164,10 @@ struct UmbraChatThreadView: View {
     private func transcript() -> String {
         chat.blocks.compactMap { b -> String? in
             switch b {
-            case .user(_, let t, _): return "我：\(t)"
+            case .user(let u): return "我：\(u.text)"
             case .assistant(let a): return a.text.isEmpty ? nil : "秘书：\(a.text)"
             case .device(_, let t, _): return "\(title)：\(t)"
-            case .note(_, let t): return t
+            case .note(let n): return n.text
             default: return nil
             }
         }.joined(separator: "\n\n")
@@ -1095,6 +1222,30 @@ struct UmbraBlinkCaret: View {
                     on.toggle()
                 }
             }
+    }
+}
+
+/// 占位气泡里的三点。7pt 圆点、`--muted`、1.2s 一轮，三颗错开 .2s / .4s（稿的取值）。
+/// 用 `repeatForever` 的隐式动画而不是逐帧 Task：三颗点各自跑一条 CA 动画，
+/// 交给系统去插值，比在主线程上定时改 @State 省事也不会掉帧。
+struct UmbraThinkingDots: View {
+    @State private var bob = false
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(0..<3, id: \.self) { i in
+                Circle()
+                    .fill(UmbraColor.muted)
+                    .frame(width: 7, height: 7)
+                    .offset(y: bob ? -3 : 0)
+                    .animation(.easeInOut(duration: 0.6)
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(i) * 0.2), value: bob)
+            }
+        }
+        // onAppear 里翻一次开关把三条动画一起点着 —— 初始值就设 true 的话首帧没有变化，
+        // repeatForever 不会启动（SwiftUI 的动画要有「值变了」这个事件）。
+        .onAppear { bob = true }
     }
 }
 

@@ -31,6 +31,9 @@ class ChatViewModel: ObservableObject {
     @Published var draft: String = "" {
         didSet { if !draft.hasPrefix("/"), slashDismissed { slashDismissed = false } }
     }
+    /// 输入框上方的引用条（批次 011 ②）：选了「引用」之后挂在这儿，发出去随消息带走。
+    /// 只是这条消息的注脚 —— 不改发给模型的正文，也不改气泡里显示的文字。
+    @Published var quote: ChatQuote?
     /// 「/」快捷输入选中的动作芯片（批次 005）。挂着芯片时动作名以 【动作名】 前缀
     /// 并进正文发出（服务端零改动，秘书按人话前缀理解意图）；nil = 没挂。
     /// 原来这里是三态「对话模式」（auto / chat / execution）—— 模式条整个撤了，
@@ -82,6 +85,10 @@ class ChatViewModel: ObservableObject {
         replyTimeout = nil
     }
     private func failPendingTurn() {
+        // 先清表再判：这条路径不经过 stopReplyTimeout，早退时不清的话 replyTimeout 会留着
+        // 一个跑完的 Task，而 handleMessage 靠「replyTimeout != nil」判断「还在等这一轮吗」——
+        // 契约一破，之后每收到一条推送都会白白重起一个 120 秒的计时器。
+        replyTimeout = nil
         let conv = pendingConv
         let s = store(conv)
         guard let idx = s.assistantIdx, idx < s.blocks.count else { return }
@@ -169,6 +176,12 @@ class ChatViewModel: ObservableObject {
     }
     private var mainStore: ConvStore { store(ChatViewModel.mainConv) }
 
+    /// 只把变更反映到当前会话，**不标未读**。删除、回收站找回这类「不是新消息」的变更用它 ——
+    /// 走 reflect 的话联系人列表会冒一个红点，点进去却什么新东西都没有。
+    private func refresh(_ conv: String) {
+        if conv == activeConv { blocks = store(conv).blocks }
+    }
+
     // 把某会话的变更反映到 UI：active → 更新 blocks；否则标未读。
     private func reflect(_ conv: String) {
         if conv == activeConv {
@@ -205,7 +218,7 @@ class ChatViewModel: ObservableObject {
                 let s = self.mainStore
                 s.loaded = true
                 if s.blocks.isEmpty {
-                    s.blocks = messages.map { self.historyToBlock($0) }
+                    s.blocks = messages.compactMap { self.historyToBlock($0) }
                 }
                 if let last = messages.first {
                     s.oldestId = last.id
@@ -224,13 +237,15 @@ class ChatViewModel: ObservableObject {
             let messages = await HTTPService.shared.fetchHistory(limit: 40, conversation: conv)
             await MainActor.run {
                 if s.blocks.isEmpty {
-                    s.blocks = messages.map { self.historyToBlock($0) }
+                    s.blocks = messages.compactMap { self.historyToBlock($0) }
                 }
                 if let last = messages.first {
                     s.oldestId = last.id
                     s.hasMoreHistory = messages.count >= 40
                 }
-                self.reflect(conv)
+                // 首次进这个会话时把历史铺上，不是「来新消息了」。同 loadOlderHistory：
+                // 这中间隔了一次 await，中途再切一次会话就会给它误点红点。
+                self.refresh(conv)
             }
         }
     }
@@ -247,11 +262,52 @@ class ChatViewModel: ObservableObject {
         }
     }
 
-    private func historyToBlock(_ msg: HistoryMessage) -> ChatBlock {
+    /// 历史里的一行 → 一个块。**返回可空**：有些行不该出现在界面上（见下面两处 nil），
+    /// 调用方一律用 compactMap。
+    private func historyToBlock(_ msg: HistoryMessage) -> ChatBlock? {
+        // `/new` 会往库里写一行 __new_topic__ 当「新话题」的分界标记（memory.mark_new_topic）。
+        // 它是给取上下文用的，不是给人看的 —— 历史接口不过滤（只滤软删），端上必须自己滤掉，
+        // 否则开了新会话再回来，聊天里就多一行写着 __new_topic__ 的东西。
+        // 放在 switch **之前**：现在它是 role=system，但这一条不该押注在 role 上 ——
+        // 万一哪天换成别的 role，落进 default 就会变成一颗秘书说「__new_topic__」的气泡，更糟。
+        if msg.content == "__new_topic__" { return nil }
         switch msg.role {
-        case "user": return .user(id: UUID(), text: msg.content, ts: msg.created_at)
+        case "user":
+            // 历史里的一条我发的消息：id / 引用 / 附件都从服务端那份带回来（删除与引用指着它们）。
+            // 纯图片消息（kind=image）的 content 是空串，当文字气泡画出来就是个空泡 ——
+            // 图片块是 ③ 那一批的事，在那之前先不画（预览行另给占位文案）。
+            if (msg.kind ?? "text") == "image" { return nil }
+            return .user(ChatBlock.UserBlock(
+                text: msg.content, ts: msg.created_at, serverId: msg.id,
+                quote: historyQuote(msg.meta), atts: msg.atts ?? []))
         case "device": return .device(id: UUID(), text: msg.content, ts: msg.created_at)
-        default: return .assistantBlock(text: msg.content, ts: msg.created_at)
+        case "system":
+            // 取消收尾那条系统提示行是真消息（进库、能删、能从回收站找回），
+            // 重进这个会话时得照样画出来，不能当成秘书说的话塞进气泡。
+            return .note(ChatBlock.NoteBlock(text: msg.content, serverId: msg.id,
+                                             toolsRun: historyTools(msg.meta)))
+        default:
+            return .assistant(ChatBlock.AssistantBlock(
+                thinking: false, streaming: false, text: msg.content, trace: [], traceOpen: false,
+                ts: msg.created_at, serverId: msg.id,
+                interrupted: msg.meta?.interrupted ?? false, toolsRun: historyTools(msg.meta)))
+        }
+    }
+
+    /// 历史行的 meta.quote → 引用注脚。空 text 的引用不要 —— `ChatQuote.init?(json:)`（WS 那条路）
+    /// 就是拒绝空 text 的，两条入口的口径必须一样，不然同一条消息在「拉历史」和「跨端广播」
+    /// 两种来源下画出来的东西不一致。
+    private func historyQuote(_ meta: HistoryMeta?) -> ChatQuote? {
+        guard let q = meta?.quote, let text = q.text, !text.isEmpty else { return nil }
+        return ChatQuote(id: q.id, role: q.role ?? "user", text: text)
+    }
+
+    /// 历史行的 meta.tools → 端上的工具留痕。两份结构长得几乎一样，
+    /// 但一份是 Codable（HTTP 历史）、一份从 JSON 字典来（WS 广播），合不成一个类型。
+    private func historyTools(_ meta: HistoryMeta?) -> [ChatToolRun] {
+        (meta?.tools ?? []).compactMap { t in
+            guard let name = t.name, !name.isEmpty else { return nil }
+            return ChatToolRun(name: name, args: t.args ?? "")
         }
     }
 
@@ -273,12 +329,14 @@ class ChatViewModel: ObservableObject {
             if messages.isEmpty { s.hasMoreHistory = false; return }
             if messages.count < 40 { s.hasMoreHistory = false }
             s.oldestId = messages.first?.id
-            let newBlocks = messages.map { self.historyToBlock($0) }
+            let newBlocks = messages.compactMap { self.historyToBlock($0) }
             s.blocks.insert(contentsOf: newBlocks, at: 0)
             let shift = newBlocks.count
             for key in s.taskMap.keys { s.taskMap[key]? += shift }
             s.assistantIdx? += shift
-            reflect(conv)
+            // 往前插旧消息不是「来新消息了」。而且这中间隔了一次 await：用户在转圈时
+            // 切去了别的会话的话，reflect 会给刚才那个会话点上一个红点。
+            refresh(conv)
         }
     }
 
@@ -307,15 +365,147 @@ class ChatViewModel: ObservableObject {
         let conv = activeConv
         let s = store(conv)
         let now = ISO8601DateFormatter().string(from: Date())
-        s.blocks.append(.user(id: UUID(), text: text, ts: now))
+        // 上一轮还在转的占位先收尾：assistantIdx 马上要被这一轮覆盖，旧那颗就再没人管了。
+        // 批次 011 之后它还会多长出一颗停止钮，而那颗点下去停的是**这一轮** —— 更坏。
+        sealPlaceholder(s)
+        let sent = quote
+        quote = nil   // 引用是一次性的：这一条带走就摘掉，别让下一条默默带上同一段
+        // 乐观气泡：先画出来，服务端回执（reply 的 user_message_id）再把 serverId 认领上。
+        s.blocks.append(.user(ChatBlock.UserBlock(text: text, ts: now, quote: sent)))
+        // mode 固定 "auto"：模式条已撤（批次 005），服务端参数保留一段时间，界面不再出现。
+        // 发不出去（离线）就地收尾：把这条标成失败 + 追一行说清楚，**不画占位**。
+        // 原来的做法是照样画占位，然后三个点转满 120 秒才冒出「超时」—— 而消息压根没出门。
+        guard ws.sendMessage(text, conversation: conv, mode: "auto", quote: sent) else {
+            if case .user(var u) = s.blocks[s.blocks.count - 1] {
+                u.failed = true
+                s.blocks[s.blocks.count - 1] = .user(u)
+            }
+            s.blocks.append(.error(id: UUID(), text: L("chat.notConnected")))
+            // 这一轮压根没开始，表也别留着（sealPlaceholder 已经把上一轮的 assistantIdx 清了，
+            // 计时器再响一次也找不到收尾对象，只会把 replyTimeout 卡成非 nil）。
+            stopReplyTimeout()
+            setPreview(conv, text, now)
+            reflect(conv)
+            return
+        }
         s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: true, streaming: true, text: "", trace: [], traceOpen: true, ts: now)))
         s.assistantIdx = s.blocks.count - 1
         setPreview(conv, text, now)
         reflect(conv)
-        // mode 固定 "auto"：模式条已撤（批次 005），服务端参数保留一段时间，界面不再出现。
-        ws.sendMessage(text, conversation: conv, mode: "auto")
         pendingConv = conv
         armReplyTimeout()
+    }
+
+    /// 把某会话里还在转的占位气泡就地收尾（只停转，不追错误行）。
+    /// 用在「这一轮的占位要被新一轮顶掉」的场合 —— 旧那颗的 delta/reply 本来就已经
+    /// 找不到落点了（currentAssistant 只认 assistantIdx），至少别让它一直转下去。
+    private func sealPlaceholder(_ s: ConvStore) {
+        defer { s.assistantIdx = nil }
+        guard let idx = s.assistantIdx, idx < s.blocks.count,
+              case .assistant(var a) = s.blocks[idx] else { return }
+        a.thinking = false
+        a.streaming = false
+        s.blocks[idx] = .assistant(a)
+    }
+
+    /// 认领服务端给我方消息分配的 id（批次 011）。用户消息在 `handle()` 里才落库，
+    /// WS 广播那会儿还没有 id，所以由 `reply` 回执带回来。
+    ///
+    /// 两道保险，都是 PC 端踩出来的：
+    ///   1. **已经认领过就别再找**（带附件那条由 message_saved 先认领）—— 不然会把这个 id
+    ///      错发给更早一条还没回执的消息；
+    ///   2. 从**本轮的占位气泡**往前找，不是从整份数组的末尾找。等回复的这几秒里别的端
+    ///      也可能发消息进来，而服务端广播别人那条纯文字消息时**不带 id**
+    ///      （app.py 的 user_sync 只有带附件才 update id），末尾那条很可能是别人的 ——
+    ///      认错了以后长按删除就删到别人头上。占位块之前紧挨着的那条一定是我这条。
+    private func claimUserMessageId(_ uid: Int, conv: String) {
+        let s = store(conv)
+        let taken = s.blocks.contains { if case .user(let u) = $0 { return u.serverId == uid } else { return false } }
+        guard !taken else { return }
+        var i = min(s.assistantIdx.map { $0 - 1 } ?? s.blocks.count - 1, s.blocks.count - 1)
+        while i >= 0 {
+            if case .user(var u) = s.blocks[i], u.serverId == nil, !u.failed {
+                u.serverId = uid
+                s.blocks[i] = .user(u)
+                refresh(conv)
+                return
+            }
+            i -= 1
+        }
+    }
+
+    /// 停掉这次回复（批次 011 ①）。**只发信号，不动本地气泡** —— 收尾块由服务端
+    /// 以 reply_cancelled 回来替换占位；本端抢着改的话，「点停止的同一刻其实已经答完了」
+    /// 这种时序会两边打架。
+    ///
+    /// 静默计时**不停**：收尾也可能丢（连接刚好断、服务端收尾那段抛异常），
+    /// 停了表这颗占位气泡就会一直转到用户杀进程。留着它当地板。
+    /// 返回 false = 没连上，信号没发出去 —— 调用方该吐一句，不然用户戳那颗钮毫无反应。
+    @discardableResult
+    func cancelReply() -> Bool {
+        let conv = activeConv
+        guard store(conv).assistantIdx != nil else { return false }
+        return ws.sendCancelReply(conversation: conv)
+    }
+
+    /// 删一条消息（批次 011 ②）。服务端软删进回收站（30 天）后广播 message_deleted 给所有端，
+    /// **本端也从广播里删** —— 本地先删会在服务端拒绝时留下一条「看起来删了其实还在」的消息。
+    ///
+    /// ⚠️ 这个方法**不弹二次确认**。删除是跨端的，稿里点名要先问一句
+    ///（「删除这条消息？/ 各设备都会删除。删除后会移入回收站，保留 30 天。」），
+    /// 那一层归调用方（长按菜单）走 `router.confirm`。
+    /// 返回 false = 没连上，没发出去 —— 调用方该吐一句，别让菜单收了却什么也没发生。
+    /// 没有 serverId 的消息（还没发出去的失败条）服务端上不存在，只该本地移除，走 `dropLocal`。
+    @discardableResult
+    func deleteMessage(serverId: Int) -> Bool {
+        guard serverId > 0 else { return false }
+        return ws.sendDeleteMessage(id: serverId)
+    }
+
+    /// 只把本地这一个块拿掉（发送失败、服务端上根本没有这条的那种「删除」）。
+    /// 失败气泡后面那行「没发出去」的错误说的就是它，一并带走 —— 只删气泡的话，
+    /// 屏幕上会剩一句没有主语的错误。
+    func dropLocal(blockId: String) {
+        for (conv, s) in stores {
+            guard let i = s.blocks.firstIndex(where: { $0.id == blockId }) else { continue }
+            dropBlocks(at: i, in: s, alsoTrailingError: true)
+            refresh(conv)
+            return
+        }
+    }
+
+    /// 重新发送一条发失败的消息（批次 011 ② 的「重新发送」置顶项）。
+    /// 先把失败那条连同它的错误行拿掉，再走一遍完整的 `send()` —— 原地改状态的话，
+    /// 第二次又失败就会留下两条一模一样的红叹号。正文与引用照旧带走。
+    func resendFailed(blockId: String) {
+        let conv = activeConv
+        let s = store(conv)
+        guard let i = s.blocks.firstIndex(where: { $0.id == blockId }),
+              case .user(let u) = s.blocks[i], u.failed else { return }
+        dropBlocks(at: i, in: s, alsoTrailingError: true)
+        refresh(conv)
+        // 正文已经含着【动作名】前缀（原来那次发送时就拼进去了），所以 chipAction 保持空，
+        // 不然 send() 会再拼一层。
+        quote = u.quote
+        draft = u.text
+        send()
+    }
+
+    /// 移掉第 i 个块（可选地连同紧跟其后的那行错误），并把受影响的下标整体前移。
+    private func dropBlocks(at i: Int, in s: ConvStore, alsoTrailingError: Bool) {
+        var n = 1
+        if alsoTrailingError, i + 1 < s.blocks.count, case .error = s.blocks[i + 1] { n = 2 }
+        s.blocks.removeSubrange(i ..< (i + n))
+        if let a = s.assistantIdx { s.assistantIdx = a > i ? a - n : (a == i ? nil : a) }
+        for (k, v) in s.taskMap where v > i { s.taskMap[k] = v - n }
+    }
+
+    /// 引用一条消息（批次 011 ②）：挂到输入框上方的引用条，发出去随消息带走。
+    /// 没有 serverId 也能引用（引用条照出、正文照带），只是点它跳不回原消息。
+    func quoteMessage(id: Int?, role: String, text: String) {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !t.isEmpty else { return }
+        quote = ChatQuote(id: id, role: role, text: String(t.prefix(200)))
     }
 
     /// 灵感详情「让 Umbra 去做这件事」：切到主会话，挂「创建任务」芯片、
@@ -344,17 +534,22 @@ class ChatViewModel: ObservableObject {
         Task { await HTTPService.shared.clearHistory(conversation: conv) }
     }
 
-    func newSession() {
+    /// 开新话题。**先发后清**：`/new` 没出门（离线）就什么都不做并返回 false ——
+    /// 原来是先清本地再发，离线时表现成「历史清了，服务端那边话题却没断」，
+    /// 而且 hasMoreHistory 还留着 true，往上一翻刚清掉的又全回来了。
+    @discardableResult
+    func newSession() -> Bool {
+        guard ws.sendNewSession() else { return false }
         let s = mainStore
         s.blocks.removeAll()
         s.assistantIdx = nil
         s.taskMap.removeAll()
         s.oldestId = nil
         s.hasMoreHistory = true
-        ws.sendNewSession()
         stickToBottom = true
         if activeConv != ChatViewModel.mainConv { switchConversation(ChatViewModel.mainConv) }
-        else { reflect(ChatViewModel.mainConv) }
+        else { refresh(ChatViewModel.mainConv) }
+        return true
     }
 
     func toggleTrace(at index: Int) {
@@ -386,7 +581,9 @@ class ChatViewModel: ObservableObject {
                     changed = true
                 }
             }
-            if changed { reflect(conv) }
+            // 改的是卡片自己的作答状态，不是新消息。别的端答完广播过来的 question_resolved
+            // 更是「已经有人处理过了」，给它点个红点、点进去却什么新东西都没有。
+            if changed { refresh(conv) }
         }
     }
 
@@ -494,7 +691,9 @@ class ChatViewModel: ObservableObject {
                 }
             }
         }
-        reflect(ChatViewModel.mainConv)
+        // 四个调用方全是本机用户自己点的（指位 / 纠偏 / 暂停 / 继续）——
+        // 自己操作把自己标未读，说不通。
+        refresh(ChatViewModel.mainConv)
     }
 
     private var autoApprovedConfirms: Set<String> = []
@@ -543,9 +742,65 @@ class ChatViewModel: ObservableObject {
 
         case "reply":
             stopReplyTimeout()
-            if var a = currentAssistant(streamConv) { a.text = msg.text ?? a.text; a.thinking = false; a.streaming = false; updateAssistant(a, streamConv) }
+            if var a = currentAssistant(streamConv) {
+                a.text = msg.text ?? a.text
+                a.thinking = false
+                a.streaming = false
+                // 秘书这条的服务端 id：长按删除 / 引用要指着它。
+                a.serverId = (msg.json["message_id"] as? Int) ?? (msg.json["message_id"] as? NSNumber)?.intValue
+                updateAssistant(a, streamConv)
+            }
+            // 我那条的 id 也在这个回执里（批次 011：用户消息在 handle() 里才落库，
+            // WS 广播时还没有 id，所以由回执带回来）。认领到最近一条还没有 id 的我方消息上。
+            if let uid = (msg.json["user_message_id"] as? Int) ?? (msg.json["user_message_id"] as? NSNumber)?.intValue {
+                claimUserMessageId(uid, conv: streamConv)
+            }
             store(streamConv).assistantIdx = nil
             setPreview(streamConv, msg.text ?? "", ISO8601DateFormatter().string(from: Date()))
+
+        case "reply_cancelled":
+            // 你停了这次回复（批次 011 ①）。两种收尾由服务端定：
+            //   role=assistant → 半截保留 + meta.interrupted（气泡下一行「你停了这次回复 · 只写到这里」）
+            //   role=system    → 一行居中提示「你停了这次回复 · 消息已经发出去了，秘书没回」
+            // 两种都**替换掉正在流式的占位块**；工具轨迹留着 —— 那是真跑过的。
+            stopReplyTimeout()
+            let s = store(streamConv)
+            let idx = s.assistantIdx
+            let text = msg.text ?? ""
+            let blk: ChatBlock
+            if msg.chatRole == "assistant" {
+                // 半截那份保留原占位块攒下的 trace（工具轨迹卡不该跟着消失）。
+                var trace: [String] = []
+                if let i = idx, i < s.blocks.count, case .assistant(let old) = s.blocks[i] { trace = old.trace }
+                blk = .assistant(ChatBlock.AssistantBlock(
+                    thinking: false, streaming: false, text: text, trace: trace, traceOpen: false,
+                    ts: ISO8601DateFormatter().string(from: Date()),
+                    serverId: msg.messageId, interrupted: true, toolsRun: msg.metaTools))
+            } else {
+                blk = .note(ChatBlock.NoteBlock(text: text, serverId: msg.messageId, toolsRun: msg.metaTools))
+            }
+            if let i = idx, i < s.blocks.count, case .assistant = s.blocks[i] { s.blocks[i] = blk }
+            else { s.blocks.append(blk) }
+            s.assistantIdx = nil
+            setPreview(streamConv, text, ISO8601DateFormatter().string(from: Date()))
+            reflect(streamConv)
+
+        case "message_saved":
+            // 落库回执（只发给发起端）：把在途的乐观气泡认领成正式消息 —— 有了 id，
+            // 删除和引用才有对象可指。带附件的文字消息先回这条、再回 reply，两次认领同一个 id，
+            // claimUserMessageId 里的「认过就不再找」保证不会把 id 错发给更早那条。
+            // kind=image 走的是另一种块（纯图消息，③ 那一批），这里先不认 —— 认了会挂到文字气泡上。
+            if let mid = msg.messageId, (msg.kind ?? "text") != "image" {
+                claimUserMessageId(mid, conv: msg.conversation ?? ChatViewModel.mainConv)
+            }
+
+        case "message_deleted":
+            // 谁删的都一样处理（服务端不排除发起端）：本地还有这条就移除，已经没有就当没事。
+            if let mid = msg.messageId { removeBlock(serverId: mid) }
+
+        case "message_restored":
+            // 回收站找回：往正确位置插一条旧消息，每端各写一遍必然各错各的 —— 重拉那个会话。
+            reloadConv(msg.conversation ?? activeConv)
 
         case "device_presence":
             loadDevices()  // 设备上下线 → 刷新联系人列表（在线状态 / 能力目录）
@@ -647,7 +902,7 @@ class ChatViewModel: ObservableObject {
             //   2. 文案写死「电脑端」。清空的可能是另一台手机、也可能是网页端，
             //      服务端只告诉我们「不是你」，说不出是谁，所以不再瞎猜具体是哪一端。
             if msg.clearedBy != NetworkConfig.shared.clientId {
-                s.blocks.append(.note(id: UUID(), text: "其它端清空了这段聊天历史"))
+                s.blocks.append(.note(ChatBlock.NoteBlock(text: "其它端清空了这段聊天历史")))
             }
             reflect(conv)
 
@@ -656,13 +911,38 @@ class ChatViewModel: ObservableObject {
 
         case "chat_message":
             // 其它端发出的消息（跨端同步），落到它所属的会话。
+            // 批次 011 起多了两种形状：role/kind=system（别的端停了回复留下的提示行）、
+            // 带 meta 的半截中断（那边停在一半，这边也该看到「只写到这里」）。
             let conv = msg.conversation ?? ChatViewModel.mainConv
             let ts = msg.created_at ?? ISO8601DateFormatter().string(from: Date())
             let s = store(conv)
-            if msg.chatRole == "user" {
-                s.blocks.append(.user(id: UUID(), text: msg.chatText ?? "", ts: ts))
+            if (msg.kind ?? "text") == "image" {
+                // 别的端发的纯图片消息。图片块是 ③ 那一批的事；在那之前**宁可不画**，
+                // 也不要画成一个空气泡（content 是空串）——「对面发了条空消息」比少一条更糟。
+                // 联系人列表的预览行给一句占位，不然那一栏会停在上一条上。
+                setPreview(conv, L("chat.imageMsgPreview"), ts)
+                // reflect 不能省：它是「标未读」的唯一入口。只更预览的话，联系人那一行
+                // 内容变了却不冒红点 —— 比不显示更让人摸不着头脑。
+                reflect(conv)
+                return
+            }
+            if msg.chatRole == "system" || msg.kind == "system" {
+                s.blocks.append(.note(ChatBlock.NoteBlock(
+                    text: msg.chatText ?? "", serverId: msg.messageId, toolsRun: msg.metaTools)))
+            } else if msg.chatRole == "user" {
+                // 重连时服务端会补发，同 id 已经在了就别重复画一条。
+                if let mid = msg.messageId,
+                   s.blocks.contains(where: { if case .user(let u) = $0 { return u.serverId == mid } else { return false } }) {
+                    return
+                }
+                s.blocks.append(.user(ChatBlock.UserBlock(
+                    text: msg.chatText ?? "", ts: ts, serverId: msg.messageId,
+                    quote: msg.metaQuote, atts: msg.atts ?? [])))
             } else if msg.chatRole == "assistant" {
-                s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: false, streaming: false, text: msg.chatText ?? "", trace: [], traceOpen: false, ts: ts)))
+                s.blocks.append(.assistant(ChatBlock.AssistantBlock(
+                    thinking: false, streaming: false, text: msg.chatText ?? "",
+                    trace: [], traceOpen: false, ts: ts, serverId: msg.messageId,
+                    interrupted: msg.metaInterrupted, toolsRun: msg.metaTools)))
             }
             setPreview(conv, msg.chatText ?? "", ts)
             reflect(conv)
@@ -678,6 +958,58 @@ class ChatViewModel: ObservableObject {
             reflect(streamConv)
 
         default: break
+        }
+    }
+
+    /// 按服务端消息 id 移除一个块（message_deleted 广播用）。
+    /// 扫**所有会话**而不只当前那个：广播不带足够信息保证我们猜对会话，而 id 是全局唯一的。
+    /// 删掉的位置会让后面块的下标整体前移，由 `dropBlocks` 统一修正
+    ///（被删的那条一定不是任务卡 —— 任务卡没有 serverId —— 所以只用前移，不用摘条目）。
+    private func removeBlock(serverId: Int) {
+        guard serverId > 0 else { return }
+        for (conv, s) in stores {
+            guard let i = s.blocks.firstIndex(where: { blockServerId($0) == serverId }) else { continue }
+            // 这里**不**带走后面那行错误：真被服务端删掉的是一条正常消息，
+            // 它后面就算跟着一条错误，那也是另一回事。
+            dropBlocks(at: i, in: s, alsoTrailingError: false)
+            refresh(conv)
+            return
+        }
+    }
+
+    /// 一个块对应的服务端消息 id（没有落库的块 —— 任务卡、确认卡、问答卡 —— 返回 nil）。
+    private func blockServerId(_ b: ChatBlock) -> Int? {
+        switch b {
+        case .user(let u): return u.serverId
+        case .assistant(let a): return a.serverId
+        case .note(let n): return n.serverId
+        default: return nil
+        }
+    }
+
+    /// 重拉一个会话的历史（message_restored 用）。找回的消息要插回原来的位置，
+    /// 那份排序逻辑每端各写一遍必然各错各的 —— 直接把这段重新拉一次最省事也最不会错。
+    private func reloadConv(_ conv: String) {
+        guard let s = stores[conv] else { return }
+        // 正在等回复的会话不冲：重拉会把占位块连同 assistantIdx 一起抹掉，
+        // 之后的 delta / reply 全部落空，这一轮的回复就在界面上人间蒸发了。
+        // 找回一条旧消息不急在这一秒 —— 等这一轮结束后下次进这个会话自然会看到。
+        guard s.assistantIdx == nil else { return }
+        Task {
+            let messages = await HTTPService.shared.fetchHistory(limit: 40, conversation: conv)
+            await MainActor.run {
+                // 再确认一次：这一趟 HTTP 是异步的，回来时可能已经有新的一轮在跑了。
+                guard s.assistantIdx == nil else { return }
+                s.blocks = messages.compactMap { self.historyToBlock($0) }
+                // 下标类的状态全部作废：块换了一整批，旧下标指到哪儿都不作数。
+                // 顺带说明重拉的代价：任务卡 / 确认卡 / 问答卡 / locate 卡都不落 messages 表，
+                // 重拉之后它们会消失。这是「插回原位置的排序逻辑每端各写一遍必然各错各的」
+                // 换来的，两害相权取其轻 —— PC 端 reloadConv 也是这么做的。
+                s.taskMap.removeAll()
+                s.oldestId = messages.first?.id
+                s.hasMoreHistory = messages.count >= 40
+                self.refresh(conv)
+            }
         }
     }
 
@@ -759,7 +1091,7 @@ class ChatViewModel: ObservableObject {
 
 // MARK: - Chat Blocks
 enum ChatBlock: Identifiable {
-    case user(id: UUID, text: String, ts: String?)
+    case user(UserBlock)
     case assistant(AssistantBlock)
     case device(id: UUID, text: String, ts: String?)
     case task(TaskBlock)
@@ -767,14 +1099,16 @@ enum ChatBlock: Identifiable {
     case confirm(ConfirmBlock)
     case locate(LocateBlock)
     case question(QuestionBlock)
-    /// 居中的一行系统说明（如「电脑端清空了这段聊天历史」）。不是气泡，不属于任何一方。
-    case note(id: UUID, text: String)
+    /// 居中的一行系统说明（如「电脑端清空了这段聊天历史」「你停了这次回复…」）。
+    /// 不是气泡，不属于任何一方，**不接长按菜单**（`messageMenu.byKind.systemLine`：
+    /// 那不是消息，给它一个只有「复制」的菜单反而暗示它是条）。
+    case note(NoteBlock)
     case error(id: UUID, text: String)
 
     // 稳定 id：每个块创建时就固定，供 SwiftUI 做行身份识别。
     var id: String {
         switch self {
-        case .user(let id, _, _): return id.uuidString
+        case .user(let u): return u.id.uuidString
         case .assistant(let a): return a.id.uuidString
         case .device(let id, _, _): return id.uuidString
         case .task(let j): return j.id.uuidString
@@ -782,13 +1116,41 @@ enum ChatBlock: Identifiable {
         case .confirm(let c): return c.id.uuidString
         case .locate(let l): return l.id.uuidString
         case .question(let q): return q.id.uuidString
-        case .note(let id, _): return id.uuidString
+        case .note(let n): return n.id.uuidString
         case .error(let id, _): return id.uuidString
         }
     }
 }
 
 extension ChatBlock {
+    /// 我发出去的一条消息。批次 011 起它不只有文字：
+    ///   serverId  服务端消息 id（sendMessage 之后由 reply 的 user_message_id / message_saved 回执认领）。
+    ///             **引用和删除都指着它** —— 没有 id 的消息删不了、也没法被引用（没有对象可指）。
+    ///   quote     引用注脚：气泡顶部那块「引用 X」，点它跳回原消息。
+    ///   atts      附件 file_id（批次 013 带附件的文字消息；纯图片消息走 .image 块）。
+    ///   failed    发出去失败了：气泡左侧一颗红「!」，长按菜单把「重新发送」置顶。
+    struct UserBlock: Hashable {
+        let id = UUID()
+        var text: String
+        var ts: String?
+        var serverId: Int?
+        var quote: ChatQuote?
+        var atts: [String] = []
+        var failed: Bool = false
+    }
+
+    /// 居中的系统提示行。两个来源，形态一样但性质不同：
+    ///   · 本地生成的（「其它端清空了这段聊天历史」）—— serverId 为空，服务端没有这条；
+    ///   · 服务端落库的（取消收尾那句「你停了这次回复 · 消息已经发出去了，秘书没回」）——
+    ///     它是真消息，进回收站也认这个 id，所以要留着。
+    /// toolsRun 只有取消收尾那条会有：跟一条琥珀行说清停之前动过什么（`replyCancel.toolKept`）。
+    struct NoteBlock: Hashable {
+        let id = UUID()
+        var text: String
+        var serverId: Int?
+        var toolsRun: [ChatToolRun] = []
+    }
+
     struct AssistantBlock: Hashable {
         let id = UUID()
         var thinking: Bool
@@ -797,6 +1159,12 @@ extension ChatBlock {
         var trace: [String]
         var traceOpen: Bool
         var ts: String?
+        /// 服务端消息 id（reply 的 message_id / 历史里带）。删除与引用要它。
+        var serverId: Int?
+        /// 用户停在半截（批次 011 ①的第一种收尾）：时间戳后面缀「只写到这里」，不在正文里加括号。
+        var interrupted: Bool = false
+        /// 停之前已经跑掉的工具：卡下面那行琥珀提示「已经动过 X」靠它说得具体。
+        var toolsRun: [ChatToolRun] = []
     }
 
     /// 任务进度卡（task_update）。taskId 就是任务 id；confirmId 是嵌在卡里的
@@ -907,6 +1275,55 @@ extension ChatBlock {
 
     static func taskBlock(taskId: String, goal: String, pct: Int, status: String, message: String, confirmId: String?, results: [[String: String]]?) -> ChatBlock {
         .task(TaskBlock(taskId: taskId, goal: goal, pct: pct, status: status, message: message, confirmId: confirmId, results: results))
+    }
+}
+
+// MARK: - 取消收尾的琥珀行（批次 011 ①）
+//
+// 「⚠︎ 停之前它已经建好了提醒「明天十点打给张伟」。这条留着，不跟着撤销。 [去看提醒]」
+// 稿方点名否掉了笼统的「已执行的操作不会撤销」：没执行过工具时它是句废话，
+// 执行过时又不说到底留下了什么。所以只在跑过**会留下东西的**工具时才出这一行 ——
+// 只读查询（search / list / web_search）停了就停了，说「不跟着撤销」反而吓人。
+// 这张表与 PC 端 chat.ts 的 KEPT_TOOLS 一一对应，改一处要改两处。
+@MainActor
+enum ChatKeptTool {
+    /// 一条留痕的说法：动词短语 + 去哪儿看那样东西。两个文案都是 key，不是成品字符串 ——
+    /// 这一行是给人看的，英文界面下不能冒出半句中文。
+    struct Kept {
+        let verbKey: String
+        let route: UmbraRoute
+        let buttonKey: String
+    }
+
+    static let table: [String: Kept] = [
+        "create_reminder":  Kept(verbKey: "chat.kept.createReminder", route: .remList,   buttonKey: "chat.goSeeReminder"),
+        "update_reminder":  Kept(verbKey: "chat.kept.updateReminder", route: .remList,   buttonKey: "chat.goSeeReminder"),
+        "delete_reminder":  Kept(verbKey: "chat.kept.deleteReminder", route: .remList,   buttonKey: "chat.goSeeReminder"),
+        "add_money_entry":  Kept(verbKey: "chat.kept.addMoney",       route: .moneyList, buttonKey: "chat.goSeeMoney"),
+        "add_phrase":       Kept(verbKey: "chat.kept.addPhrase",      route: .mePhrases, buttonKey: "chat.goSeePhrases"),
+        "save_inspiration": Kept(verbKey: "chat.kept.saveIdea",       route: .inspList,  buttonKey: "chat.goSeeIdeas"),
+        "create_task":      Kept(verbKey: "chat.kept.createTask",     route: .taskList,  buttonKey: "chat.goSeeTasks"),
+    ]
+
+    /// 从 args（JSON 字符串，服务端已截到 200）里捞一个能指认对象的词：提醒的 text、任务的 name…
+    /// 捞不到就只说动词（「停之前它已经建好了提醒。」），**不编一个名字出来**。
+    static func object(of args: String) -> String {
+        guard let data = args.data(using: .utf8),
+              let d = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "" }
+        let raw = (d["text"] as? String) ?? (d["title"] as? String) ?? (d["name"] as? String) ?? ""
+        let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !s.isEmpty else { return "" }
+        return L("chat.keptObject", s.count > 24 ? String(s.prefix(24)) + "…" : s)
+    }
+
+    /// 一串工具 → 琥珀行整句 + 该跳哪儿。一个「会留下东西」的都没有就返回 nil（这一行不出）。
+    static func line(for tools: [ChatToolRun]) -> (text: String, route: UmbraRoute, button: String)? {
+        let kept = tools.compactMap { t in table[t.name].map { (run: t, spec: $0) } }
+        guard let first = kept.first else { return nil }
+        let parts = kept.map { "\(L($0.spec.verbKey))\(object(of: $0.run.args))" }
+        let tail = L(kept.count > 1 ? "chat.toolsKeptTailMany" : "chat.toolsKeptTailOne")
+        return (L("chat.toolsKeptHead") + parts.joined(separator: L("chat.keptJoin")) + tail,
+                first.spec.route, L(first.spec.buttonKey))
     }
 }
 

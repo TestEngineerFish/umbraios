@@ -722,6 +722,91 @@
         }
       }
     },
+    "chat.goSeeIdeas" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View ideas"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去看灵感"
+          }
+        }
+      }
+    },
+    "chat.goSeeMoney" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View entries"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去看流水"
+          }
+        }
+      }
+    },
+    "chat.goSeePhrases" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View phrases"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去看常用语"
+          }
+        }
+      }
+    },
+    "chat.goSeeReminder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View reminders"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去看提醒"
+          }
+        }
+      }
+    },
+    "chat.goSeeTasks" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "View tasks"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去看任务"
+          }
+        }
+      }
+    },
     "chat.image.loadFailed" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -735,6 +820,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "图片加载失败"
+          }
+        }
+      }
+    },
+    "chat.imageMsgPreview" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[Image]"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "[图片]"
           }
         }
       }
@@ -773,6 +875,176 @@
         }
       }
     },
+    "chat.interruptedNote" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "You stopped this reply · it only got this far"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你停了这次回复 · 只写到这里"
+          }
+        }
+      }
+    },
+    "chat.kept.addMoney" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "logged an entry"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记了一笔账"
+          }
+        }
+      }
+    },
+    "chat.kept.addPhrase" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "saved a phrase"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存了一条常用语"
+          }
+        }
+      }
+    },
+    "chat.kept.createReminder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "created the reminder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "建好了提醒"
+          }
+        }
+      }
+    },
+    "chat.kept.createTask" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "created the task"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "创建了任务"
+          }
+        }
+      }
+    },
+    "chat.kept.deleteReminder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "deleted the reminder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "删了提醒"
+          }
+        }
+      }
+    },
+    "chat.kept.saveIdea" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "saved an idea"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "记下了一条灵感"
+          }
+        }
+      }
+    },
+    "chat.kept.updateReminder" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "updated the reminder"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "改了提醒"
+          }
+        }
+      }
+    },
+    "chat.keptJoin" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ", "
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "、"
+          }
+        }
+      }
+    },
+    "chat.keptObject" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "“%@”"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「%@」"
+          }
+        }
+      }
+    },
     "chat.newSession.confirm" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -803,6 +1075,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开启新对话"
+          }
+        }
+      }
+    },
+    "chat.notConnected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not connected to the server — this one didn't go out. Check the server address in Settings."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "还没连上服务端，这条没发出去。到设置里检查一下服务端地址。"
           }
         }
       }
@@ -909,6 +1198,23 @@
         }
       }
     },
+    "chat.stopReply" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stop"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停止"
+          }
+        }
+      }
+    },
     "chat.suggestion.screenshot" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -956,6 +1262,57 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "写个小工具"
+          }
+        }
+      }
+    },
+    "chat.toolsKeptHead" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Before you stopped it, it already "
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "停之前它已经"
+          }
+        }
+      }
+    },
+    "chat.toolsKeptTailMany" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ". Those stay — cancelling doesn't undo them."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "。这些留着，不跟着撤销。"
+          }
+        }
+      }
+    },
+    "chat.toolsKeptTailOne" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : ". That stays — cancelling doesn't undo it."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "。这条留着，不跟着撤销。"
           }
         }
       }
@@ -3233,6 +3590,9 @@
 
     },
     "重复密码、弱密码、没开两步验证、长期未更新 —— 四项都没问题。" : {
+
+    },
+    "重新发送" : {
 
     },
     "重新查一次" : {

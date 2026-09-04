@@ -111,14 +111,10 @@ struct UmbraShell: View {
         .onChange(of: deepLink.route) { route in
             guard let route else { return }
             deepLink.route = nil
-            router.root(route.tab)
-            postDeepLinkPush(route)
+            // 「落到目标 Tab 的根再推目标页」这套动作统一收在 router.jump 里 ——
+            // 原来这儿、灵感页、聊天的琥珀行各写了一份，改跳转规则要改三处。
+            router.jump(route)
         }
-    }
-
-    /// 深链的最后一跳拆出来 —— onChange 闭包别叠太深。
-    private func postDeepLinkPush(_ route: UmbraRoute) {
-        if route != route.tab.root { router.go(route) }
     }
 
     /// 当前 Tab 是否在推入页里（栈深 > 0）。系统底栏的显隐跟着它走。

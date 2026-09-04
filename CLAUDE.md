@@ -1,7 +1,12 @@
 # UmbraiOS 工程约定
 
-SwiftUI，最低支持 iOS 16，Swift 语言版本 5.0。界面按
-`doc/design_handoff_umbra_ios/` 里的设计交接包实现。
+SwiftUI，**最低 iOS 17.0**（主 App；Widgets / AutoFill 扩展是 17.6），Swift 语言版本 5.0。
+界面按 `doc/design_handoff_umbra_ios/` 里的设计交接包实现。
+
+> 这行原来写的是「最低支持 iOS 16」，与工程设置对不上（`IPHONEOS_DEPLOYMENT_TARGET`
+> 早就是 17.0/17.6）。代码里已经大量用了 iOS 17 才有的 API —— 两参数的
+> `.onChange(of:) { _, new in }`、`.topBarTrailing` / `.topBarLeading`（30+ 处）——
+> 真按 16 去调 target 会一次炸出几十处编译错误。以工程设置为准。
 
 ## 目录结构
 

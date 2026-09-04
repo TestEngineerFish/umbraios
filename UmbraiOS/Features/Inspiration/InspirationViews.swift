@@ -623,8 +623,7 @@ struct UmbraInspirationDetailView: View {
                 chat.prefillTaskFromIdea(
                     i.raw.isEmpty ? i.title : i.raw,
                     sourceTitle: i.title.isEmpty ? String(i.raw.prefix(18)) : i.title)
-                router.root(.chat)
-                router.go(.chatThread(conv: ChatViewModel.mainConv))
+                router.jump(.chatThread(conv: ChatViewModel.mainConv))
             }
             HStack(spacing: 8) {
                 UmbraButton(title: i.status == "done" ? "标回待办" : "标记已实现", kind: .secondary, height: 44) {

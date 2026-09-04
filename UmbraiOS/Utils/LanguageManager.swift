@@ -98,6 +98,14 @@ final class LanguageManager: ObservableObject {
     }
 
     func localized(_ key: String, _ arguments: CVarArg...) -> String {
+        localized(key, arguments: arguments)
+    }
+
+    /// 变参转发必须走这个「已经是数组」的入口。
+    /// ⚠️ 原来 `L(key, a, b)` 是把 `arguments`（一个 `[CVarArg]`）整个塞进另一个变参函数的，
+    /// 于是格式化时看到的是**一个数组参数**，`%@ %@` 只会填上第一个、第二个变成垃圾。
+    /// 这个坑一直没爆是因为带参数的 L 全项目一处都没用过（批次 011 起有了）。
+    func localized(_ key: String, arguments: [CVarArg]) -> String {
         let format = StringCatalog.shared.string(for: key, languageCode: languageCode)
         guard !arguments.isEmpty else { return format }
         return String(format: format, locale: locale, arguments: arguments)
@@ -113,5 +121,5 @@ func L(_ key: String) -> String {
 
 @MainActor
 func L(_ key: String, _ arguments: CVarArg...) -> String {
-    LanguageManager.shared.localized(key, arguments)
+    LanguageManager.shared.localized(key, arguments: arguments)
 }

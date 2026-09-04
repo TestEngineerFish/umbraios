@@ -148,6 +148,13 @@ enum UmbraIconPath {
     /// 原始 d：`M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z`（只有直线，无需弧转贝塞尔）。
     static let layoutGrid = "M4,4L11,4L11,11L4,11ZM13,4L20,4L20,11L13,11ZM4,13L11,13L11,20L4,20ZM13,13L20,13L20,20L13,20Z"
 
+    /// 停止（批次 011 ① 新增）：圆角方块。占位气泡尾部那颗停止钮、以及半截回复下面
+    /// 「你停了这次回复 · 只写到这里」那一行的前缀图标都用它。
+    /// **它不在 `umbra-icons.json` 里** —— iOS 稿两处都是内联 `<rect x=7 y=7 w=10 h=10 rx=2>`，
+    /// 清单没收录。已回执给设计侧补进清单，补了之后这里的注释可以改成引清单名。
+    /// 原始 d：`M7 7h10v10H7z` 的 rx=2 版本（四角用 κ=0.5523 的三次贝塞尔近似）。
+    static let stopSquare = "M9,7L15,7C16.105,7 17,7.895 17,9L17,15C17,16.105 16.105,17 15,17L9,17C7.895,17 7,16.105 7,15L7,9C7,7.895 7.895,7 9,7Z"
+
     /// 原始 d：`M18 6 6 18M6 6l12 12`
     static let x = "M18,6L6,18M6,6L18,18"
     /// 原始 d：`M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18M15 9l-6 6M9 9l6 6`
@@ -211,6 +218,7 @@ enum UmbraIconPath {
         "sortLines": sortLines,
         "spinnerArc": spinnerArc,
         "star": star,
+        "stopSquare": stopSquare,
         "sun": sun,
         "task": task,
         "textLines": textLines,
