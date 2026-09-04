@@ -197,10 +197,13 @@ struct UmbraMarkdownText: View {
             .padding(.leading, CGFloat(indent) * 14)
 
         case .code(let t):
+            // ⚠️ 这里**不要**挂 .textSelection(.enabled)：秘书气泡从批次 011 ② 起挂了
+            // 六项长按菜单，而文本选择和 contextMenu 抢同一个长按手势 —— 压在代码块字形上
+            // 时选择会先赢，菜单弹不出来。秘书的回复里代码块很常见，不是边角情况。
+            // 复制能力没丢：整条正文的「复制」在气泡的长按菜单里。
             Text(t)
                 .font(UmbraFont.mono(size - 1.5, .w400))
                 .lineSpacing(size * 0.4)
-                .textSelection(.enabled)
                 .padding(9)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(UmbraColor.chip))

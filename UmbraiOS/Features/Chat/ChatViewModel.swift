@@ -345,6 +345,9 @@ class ChatViewModel: ObservableObject {
         activeConv = conv
         unread.remove(conv)
         stickToBottom = true
+        // 引用是 VM 级的单例状态：在主会话里选了「引用」还没发就切走，
+        // 带着它发出去就是一条指向**别的会话**那条消息的引用，点了永远跳不过去。
+        quote = nil
         let s = store(conv)
         blocks = s.blocks
         if !s.loaded { loadConvHistory(conv) }
@@ -361,6 +364,15 @@ class ChatViewModel: ObservableObject {
         draft = ""
         chipAction = nil
         ideaBanner = nil
+        let sent = quote
+        quote = nil   // 引用是一次性的：这一条带走就摘掉，别让下一条默默带上同一段
+        deliver(text, quote: sent)
+    }
+
+    /// 真正把一条消息发出去（乐观气泡 / 占位 / 失败收尾 / 计时都在这儿）。
+    /// 和 `send()` 拆开，是因为「重新发送」不该借用户的输入框当传参通道 ——
+    /// 借了就会把人家正打到一半的草稿、挂着的芯片、刚选的另一条引用全冲掉。
+    private func deliver(_ text: String, quote sent: ChatQuote?) {
         stickToBottom = true
         let conv = activeConv
         let s = store(conv)
@@ -368,8 +380,6 @@ class ChatViewModel: ObservableObject {
         // 上一轮还在转的占位先收尾：assistantIdx 马上要被这一轮覆盖，旧那颗就再没人管了。
         // 批次 011 之后它还会多长出一颗停止钮，而那颗点下去停的是**这一轮** —— 更坏。
         sealPlaceholder(s)
-        let sent = quote
-        quote = nil   // 引用是一次性的：这一条带走就摘掉，别让下一条默默带上同一段
         // 乐观气泡：先画出来，服务端回执（reply 的 user_message_id）再把 serverId 认领上。
         s.blocks.append(.user(ChatBlock.UserBlock(text: text, ts: now, quote: sent)))
         // mode 固定 "auto"：模式条已撤（批次 005），服务端参数保留一段时间，界面不再出现。
@@ -380,7 +390,8 @@ class ChatViewModel: ObservableObject {
                 u.failed = true
                 s.blocks[s.blocks.count - 1] = .user(u)
             }
-            s.blocks.append(.error(id: UUID(), text: L("chat.notConnected")))
+            // 不另起错误块：稿②把「没发出去 · 连接断了」+「重新发送」画在气泡**正下方那一行**，
+            // 再来一张错误卡就是同一件事说两遍。
             // 这一轮压根没开始，表也别留着（sealPlaceholder 已经把上一轮的 assistantIdx 清了，
             // 计时器再响一次也找不到收尾对象，只会把 replyTimeout 卡成非 nil）。
             stopReplyTimeout()
@@ -463,12 +474,10 @@ class ChatViewModel: ObservableObject {
     }
 
     /// 只把本地这一个块拿掉（发送失败、服务端上根本没有这条的那种「删除」）。
-    /// 失败气泡后面那行「没发出去」的错误说的就是它，一并带走 —— 只删气泡的话，
-    /// 屏幕上会剩一句没有主语的错误。
     func dropLocal(blockId: String) {
         for (conv, s) in stores {
             guard let i = s.blocks.firstIndex(where: { $0.id == blockId }) else { continue }
-            dropBlocks(at: i, in: s, alsoTrailingError: true)
+            dropBlocks(at: i, in: s)
             refresh(conv)
             return
         }
@@ -482,22 +491,24 @@ class ChatViewModel: ObservableObject {
         let s = store(conv)
         guard let i = s.blocks.firstIndex(where: { $0.id == blockId }),
               case .user(let u) = s.blocks[i], u.failed else { return }
-        dropBlocks(at: i, in: s, alsoTrailingError: true)
+        dropBlocks(at: i, in: s)
         refresh(conv)
-        // 正文已经含着【动作名】前缀（原来那次发送时就拼进去了），所以 chipAction 保持空，
-        // 不然 send() 会再拼一层。
-        quote = u.quote
-        draft = u.text
-        send()
+        // 直接喂内核，不经 draft / quote 这两个属性中转：正文已经含着【动作名】前缀
+        //（原来那次发送时就拼进去了），走 send() 会被 chipAction 再拼一层，
+        // 而且会把用户此刻正在打的草稿冲掉。
+        deliver(u.text, quote: u.quote)
     }
 
-    /// 移掉第 i 个块（可选地连同紧跟其后的那行错误），并把受影响的下标整体前移。
-    private func dropBlocks(at i: Int, in s: ConvStore, alsoTrailingError: Bool) {
-        var n = 1
-        if alsoTrailingError, i + 1 < s.blocks.count, case .error = s.blocks[i + 1] { n = 2 }
-        s.blocks.removeSubrange(i ..< (i + n))
-        if let a = s.assistantIdx { s.assistantIdx = a > i ? a - n : (a == i ? nil : a) }
-        for (k, v) in s.taskMap where v > i { s.taskMap[k] = v - n }
+    /// 移掉第 i 个块，并把受影响的下标整体前移。
+    ///
+    /// 曾经这里还会「顺带带走紧跟其后的那行错误」——因为发送失败时会另起一条错误块。
+    /// 稿②把「没发出去 · 连接断了」画进了气泡正下方那一行，错误块不再产生，这条顺带
+    /// 就只剩下误删：失败气泡在末尾，之后服务端推来的 error 正好落在它 i+1，
+    /// 用户点重发 / 删除会把那条**真的**服务端错误一起静默删掉。
+    private func dropBlocks(at i: Int, in s: ConvStore) {
+        s.blocks.remove(at: i)
+        if let a = s.assistantIdx { s.assistantIdx = a > i ? a - 1 : (a == i ? nil : a) }
+        for (k, v) in s.taskMap where v > i { s.taskMap[k] = v - 1 }
     }
 
     /// 引用一条消息（批次 011 ②）：挂到输入框上方的引用条，发出去随消息带走。
@@ -523,6 +534,8 @@ class ChatViewModel: ObservableObject {
     func clearActiveHistory() {
         let conv = activeConv
         let s = store(conv)
+        // 挂着的引用指向的那条马上就没了，一起摘掉（同 switchConversation 的理由）。
+        quote = nil
         s.blocks.removeAll()
         s.assistantIdx = nil
         s.taskMap.removeAll()
@@ -541,6 +554,9 @@ class ChatViewModel: ObservableObject {
     func newSession() -> Bool {
         guard ws.sendNewSession() else { return false }
         let s = mainStore
+        // 同 clearActiveHistory：引用指着的那条即将从列表里消失。
+        // 放在 if 之外 —— 已经在主会话时走的是 else 分支，不经过 switchConversation。
+        quote = nil
         s.blocks.removeAll()
         s.assistantIdx = nil
         s.taskMap.removeAll()
@@ -968,22 +984,10 @@ class ChatViewModel: ObservableObject {
     private func removeBlock(serverId: Int) {
         guard serverId > 0 else { return }
         for (conv, s) in stores {
-            guard let i = s.blocks.firstIndex(where: { blockServerId($0) == serverId }) else { continue }
-            // 这里**不**带走后面那行错误：真被服务端删掉的是一条正常消息，
-            // 它后面就算跟着一条错误，那也是另一回事。
-            dropBlocks(at: i, in: s, alsoTrailingError: false)
+            guard let i = s.blocks.firstIndex(where: { $0.serverId == serverId }) else { continue }
+            dropBlocks(at: i, in: s)
             refresh(conv)
             return
-        }
-    }
-
-    /// 一个块对应的服务端消息 id（没有落库的块 —— 任务卡、确认卡、问答卡 —— 返回 nil）。
-    private func blockServerId(_ b: ChatBlock) -> Int? {
-        switch b {
-        case .user(let u): return u.serverId
-        case .assistant(let a): return a.serverId
-        case .note(let n): return n.serverId
-        default: return nil
         }
     }
 
@@ -1104,6 +1108,17 @@ enum ChatBlock: Identifiable {
     /// 那不是消息，给它一个只有「复制」的菜单反而暗示它是条）。
     case note(NoteBlock)
     case error(id: UUID, text: String)
+
+    /// 这个块对应的服务端消息 id（没有落库的块 —— 任务卡、确认卡、问答卡 —— 是 nil）。
+    /// 删除按它找块，「跳回被引用的那条」也按它找。
+    var serverId: Int? {
+        switch self {
+        case .user(let u): return u.serverId
+        case .assistant(let a): return a.serverId
+        case .note(let n): return n.serverId
+        default: return nil
+        }
+    }
 
     // 稳定 id：每个块创建时就固定，供 SwiftUI 做行身份识别。
     var id: String {

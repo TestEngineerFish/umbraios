@@ -30,6 +30,12 @@ struct UmbraChatThreadView: View {
     @FocusState private var inputFocused: Bool
     /// 应用内图片预览器（产出图片点开）。非 nil 即全屏展示。
     @State private var viewerItem: UmbraViewerItem?
+    /// 「点被引用的那块回到原消息」：装被引消息的服务端 id，`messages` 里滚过去后清空。
+    /// 不直接在 userBubble 里滚 —— ScrollViewReader 的 proxy 只在 `messages` 作用域里拿得到。
+    @State private var jumpTo: Int?
+    /// 刚跳到的那个块的 id：给它套一圈 orange-soft 的 halo 闪 1.4 秒，
+    /// 不闪的话滚过去了用户也不知道到底是哪一条（PC 端同样处理）。
+    @State private var flashBlockId: String?
 
     private var isAssistant: Bool { conv == ChatViewModel.mainConv }
     private var title: String { chat.convLabel(conv) }
@@ -201,7 +207,28 @@ struct UmbraChatThreadView: View {
             // 键盘**弹起**要跟滚（正在看的那条会被顶到键盘后面），
             // 键盘**收起**也要跟滚（不然列表停在上移后的位置，底下空一截）——两个方向都回底。
             .onChange(of: inputFocused) { _ in scrollToEnd(proxy) }
+            .onChange(of: jumpTo) { id in
+                guard let id else { return }
+                jumpTo = nil
+                jump(to: id, proxy)
+            }
             .onAppear { scrollToEnd(proxy) }
+        }
+    }
+
+    /// 回到被引用的那条：滚过去 + 闪一下 halo。找不到就说一声，**别默默什么都不做** ——
+    /// 用户会以为这块不能点。「找不到」的主因其实是**还没翻到**（一次只拉 40 条），
+    /// 所以文案不说「已经删除」，只说它不在已经加载的这一段里。
+    private func jump(to serverId: Int, _ proxy: ScrollViewProxy) {
+        guard let target = chat.blocks.first(where: { $0.serverId == serverId }) else {
+            router.showToast(L("chat.quoteJumpMissing"))
+            return
+        }
+        withAnimation(UmbraMotion.tint) { proxy.scrollTo(target.id, anchor: .center) }
+        flashBlockId = target.id
+        Task {
+            try? await Task.sleep(nanoseconds: 1_400_000_000)
+            if flashBlockId == target.id { flashBlockId = nil }
         }
     }
 
@@ -258,20 +285,23 @@ struct UmbraChatThreadView: View {
                 }
             }
 
-        case .device(_, let text, _):
+        case .device(let did, let text, _):
             VStack(alignment: .leading, spacing: 5) {
                 senderHeader(icon: UmbraIconPath.monitor, name: title, tint: UmbraColor.faint)
-                plainLeftBubble(text, fill: UmbraColor.deviceBubble)
+                plainLeftBubble(text, fill: UmbraColor.deviceBubble, blockId: did.uuidString)
             }
 
         case .task(let j):
             taskCard(j)
+                .contextMenu { cardMenu("\(j.goal)（\(j.pct)%，\(UmbraStatus(taskStatus: j.status).label)）\(j.message)") }
 
         case .done(_, let goal, let results):
             doneCard(goal: goal, results: results)
+                .contextMenu { cardMenu(L("chat.done", goal)) }
 
         case .confirm(let c):
             confirmCard(c)
+                .contextMenu { cardMenu(c.summary) }
 
         case .question(let q):
             UmbraQuestionCard(block: q)
@@ -295,6 +325,8 @@ struct UmbraChatThreadView: View {
                     .padding(.horizontal, UmbraMetric.sp4)
                     .padding(.vertical, 6)
                     .background(Capsule().fill(UmbraColor.chip))
+                    // 系统提示行也有服务端 id（取消收尾那条），所以它也可能是引用跳转的目标。
+                    .overlay { if flashBlockId == n.id.uuidString { Capsule().stroke(UmbraColor.orangeSoft, lineWidth: 2) } }
                 if let kept = ChatKeptTool.line(for: n.toolsRun) { keptToolsRow(kept) }
             }
 
@@ -303,32 +335,198 @@ struct UmbraChatThreadView: View {
         }
     }
 
-    /// 长按气泡复制。IM 的通行做法，textSelection 只能选不能一键复制整条。
-    ///
-    /// ⚠️ 这还是**批次 011 之前**的两项菜单。稿②要求按消息类型分档
-    ///（我发的 / 秘书的 / 失败的 / 图片 / 卡片），并补上引用、存为常用语、记为灵感、删除。
-    /// 引用与删除的数据层已经通了（`ChatViewModel.quoteMessage` / `deleteMessage`、
-    /// 服务端的 `message_delete` 与 meta.quote），**缺的只是这层菜单 UI**，留在 ② 那一批做 ——
-    /// 别再照着老注释重新判一次「服务端不支持」。
+    // MARK: - 长按菜单（批次 011 ②）
+    //
+    // ⚠️ 三处气泡上的 `.textSelection(.enabled)` 随这一批**撤掉了**：它和 `.contextMenu`
+    // 抢同一个长按手势，压在文字字形上时系统文本选择会先赢，六项菜单只能在气泡内边距上
+    // 才稳定弹出来 —— 而这一批的重点正是那六项。「复制」现在在菜单里，能力没丢。
+    //
+    // 按消息类型分档，和 PC 右键**同一张表**（`messageMenu.byKind`）：
+    //   我发的 复制 · 引用 · 存为常用语 · 记为灵感 · 添加提醒 · 删除
+    //   秘书的 复制 · 引用 · 记为灵感 · 添加提醒 · 删除（秘书的话不给「存为常用语」——
+    //          常用语是「你常写的话」，存秘书的回复会让那个抽屉里混进一堆不是你会说的句子）
+    //   失败的 重新发送（置顶）· 复制 · 删除
+    //   卡  片 复制摘要（不给删除：卡片是流程的一部分，删了链路断）
+    //   系统行 不接长按
+    //
+    // 用**系统 contextMenu** 而不是照稿自绘那个 208 宽的玻璃浮层：长按菜单是系统接管的位置
+    // （抬起预览、模糊、触感、贴边避让、辅助功能全在里面），自绘一份等于把这些全部重做一遍 ——
+    // 和「底栏用真·系统 tab bar」「列表用系统 .swipeActions」是同一条铁律。稿上那些取值
+    //（208 / 圆角 16 / 玻璃 / 44 行高 / 图标在右）本来就是系统菜单的样子。
+    // 稿②的「选中态 halo」也随之不需要：系统菜单会把气泡抬起来，那就是选中态。
+
+    /// 我方气泡的菜单。发失败的那条按 `messageMenu.byKind.failed` 砍到三项、「重新发送」置顶
+    ///（那条还没送出去，引用和存起来都无从谈起，而你长按它十次有九次就是为了重发）。
     @ViewBuilder
-    private func copyMenu(_ text: String) -> some View {
+    private func myMenu(_ u: ChatBlock.UserBlock) -> some View {
+        if u.failed {
+            actionResend(u)
+            actionCopy(u.text)
+            // 服务端上根本没有这条，只是本地移除 —— 不走「移入回收站 30 天」那套确认。
+            Button(role: .destructive) {
+                chat.dropLocal(blockId: u.id.uuidString)
+            } label: {
+                Label(L("chat.menu.delete"), systemImage: "trash")
+            }
+        } else {
+            actionCopy(u.text)
+            actionQuote(id: u.serverId, role: "user", text: u.text)
+            actionPhrase(u.text)
+            actionIdea(u.text)
+            actionRemind(u.text)
+            actionDelete(serverId: u.serverId)
+        }
+    }
+
+    /// 引用条与被引块上写谁说的。设备说的话既不是「我」也不是「秘书」——
+    /// 写成秘书就是把另一台机器说的话安到秘书头上。
+    private func quoteWho(_ role: String) -> String {
+        switch role {
+        case "user": return L("chat.quoteMe")
+        // 设备的话**不能**无脑用 title：服务端不带 conversation 时 device_message 会落进
+        // 主会话，那里的 title 就是「秘书」—— 正好把另一台机器说的话安到秘书头上。
+        case "device": return isAssistant ? L("chat.quoteWho.device") : title
+        default: return L("chat.conv.secretary")
+        }
+    }
+
+    /// 秘书 / 设备气泡的菜单。role 决定引用条上写谁说的。
+    @ViewBuilder
+    private func botMenu(_ text: String, serverId: Int?, role: String = "assistant") -> some View {
+        actionCopy(text)
+        actionQuote(id: serverId, role: role, text: text)
+        actionIdea(text)
+        actionRemind(text)
+        actionDelete(serverId: serverId)
+    }
+
+    /// 结构化消息（任务卡 / 确认卡 / 完成卡）只给「复制摘要」一项。
+    /// 「打开对应任务」作废（`messageMenu.cardOneItem`：独立确认卡里没有 task_id，
+    /// 不为一个菜单项让服务端加字段）。
+    private func cardMenu(_ summary: String) -> some View {
+        Button {
+            UIPasteboard.general.string = summary
+            router.showToast(L("chat.copied"))
+        } label: {
+            Label(L("chat.menu.copySummary"), systemImage: "doc.on.doc")
+        }
+    }
+
+    // MARK: 菜单里的单个动作
+
+    private func actionCopy(_ text: String) -> some View {
         Button {
             UIPasteboard.general.string = text
-            router.showToast("已复制")
+            router.showToast(L("chat.copied"))
         } label: {
-            Label("复制", systemImage: "doc.on.doc")
+            Label(L("chat.copy"), systemImage: "doc.on.doc")
         }
+    }
+
+    private func actionResend(_ u: ChatBlock.UserBlock) -> some View {
         Button {
-            // 把这句话变成一条一小时后的本机提醒 —— 提醒本来就是本机功能，这是真的。
-            let r = UmbraReminder(id: UUID().uuidString,
-                                  text: String(text.prefix(80)),
-                                  at: Date().addingTimeInterval(3600),
-                                  source: "聊天")
-            ReminderStore.shared.save(r)
-            ReminderStore.shared.requestAuthorizationIfNeeded()
-            router.showToast("已加到提醒 · 1 小时后")
+            chat.resendFailed(blockId: u.id.uuidString)
         } label: {
-            Label("添加提醒", systemImage: "bell")
+            Label(L("chat.menu.resend"), systemImage: "arrow.clockwise")
+        }
+    }
+
+    /// 引用。**只在能打字的会话里给** —— 引用条挂在输入框上方，只读的设备会话里
+    /// 挂上去也发不出去。（PC 端的做法是切回主会话，那会把人从当前会话拽走，不搬。）
+    @ViewBuilder
+    private func actionQuote(id: Int?, role: String, text: String) -> some View {
+        if inputEnabled {
+            Button {
+                voiceMode = false          // 语音态没有输入框，引用条挂上去看不见
+                chat.quoteMessage(id: id, role: role, text: text)
+                inputFocused = true
+            } label: {
+                Label(L("chat.menu.quote"), systemImage: "text.quote")
+            }
+        }
+    }
+
+    /// 存为常用语。取前 12 个字当名字（和秘书侧 add_phrase 同规则）；
+    /// 内容一模一样的已经有了就不重复存，并说清楚是「已经有了」而不是「存失败了」。
+    private func actionPhrase(_ text: String) -> some View {
+        Button {
+            let store = PhraseStore.shared
+            if store.items.contains(where: { $0.content == text }) {
+                router.showToast(L("chat.phraseExists"))
+                return
+            }
+            // 取第一行的前 12 个字当名字（和秘书侧 add_phrase 同规则）。
+            // trim 要含换行：.whitespaces 不含 \n，全是空行的正文会存出一条名字是几个换行的常用语。
+            // 兜底那一支也要用 **trim 过的**全文：split 只跳过空子串，`"   "` 不是空串，
+            // 于是「首行全是空格」的正文会绕过上面这次 trim，名字里带着前导空白存进去。
+            let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+            let head = (text.split(separator: Character("\n")).first.map { String($0) } ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let name = String((head.isEmpty ? body : head).prefix(12))
+            guard !name.isEmpty else { return }   // 全是空白的正文不值得存一条名字为空的常用语
+            store.add(name: name, content: text, keyword: nil)
+            router.showToast(L("chat.phraseSaved"))
+        } label: {
+            Label(L("chat.menu.phrase"), systemImage: "text.badge.plus")
+        }
+    }
+
+    private func actionIdea(_ text: String) -> some View {
+        Button {
+            Task {
+                let ok = await HTTPService.shared.createInspiration(
+                    raw: text, title: "", summary: "", tags: [])
+                await MainActor.run {
+                    router.showToast(ok ? L("chat.ideaSaved") : L("chat.ideaSaveFailed"))
+                    if ok { NotificationCenter.default.post(name: .inspirationChanged, object: nil) }
+                }
+            }
+        } label: {
+            Label(L("chat.menu.idea"), systemImage: "lightbulb")
+        }
+    }
+
+    /// 添加提醒：把正文预填进**新建提醒页**，让用户自己补时间。
+    /// 原来是直接建一条「一小时后」的 —— 那个时间是我们猜的，猜错了用户还得进去改。
+    /// 走 ReminderStore 已有的模板通道（路由只认 id，传不了草稿，见 stashCloneTemplate）。
+    private func actionRemind(_ text: String) -> some View {
+        Button {
+            ReminderStore.shared.stashCloneTemplate(
+                UmbraReminder(id: UUID().uuidString,
+                              text: String(text.prefix(200)),
+                              at: Date().addingTimeInterval(3600),
+                              source: "聊天"))
+            // 通知权限**不在这儿要** —— 用户还没写完、可能马上就点取消。
+            // 新建页的 save() 里已经在正确时机要了（「这时候用户正想让它响，最容易被同意」）。
+            router.jump(.remEdit(id: nil))
+        } label: {
+            Label(L("chat.menu.remind"), systemImage: "bell")
+        }
+    }
+
+    /// 删除。跨端的，必须先问一句（`messageMenu.deleteCopy` 的原文）。
+    /// 没有 serverId 的（还没拿到回执）删不了 —— 不摆一个点了没反应的按钮。
+    @ViewBuilder
+    private func actionDelete(serverId: Int?) -> some View {
+        if let sid = serverId {
+            Button(role: .destructive) {
+                router.confirm(UmbraAlert(
+                    title: L("chat.delMsgTitle"),
+                    body: L("chat.delMsgBody"),
+                    confirmLabel: L("chat.menu.delete"),
+                    confirmDestructive: true,
+                    onConfirm: {
+                        // 本地不抢着删：服务端广播 message_deleted 会回来（不排除发起端）。
+                        // 抢着删的话，服务端拒绝时就留下一条「看起来删了其实还在」的消息。
+                        if !chat.deleteMessage(serverId: sid) {
+                            router.showToast(L("chat.notConnected"))
+                        } else {
+                            router.showToast(L("chat.deleted"))
+                        }
+                    }))
+            } label: {
+                Label(L("chat.menu.delete"), systemImage: "trash")
+            }
         }
     }
 
@@ -340,62 +538,114 @@ struct UmbraChatThreadView: View {
         // 同时用 Spacer 的 minLength 留出对侧留白 —— 长文自然换行，短文自然收窄。
         HStack(spacing: 0) {
             Spacer(minLength: UmbraMetric.bubbleGutter)
-            Text(u.text)
-                .font(UmbraFont.sans(15.5, .w400))
-                .foregroundColor(UmbraColor.text)
-                .lineSpacing(15.5 * 0.5)
-                .multilineTextAlignment(.leading)
-                .textSelection(.enabled)
+            VStack(alignment: .trailing, spacing: 2) {
+                VStack(alignment: .leading, spacing: 6) {
+                    // 被引用的内容进**气泡顶部**（不是挂在气泡外面）：它是这条消息的一部分，
+                    // 挂在外面会被读成两条消息（批次 011 ② 明确改的一处）。
+                    if let q = u.quote { quotedBlock(q) }
+                    Text(u.text)
+                        .font(UmbraFont.sans(15.5, .w400))
+                        .foregroundColor(UmbraColor.text)
+                        .lineSpacing(15.5 * 0.5)
+                        .multilineTextAlignment(.leading)
+                }
                 .padding(.horizontal, 13)
                 .padding(.vertical, 9)
                 .background(UmbraBubbleShape(mine: true).fill(UmbraColor.userBubble))
+                // 发失败的气泡压暗（稿 .72），和「送出去了」区分开。
+                .opacity(u.failed ? 0.72 : 1)
+                .overlay { halo(u.id.uuidString, mine: true) }
                 .contextMenu { myMenu(u) }
+                if u.failed { failedRow(u) }
+            }
         }
     }
 
-    /// 我方气泡的长按菜单。发**失败**的那条按稿②砍到三项、「重新发送」置顶
-    ///（`messageMenu.byKind.failed`：那条还没送出去，引用和存起来都无从谈起，
-    /// 而你右键它十次有九次就是为了重发）。这条路必须现在就通 —— 不然离线发一条，
-    /// 它就带着红叹号卡在那儿，既发不出去也删不掉。
-    /// 正常那条仍是老的两项，按类型分档的完整菜单留在 ② 那一批。
+    /// 刚跳到的那条闪一圈 orange-soft。不闪的话滚过去了也不知道到底是哪一条。
     @ViewBuilder
-    private func myMenu(_ u: ChatBlock.UserBlock) -> some View {
-        if u.failed {
+    private func halo(_ blockId: String, mine: Bool) -> some View {
+        if flashBlockId == blockId {
+            UmbraBubbleShape(mine: mine).stroke(UmbraColor.orangeSoft, lineWidth: 2)
+        }
+    }
+
+    /// 气泡顶部的被引用块（`messageQuote.inBubble`）：`--chip` 底 + 左 2px 橙条，
+    /// 两行截断，点它回到原消息。没有 id 的（对方端刚广播过来、还没拉历史）不给点 ——
+    /// 点了也跳不过去，给个能点的样子只会让人点两次。
+    private func quotedBlock(_ q: ChatQuote) -> some View {
+        HStack(alignment: .top, spacing: 7) {
+            Capsule().fill(UmbraColor.orange).frame(width: 2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(quoteWho(q.role))
+                    .font(UmbraFont.sans(11.5, .w600))
+                    .foregroundColor(UmbraColor.orangeText)
+                Text(q.text)
+                    .font(UmbraFont.sans(12.5, .w400))
+                    .foregroundColor(UmbraColor.muted)
+                    .lineSpacing(12.5 * 0.5)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            // ⚠️ 这里**不能**挂 .frame(maxWidth: .infinity)：贪婪属性会一路上传给气泡，
+            // 让它和外层的 Spacer 对半分屏宽 —— 就是 userBubble 顶上那段警告写的那个坑，
+            // 表现为「引用了一条之后，回一个『好的』也画成半屏宽」。
+        }
+        // ⚠️ 这行 fixedSize 是**承重的**：左边那条竖条是弹性视图，去掉它之后外层给下来一个
+        // 大高度提案时竖条会照单全收，整块引用被撑成半屏高。别「顺手清理」。
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 6)
+        .background(RoundedRectangle(cornerRadius: 9, style: .continuous).fill(UmbraColor.chip))
+        .contentShape(Rectangle())
+        .onTapGesture { if let id = q.id { jumpTo = id } }
+    }
+
+    /// 「没发出去」那一行（稿②）：14px 红图标 + 原因 + 就地重发。
+    /// 错误三段式在这一行里齐了：发生了什么 · 为什么 + 一颗能点的「重新发送」。
+    ///
+    /// 图标用 `xCircle`（圆叉）而不是稿上画的圆圈感叹号：本工程「失败 = 圆叉」是
+    /// 交接文档定的**全站语义**（`UmbraStatus.iconPath`），而稿这一处的圆圈感叹号
+    /// 既不在 `umbra-icons.json` 里，也和清单里那颗叫 `alert-circle` 的**八角形**对不上。
+    /// 三方不一致已回执给设计侧，在他们裁定之前先服从全站语义。
+    private func failedRow(_ u: ChatBlock.UserBlock) -> some View {
+        HStack(spacing: 6) {
+            UmbraIcon(d: UmbraIconPath.xCircle, size: 14, strokeWidth: 2)
+                .foregroundColor(UmbraColor.danger)
+            Text(L("chat.sendFailed"))
+                .font(UmbraFont.sans(12.5, .w400))
+                .foregroundColor(UmbraColor.danger)
+                .fixedSize()
             Button {
                 chat.resendFailed(blockId: u.id.uuidString)
             } label: {
-                Label("重新发送", systemImage: "arrow.clockwise")
+                Text(L("chat.menu.resend"))
+                    .font(UmbraFont.sans(12.5, .w600))
+                    .foregroundColor(UmbraColor.danger)
+                    .padding(.horizontal, 6)
+                    .frame(minHeight: UmbraMetric.tapMin)
+                    .contentShape(Rectangle())
             }
-            Button {
-                UIPasteboard.general.string = u.text
-                router.showToast("已复制")
-            } label: {
-                Label("复制", systemImage: "doc.on.doc")
-            }
-            // 服务端上根本没有这条，只是本地移除 —— 不走「移入回收站 30 天」那套确认。
-            Button(role: .destructive) {
-                chat.dropLocal(blockId: u.id.uuidString)
-            } label: {
-                Label("删除", systemImage: "trash")
-            }
-        } else {
-            copyMenu(u.text)
+            .buttonStyle(.plain)
+            // 热区 44 高，但这一行在视觉上只占 18 —— 多出来的用负边距收掉。
+            .padding(.vertical, -(UmbraMetric.tapMin - 18) / 2)
         }
     }
 
     /// 左侧气泡。fill 用来区分说话人：秘书用 card、设备用 deviceBubble ——
     /// 两边都在左侧，不换色的话在设备会话里根本分不出哪句是秘书说的（用户点名）。
-    private func plainLeftBubble(_ text: String, fill: Color = UmbraColor.card) -> some View {
+    /// 设备气泡专用（秘书那条走 `aiBubbleBody`）。设备消息**没有服务端 id**，
+    /// 所以它的菜单会自动少掉「删除」（`actionDelete` 里按 serverId 判）。
+    private func plainLeftBubble(_ text: String, fill: Color, blockId: String?) -> some View {
         // 同 userBubble：宽度随内容，靠右侧 Spacer 留白，不用 maxWidth 撑满。
         HStack(spacing: 0) {
             UmbraMarkdownText(raw: text)
                 .foregroundColor(UmbraColor.text)
-                .textSelection(.enabled)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 10)
                 .background(UmbraBubbleShape(mine: false).fill(fill))
                 .overlay(UmbraBubbleShape(mine: false).stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-                .contextMenu { copyMenu(text) }
+                .overlay { if let bid = blockId { halo(bid, mine: false) } }
+                .contextMenu { botMenu(text, serverId: nil, role: "device") }
             Spacer(minLength: UmbraMetric.bubbleGutter)
         }
     }
@@ -510,7 +760,6 @@ struct UmbraChatThreadView: View {
                 // 直接当纯文本画出来满屏星号井号（用户点名）——走块级渲染。
                 UmbraMarkdownText(raw: a.text)
                     .foregroundColor(UmbraColor.text)
-                    .textSelection(.enabled)
             }
             // 流式光标：7×16 橙块，1 秒硬闪一次（steps(1)，不是渐隐）。
             // 只在**已经有字**时闪：空气泡里一根光标看不出「它在想」，那一段归三点。
@@ -520,7 +769,10 @@ struct UmbraChatThreadView: View {
         .padding(.vertical, 10)
         .background(UmbraBubbleShape(mine: false).fill(UmbraColor.card))
         .overlay(UmbraBubbleShape(mine: false).stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-        .contextMenu { if !a.text.isEmpty { copyMenu(a.text) } }
+        .overlay { halo(a.id.uuidString, mine: false) }
+        // 条件必须在**修饰符外面**：挂着一个空 menu 的话，长按占位气泡照样会抬起 +
+        // 模糊一整套系统预览，然后什么菜单项都没有。
+        .modifier(UmbraConditionalMenu(on: !a.text.isEmpty) { botMenu(a.text, serverId: a.serverId) })
     }
 
     /// 工具轨迹卡。工程里的 trace 是一行行字符串（「🔧 名字(参数)」「↳ 名字 → 结果」），
@@ -903,6 +1155,7 @@ struct UmbraChatThreadView: View {
     private var composer: some View {
         VStack(spacing: 0) {
             if let banner = chat.ideaBanner { ideaBannerView(banner) }
+            if let q = chat.quote { quoteBar(q) }
             HStack(alignment: .bottom, spacing: 8) {
                 ZStack {
                     if voiceMode { holdBar } else { textField }
@@ -945,6 +1198,53 @@ struct UmbraChatThreadView: View {
         .overlay(alignment: .top) {
             Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW)
         }
+    }
+
+    /// 输入框上方的引用条（`messageQuote.bar`）：左 2px 橙竖条 + 「引用 我 / 秘书」+ 摘要两行截断 + ×。
+    /// 底走 `--card`（iOS 那一档），和输入栏的毛玻璃底分得开。
+    @ViewBuilder
+    private func quoteBar(_ q: ChatQuote) -> some View {
+        HStack(alignment: .top, spacing: 9) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(L("chat.quoteWho", quoteWho(q.role)))
+                    .font(UmbraFont.sans(11.5, .w600))
+                    .foregroundColor(UmbraColor.orangeText)
+                Text(q.text)
+                    .font(UmbraFont.sans(12.5, .w400))
+                    .foregroundColor(UmbraColor.muted)
+                    .lineSpacing(12.5 * 0.5)
+                    .lineLimit(2)
+                    .multilineTextAlignment(.leading)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                chat.quote = nil
+            } label: {
+                UmbraIcon(d: UmbraIconPath.x, size: 11, strokeWidth: 2.4)
+                    .foregroundColor(UmbraColor.muted)
+                    .frame(width: 22, height: 22)
+                    .background(Circle().fill(UmbraColor.chip))
+                    .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)   // 热区
+                    .contentShape(Circle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("chat.quoteClear"))
+            .padding(-(UmbraMetric.tapMin - 22) / 2)
+        }
+        .padding(.horizontal, 11)
+        .padding(.vertical, 8)
+        .background(RoundedRectangle(cornerRadius: 11, style: .continuous).fill(UmbraColor.card))
+        // strokeBorder 而不是 stroke：stroke 是压线画的，外侧一半会被下面的 clipShape 裁掉，
+        // 1px 的边只剩 0.5px。
+        .overlay(RoundedRectangle(cornerRadius: 11, style: .continuous)
+            .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW))
+        // 左边那条 2px 橙竖条：压在圆角矩形左沿上，用 clipShape 收进圆角里。
+        .overlay(alignment: .leading) {
+            Rectangle().fill(UmbraColor.orange).frame(width: 2)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .padding(.horizontal, 2)
+        .padding(.bottom, 8)
     }
 
     /// 灵感带过来的来源横幅：贴在输入条上方，说明芯片和草稿是替用户填好的。
@@ -1155,10 +1455,6 @@ struct UmbraChatThreadView: View {
         .animation(UmbraMotion.tint, value: hasDraft)
     }
 
-    // MARK: - 浮层
-
-
-
     /// 「复制聊天」的内容。只导出有文字的块 —— 卡片（确认、问答、任务）复制成文本没有意义，
     /// 拼一堆「[任务进度卡]」占位反而让粘出来的东西没法用。
     private func transcript() -> String {
@@ -1222,6 +1518,28 @@ struct UmbraBlinkCaret: View {
                     on.toggle()
                 }
             }
+    }
+}
+
+/// 有条件地挂长按菜单。**不能**写成 `.contextMenu { if 条件 { … } }` ——
+/// 条件不成立时菜单内容为空，但 `.contextMenu` 修饰符本身还在，长按照样会抬起气泡、
+/// 模糊背景，走完一整套系统预览，然后一个菜单项都没有。条件必须决定「挂不挂」。
+/// 泛型参数叫 `MenuContent` 不叫 `Menu`：`Menu` 会在这个作用域里遮蔽 `SwiftUI.Menu`
+///（CLAUDE.md 点名的遮蔽雷区），以后有人在里面写 `Menu { } label: { }` 就会撞上。
+///
+/// 另：`on` 翻转会让 `_ConditionalContent` 换分支，气泡整棵子树的**身份**随之变更、
+/// 里面的 @State 会重置。流式回复的第一个 delta 到达时必然发生一次（text 由空变非空），
+/// 当下无害（那一刻只有三点在退场、光标在入场，本来就要重建），但以后往气泡里放任何
+/// 有状态的东西（展开收起、选中态）都会在那一刻被清掉。
+struct UmbraConditionalMenu<MenuContent: View>: ViewModifier {
+    let on: Bool
+    @ViewBuilder let menu: () -> MenuContent
+
+    /// 显式标 @ViewBuilder：不标也能靠协议要求继承，但本工程其它三个 ViewModifier
+    /// 都没有在 body 顶层写 if/else，没有先例可比对，明写一层省得将来靠推断。
+    @ViewBuilder
+    func body(content: Content) -> some View {
+        if on { content.contextMenu { menu() } } else { content }
     }
 }
 
