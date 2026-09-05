@@ -106,7 +106,10 @@ class ChatWebSocket: ObservableObject {
     }
 
     /// 图片消息（批次 011 ③）。文件已先走 POST /files/upload 拿到 file_id，这里只送 id 列表。
-    /// 服务端落库 + 跨端广播，**不触发秘书回复**（一期不识图）；回执是 message_saved（带消息 id）。
+    /// 服务端落库 + 跨端广播（回执是 message_saved，带消息 id），**并且从批次 016 起会回复**：
+    /// 这一条里的图全部过一遍视觉模型，秘书据此回话。
+    /// 所以调用方送完之后要开一轮占位（见 ChatViewModel.beginAssistantTurn）——
+    /// 不开的话随后的 delta / reply 找不到落点，会被静默丢掉。
     @discardableResult
     func sendImageMessage(atts: [String], conversation: String = "assistant") -> Bool {
         guard !atts.isEmpty else { return false }

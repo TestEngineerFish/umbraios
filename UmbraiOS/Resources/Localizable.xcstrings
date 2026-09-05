@@ -1402,6 +1402,57 @@
         }
       }
     },
+    "chat.menu.copyFirstImage" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Copy first image"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "复制第一张"
+          }
+        }
+      }
+    },
+    "chat.menu.saveNToAlbum" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save %lld to Photos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存 %lld 张到相册"
+          }
+        }
+      }
+    },
+    "chat.img.copiedFirst" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "First image copied"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已复制第一张"
+          }
+        }
+      }
+    },
     "chat.menu.copyImage" : {
       "extractionState" : "manual",
       "localizations" : {
@@ -2095,6 +2146,23 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "没发出去 · 上传到一半断了"
+          }
+        }
+      }
+    },
+    "chat.visionReading" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Looking at the image…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在看图…"
           }
         }
       }

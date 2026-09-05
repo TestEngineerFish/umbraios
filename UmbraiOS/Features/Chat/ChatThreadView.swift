@@ -460,12 +460,19 @@ struct UmbraChatThreadView: View {
             Button { openImage(img, at: 0) } label: {
                 Label(L("chat.menu.viewImage"), systemImage: "arrow.up.left.and.arrow.down.right")
             }
+            // 标签**按张数分档**（批次 016 `messageMenu.byKind.imageLabelWhy`）：
+            // 多图时「复制第一张」「存 5 张到相册」。
+            // 两项行为不一致是**系统能力不一致**（剪贴板单槽、相册没这个限制），改不了；
+            // 修法不是改行为，是让标签自己说清对象 —— 不让人按完才发现只复制了一张。
+            // 通则：菜单项行为有边界时，边界写进标签，不写进说明文字，也不靠人试一次学会。
             Button { copyImage(img) } label: {
-                Label(L("chat.menu.copyImage"), systemImage: "doc.on.doc")
+                Label(img.count > 1 ? L("chat.menu.copyFirstImage") : L("chat.menu.copyImage"),
+                      systemImage: "doc.on.doc")
             }
             actionQuote(id: img.serverId, role: "user", text: L("chat.quoteImage", img.count))
             Button { saveImageToAlbum(img) } label: {
-                Label(L("chat.menu.saveToAlbum"), systemImage: "square.and.arrow.down")
+                Label(img.count > 1 ? L("chat.menu.saveNToAlbum", img.count) : L("chat.menu.saveToAlbum"),
+                      systemImage: "square.and.arrow.down")
             }
             actionDelete(serverId: img.serverId)
         }
@@ -484,13 +491,16 @@ struct UmbraChatThreadView: View {
     /// 复制图片：进系统剪贴板的是**图本身**不是链接 —— 粘到别处要能直接出图。
     /// 本地还留着原图就用本地那份（不用等下载）；只有 file_id 的现下一次。
     ///
-    /// **只复制第一张**，而「存到相册」存整条 —— 两个动作口径不同是有意的：
-    /// 剪贴板实际只有一格（多图粘贴几乎没有接收方认），相册没有这个限制。
-    /// 已在回执里通报，等设计侧一句准话。
+    /// **只复制第一张**，而「存到相册」存整条 —— 016 裁定：行为不改，**改标签**。
+    /// 两者不一致是系统能力不一致（剪贴板单槽、相册没这个限制），把「存相册」也退化成
+    /// 存一张是纯损失。所以菜单项和吐司都按张数说清对象。
     private func copyImage(_ img: ChatBlock.ImageBlock) {
+        // 多图时吐司也说「第一张」—— 菜单说了一遍，做完再确认一遍，
+        // 免得人以为九张都进剪贴板了、粘出来只有一张时怀疑是粘贴的问题。
+        let done = img.count > 1 ? L("chat.img.copiedFirst") : L("chat.img.copied")
         if let d = img.data.first, let ui = UIImage(data: d) {
             UIPasteboard.general.image = ui
-            router.showToast(L("chat.img.copied"))
+            router.showToast(done)
             return
         }
         guard let fid = img.atts.first, let url = HTTPService.shared.moneyFileURL(fid) else { return }
@@ -500,7 +510,7 @@ struct UmbraChatThreadView: View {
                 router.showToast(L("chat.img.copyFailed")); return
             }
             UIPasteboard.general.image = ui
-            router.showToast(L("chat.img.copied"))
+            router.showToast(done)
         }
     }
 

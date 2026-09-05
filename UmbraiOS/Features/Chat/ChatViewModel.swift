@@ -404,15 +404,31 @@ class ChatViewModel: ObservableObject {
             reflect(conv)
             return
         }
-        s.blocks.append(.assistant(ChatBlock.AssistantBlock(thinking: true, streaming: true, text: "", trace: [], traceOpen: true, ts: now)))
+        beginAssistantTurn(conv, preview: text, ts: now)
+    }
+
+    /// 开一轮秘书回复：占位气泡 + 记住这一轮属于哪个会话 + 起 120 秒静默计时。
+    ///
+    /// 抽出来是因为**图片消息从批次 016 起也会有回复**了 —— 服务端原来收到纯图就
+    /// `continue`，现在会走识图先行 + handle()。占位不画的话，随后来的 delta / reply
+    /// 全部落进 `if var a = currentAssistant(...)` 的空分支里被**静默丢掉**：
+    /// 秘书答了，屏幕上什么都不出现。
+    ///
+    /// 两个调用点开轮的时机不同，这是有意的：文字消息在 `sendMessage` 成功那一刻开，
+    /// 图片消息要等**文件全部传完、WS 也送出去**之后才开 —— 传九张图的那十几秒里
+    /// 已经有上传进度在转了，再顶一颗「思考中」是两个进度指示打架。
+    private func beginAssistantTurn(_ conv: String, preview: String, ts: String) {
+        let s = store(conv)
+        s.blocks.append(.assistant(ChatBlock.AssistantBlock(
+            thinking: true, streaming: true, text: "", trace: [], traceOpen: true, ts: ts)))
         s.assistantIdx = s.blocks.count - 1
-        setPreview(conv, text, now)
+        setPreview(conv, preview, ts)
         reflect(conv)
         pendingConv = conv
         armReplyTimeout()
     }
 
-    // MARK: - 图片消息（批次 011 ③）
+    // MARK: - 图片消息（批次 011 ③，016 起接进秘书）
 
     /// 正在跑的上传任务，按块 id 存 —— 「取消上传」和「块被删掉了」都靠它把 Task 掐掉。
     private var uploads: [UUID: Task<Void, Never>] = [:]
@@ -499,6 +515,12 @@ class ChatViewModel: ObservableObject {
             // 送出去了就转「等回执」：这一档不再给「取消上传」——
             // 服务端已经有这条了，撤本地只会让用户再发一次，变成两条。
             self.mutateImage(blockId) { b in if b.state == .uploading { b.state = .awaitingReceipt } }
+            // 批次 016：纯图消息现在也会有回复，所以这里要开一轮 —— 不开的话
+            // 随后的 delta / reply 找不到占位块，会被静默丢掉（秘书答了、屏幕上没有）。
+            // 收尾前先把上一轮还在转的占位收掉，同 deliver()。
+            self.sealPlaceholder(self.store(conv))
+            self.beginAssistantTurn(conv, preview: L("chat.imageMsgPreview"),
+                                    ts: ISO8601DateFormatter().string(from: Date()))
             // 回执兜底：图都传上去了、WS 也送出去了，但 message_saved 可能丢
             //（连接刚好在这一刻断）。不兜的话这条会**永远转**，而它其实已经在服务端了。
             // 转成失败态并说实话；「重新发送」此时只是再送一次 WS —— atts 齐了不会重传文件。
@@ -638,7 +660,15 @@ class ChatViewModel: ObservableObject {
     ///      认错了以后长按删除就删到别人头上。占位块之前紧挨着的那条一定是我这条。
     private func claimUserMessageId(_ uid: Int, conv: String) {
         let s = store(conv)
-        let taken = s.blocks.contains { if case .user(let u) = $0 { return u.serverId == uid } else { return false } }
+        // ⚠️ 「认领过了没有」要看**所有块**，不能只看 .user。
+        // 批次 016 之前纯图不产生 reply，所以这个 id 只可能落在文字气泡上；016 之后
+        // 纯图也回 reply，而它的 id 是由 message_saved 认在**图片块**上的 ——
+        // 只查 .user 的话这里恒判「还没认领」，于是接着往前找，把这个 id 又发给
+        // 更早那条还没有 id 的文字气泡（别的端发来的消息广播时不带 id，很容易就是它）。
+        // 后果就是上面第 2 条注释里说的那件事：长按删除删到别人头上，
+        // 而且本地两个块共用一个 id，removeBlock 只删先找到的那个。
+        // `ChatBlock.serverId` 是覆盖全部 case 的计算属性，用它一次问清。
+        let taken = s.blocks.contains { $0.serverId == uid }
         guard !taken else { return }
         var i = min(s.assistantIdx.map { $0 - 1 } ?? s.blocks.count - 1, s.blocks.count - 1)
         while i >= 0 {
@@ -970,6 +1000,15 @@ class ChatViewModel: ObservableObject {
         case "delta":
             if var a = currentAssistant(streamConv) { a.text += msg.deltaText ?? ""; a.thinking = false; updateAssistant(a, streamConv) }
 
+        case "vision_reading":
+            // 服务端开始读图了（批次 013 就有这个事件，iOS 一直没接 —— 那时纯图根本不进模型，
+            // 接了也没地方显示）。016 之后纯图会有回复，读图那一两秒里三个点干转着，
+            // 人不知道它在干嘛。挂进轨迹条，和工具调用同一个位置。
+            if var a = currentAssistant(streamConv) {
+                a.trace.append("🖼 " + L("chat.visionReading"))
+                updateAssistant(a, streamConv)
+            }
+
         case "tool_call":
             if var a = currentAssistant(streamConv) {
                 if !a.text.trimmingCharacters(in: .whitespaces).isEmpty {
@@ -1244,7 +1283,8 @@ class ChatViewModel: ObservableObject {
         // 之后的 delta / reply 全部落空，这一轮的回复就在界面上人间蒸发了。
         // 找回一条旧消息不急在这一秒 —— 等这一轮结束后下次进这个会话自然会看到。
         guard s.assistantIdx == nil else { return }
-        // 正在传图的也不冲：图片消息不设占位块，assistantIdx 拦不住它 ——
+        // 正在传图的也不冲。批次 016 之后纯图消息**送出之后**才开占位，所以在
+        // 「还在传文件」那段窗口里 assistantIdx 仍然是 nil，上一道守卫拦不住它 ——
         // 冲掉之后上传照跑，跑完却找不到块，这条消息就这么无声无息地没了。
         guard !s.blocks.contains(where: {
             if case .image(let i) = $0 { return i.state == .uploading || i.state == .awaitingReceipt }
