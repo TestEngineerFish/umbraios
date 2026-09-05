@@ -233,28 +233,15 @@ struct ChatPendingStrip: View {
                 .strokeBorder(p.oversize ? UmbraColor.danger : UmbraColor.borderSoft,
                               lineWidth: UmbraMetric.borderW))
 
-            Button {
+            // 待发缩略条是 `attachThumb` 点名的三处**编辑态**之一（另两处是提醒编辑、记一笔编辑），
+            // 所以它和那两处用同一个件。这里原来是自己写的一份 —— 行为一样（贴角 44、
+            // 不用负边距，`cornerPinFirst` 那条规矩就是从这处的做法采纳上去的），
+            // 但长相和另两处不同，同一个「摘掉这张图」的动作不该有两种样子。
+            // 64 的格上贴角内缩 4：热区 x∈[16,60]、y∈[4,48]，仍然整块落在自己那格里，
+            // 不越过 HStack 的 8pt 间隙。
+            UmbraAttachRemoveBadge(label: L("chat.img.remove")) {
                 items.removeAll { $0.id == p.id }
-            } label: {
-                UmbraIcon(d: UmbraIconPath.x, size: 10, strokeWidth: 3)
-                    .foregroundColor(.white)
-                    .frame(width: 20, height: 20)
-                    .background(Circle().fill(Color(red: 12 / 255, green: 10 / 255, blue: 9 / 255)
-                        .opacity(0.72)))
-                    // 热区 44×44，**贴着右上角往里长**（alignment: .topTrailing），
-                    // 所以它整块落在自己那张 64 缩略图里，不越过 HStack 的 8pt 间隙。
-                    .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin,
-                           alignment: .topTrailing)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L("chat.img.remove"))
-            // ⚠️ 这里**不用负边距**（`rules.minTapTarget.negativeMarginAxis`，批次 015）。
-            // 原来是四向 -12：热区往右探出 12，减掉 3 的内缩还剩 9，而缩略图之间只有 8 ——
-            // 正好越界 1pt 咬到下一格（末尾那格就是「+」钮）。这里不需要负边距的原因是
-            // 它挂在 ZStack 上：44 的框在 64 的缩略图之内，撑热区根本不会把条撑大。
-            .padding(.top, 3)
-            .padding(.trailing, 3)
         }
     }
 

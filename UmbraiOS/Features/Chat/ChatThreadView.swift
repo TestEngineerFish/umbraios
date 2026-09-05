@@ -400,6 +400,7 @@ struct UmbraChatThreadView: View {
                 dropImages(img)
             }
         }
+        .frame(minHeight: UmbraMetric.tapMin)
     }
 
     /// 图都传完、WS 也送出去了，在等服务端回执。**这一档不给「取消上传」** ——
@@ -424,6 +425,7 @@ struct UmbraChatThreadView: View {
                 chat.retryImages(blockId: img.id)
             }
         }
+        .frame(minHeight: UmbraMetric.tapMin)
     }
 
     /// 撤掉一条还没发成的图片消息，并把本地那几张**放回待发条** ——
@@ -865,10 +867,26 @@ struct UmbraChatThreadView: View {
                 }
             }
         }
+        // 行撑到真实的 44（`minTapTarget.siblingClearance`）：钮的热区整块落在行内，
+        // 不再往上探进气泡、往下探进下一条的行距。见 failedAction 的注释。
+        .frame(minHeight: UmbraMetric.tapMin)
     }
 
     /// 失败行里的行内文字动作。热区照 `minTapTarget` 撑到 44（tokens 点名：12.5px 字
-    /// 配 13px 纵向 padding 只有 41，不够），多出来的高度用负边距收掉，这一行的行高不变。
+    /// 配 13px 纵向 padding 只有 41，不够）。
+    ///
+    /// ⚠️ **不再用负边距把多出来的高度收掉**（`minTapTarget.siblingClearance`，批次 016）。
+    /// 原来的写法是 `.frame(minHeight: 44)` + `.padding(.vertical, -13)`：行高不变，
+    /// 但那 13pt 是**从上下邻居身上借的** —— 往上探进失败气泡的底部、往下探进下一条消息的行距。
+    /// 而这一行在 SwiftUI 的绘制顺序里靠后，它赢：**长按失败气泡的下沿会变成点「重新发送」**。
+    ///
+    /// 现在的做法是设计侧给的：**把行撑到真实的 44 高**（见下面三个调用行的
+    /// `.frame(minHeight: tapMin)`），钮在行里长满、居中，热区整块落在行内、零溢出。
+    /// 代价是失败气泡下面那一行多出约 29pt —— 设计侧原话：「那就是一个 44pt 热区
+    /// 真正的价钱，不要拿邻居去偿。」
+    ///
+    /// 这是同一个病的第三种壳（前两种：横向吃 flex gap、内层盖外层）。共同判据：
+    /// **撑热区只能向留白借，不能向可点的东西借**；留白不够就把容器撑高。
     private func failedAction(_ title: String, weight: UmbraFont.Weight,
                               tint: Color, act: @escaping () -> Void) -> some View {
         Button(action: act) {
@@ -876,11 +894,15 @@ struct UmbraChatThreadView: View {
                 .font(UmbraFont.sans(12.5, weight))
                 .foregroundColor(tint)
                 .padding(.horizontal, 6)
-                .frame(minHeight: UmbraMetric.tapMin)
+                // **定尺 44**，不是 `maxHeight: .infinity`。
+                // 贪婪写法在 ScrollView 里（高度提案是 nil）确实老实停在 44，
+                // 但它把整行的尺寸范围变成 [44, ∞) —— 哪天这一行被放进一个会分配剩余高度的
+                // 容器（非滚动的 VStack），它就会被拉长。定尺没有这个坑，行为也完全一样：
+                // 行本身 minHeight 44，钮正好 44，热区不多不少。
+                .frame(height: UmbraMetric.tapMin)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .padding(.vertical, -(UmbraMetric.tapMin - 18) / 2)
     }
 
     /// 设备气泡专用（秘书那条走 `aiBubbleBody`）。fill 用来区分说话人 —— 秘书和设备
@@ -1486,14 +1508,20 @@ struct UmbraChatThreadView: View {
                     .foregroundColor(UmbraColor.muted)
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(UmbraColor.chip))
-                    // 热区只往上下撑（22 宽 × 44 高）：横向撑会吃掉 spacing 9，
-                    // 把左邻那两行引用文字的区域划进来（`minTapTarget.negativeMarginAxis`）。
-                    .frame(width: 22, height: UmbraMetric.tapMin)
+                    // 热区 22 宽 × 44 高：横向不撑（`minTapTarget.horizontalNot44` —— 横向撑
+                    // 只能从左邻那两行引用文字身上抢）；纵向 **贴顶往下长**，视觉圆留在
+                    // 原来的位置（HStack 是 .top 对齐的，圆本来就在顶上）。
+                    //
+                    // ⚠️ 后面那句负边距**去掉了**（`minTapTarget.siblingClearance`，批次 016）：
+                    // 原来 `-11` 把占位收回 22，代价是热区上探 11pt —— 而引用条自己只有 8pt
+                    // 纵向内衬，多出来的 3pt 探到条外面去了，还会被条的 clipShape 裁掉一截。
+                    // 现在占位就是 22×44，条跟着长到至少 44+16=60。
+                    // 引用只有一行时条会比以前高一截 —— 那就是一个 44pt 热区的价钱。
+                    .frame(width: 22, height: UmbraMetric.tapMin, alignment: .top)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("chat.quoteClear"))
-            .padding(.vertical, -(UmbraMetric.tapMin - 22) / 2)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 8)

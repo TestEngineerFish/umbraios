@@ -81,6 +81,57 @@ extension View {
     }
 }
 
+// MARK: - 附件缩略图的删除角标
+//
+// `attachThumb`（批次 016）。这颗小东西值得单独成件，是因为它身上压着两条规矩的交点：
+//
+// · `minTapTarget` 要求热区 ≥44；
+// · 而它盖在一张 78 的缩略图上 —— 44 的框占那张图 32%，**图的正中心 (39,39) 会落进删除区**，
+//   而人点一张缩略图最自然的落点就是正中心。
+//
+// 设计侧的裁定是**按态分**，不是调像素：
+//
+// · **编辑态**（提醒编辑、记一笔编辑、待发缩略条）：图**不给点开预览** ——
+//   编辑时看大图不是主诉求。于是 × 是这张图上唯一的动作，冲突自己就没了，直接贴角撑 44。
+// · **只读详情**（提醒详情、记一笔详情）：点图 = 预览是主动作，**× 整颗撤掉**，删除走长按菜单。
+//   注意是「根本不画」，不是「热区改小」—— 一颗看着能点、实际热区不足的钮**比热区小更坏，
+//   它在骗人**。
+//
+// 这个件只服务上面第一档。第二档没有件可言（撤掉就是撤掉）。
+
+/// 编辑态缩略图右上角的删除角标。**贴角**撑 44（`minTapTarget.cornerPinFirst`）：
+/// 44 的透明框整块落在自己那张图里，占位由图决定，既不需要负边距去收，
+/// 也不会越过 HStack 的格间距咬到邻格。
+///
+/// 字形走 `UmbraIconPath.x` + 自绘圆底，**不用 SF Symbol 的 `xmark.circle.fill`** ——
+/// 工程里图标一律出自图标清单（`UmbraIconPath`），SF Symbol 只在系统菜单项那种
+/// 本来就归系统画的位置用。聊天待发缩略条早就是这么画的，三处编辑面现在长得一样。
+struct UmbraAttachRemoveBadge: View {
+    /// 视觉圆离缩略图两条边的距离。
+    var inset: CGFloat = 4
+    /// 读屏用的名字。三处调用点的对象不同（附件 / 待发的图），各自给一句。
+    var label: String
+    var action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            UmbraIcon(d: UmbraIconPath.x, size: 10, strokeWidth: 3)
+                .foregroundColor(.white)
+                .frame(width: 20, height: 20)
+                .background(Circle().fill(Color(red: 12 / 255, green: 10 / 255, blue: 9 / 255)
+                    .opacity(0.72)))
+                // 视觉圆钉在 44 框的右上角，框再整体往里缩 inset —— 于是圆离图的上边和
+                // 右边各 inset，而 44 的热区往**左下**长，全落在图里。
+                .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin, alignment: .topTrailing)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .padding(.top, inset)
+        .padding(.trailing, inset)
+    }
+}
+
 // MARK: - 列表行
 //
 // 主文 16/560、副文 13/400/--muted。最小高度 44，带副文 60 —— 这两个值是触达底线，

@@ -516,25 +516,21 @@ struct UmbraMoneyAddView: View {
             .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-            // 点缩略图开应用内预览器（批次 005）。挂在删除 × 的 overlay **前面**：
-            // × 在更上层，点它仍然走删除，不会先把预览器弹出来。
+            // 点开预览**只留给原始截图**（`attachThumb.editing`，批次 016）。
+            //
+            // 这一屏是编辑态，规矩是「图不给点开预览，× 是这张图上唯一的动作」——
+            // 因为 44 的 × 钉在 78 的图上会把图的正中心划进删除区，而正中心正是人点图
+            // 最自然的落点。**原始截图是这条规矩的一个真例外**：稿里它没有删除键
+            //（它是凭证，一直留着），所以那张图上根本没有第二个动作，冲突不存在，
+            // 预览留着反而是它最该有的动作 —— 记一笔时想核对一眼原始账单是真诉求。
             .onTapGesture {
-                if let u = HTTPService.shared.moneyFileURL(a.file_id) {
-                    viewerItem = UmbraViewerItem(
-                        url: u,
-                        name: a.origin ? "原始截图" : (a.label.isEmpty ? "图片" : a.label))
-                }
+                guard a.origin, let u = HTTPService.shared.moneyFileURL(a.file_id) else { return }
+                viewerItem = UmbraViewerItem(url: u, name: "原始截图")
             }
             .overlay(alignment: .topTrailing) {
-                // 原图没有删除键（稿：它是凭证，一直留着）；普通附件右上角一个 ×。
+                // 原图没有删除键（稿：它是凭证，一直留着）；普通附件右上角一个 ×，贴角撑 44。
                 if !a.origin {
-                    Button { confirmDeleteAtt(entry: e, att: a) } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 17))
-                            .foregroundStyle(.white, Color.black.opacity(0.45))
-                            .padding(4)
-                    }
-                    .buttonStyle(.plain)
+                    UmbraAttachRemoveBadge(label: "移除这张附件") { confirmDeleteAtt(entry: e, att: a) }
                 }
             }
             Text(a.origin ? "原始截图" : (a.label.isEmpty ? "图片" : a.label))
@@ -561,13 +557,7 @@ struct UmbraMoneyAddView: View {
             .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
             .overlay(alignment: .topTrailing) {
-                Button { pending.removeAll { $0.id == p.id } } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 17))
-                        .foregroundStyle(.white, Color.black.opacity(0.45))
-                        .padding(4)
-                }
-                .buttonStyle(.plain)
+                UmbraAttachRemoveBadge(label: "撤掉这张") { pending.removeAll { $0.id == p.id } }
             }
             Text(p.label.isEmpty ? "待上传" : p.label)
                 .font(UmbraFont.sans(10.5)).foregroundColor(UmbraColor.faint)

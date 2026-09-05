@@ -149,21 +149,37 @@ struct UmbraErrorCard: View {
                 .font(UmbraFont.sans(12.5, .w400))
                 .foregroundColor(tint)
                 .fixedSize(horizontal: false, vertical: true)
-            actionLink
+            actionLink(.top)
         }
+        // 行撑到真实的 44，钮的热区整块落在行内（`minTapTarget.siblingClearance`）。
+        .frame(minHeight: UmbraMetric.tapMin)
     }
 
-    /// 行内文字动作。热区纵向撑到 44，横向不撑（`minTapTarget.negativeMarginAxis`）。
-    private var actionLink: some View {
+    /// 行内文字动作。横向不撑（`minTapTarget.horizontalNot44`：横向只能从邻居身上抢），
+    /// 纵向**跟着行长满** —— strip / banner 两个形的行本身已经撑到 44（见下面两处
+    /// `.frame(minHeight: tapMin)`）。
+    ///
+    /// ⚠️ 这里原来是 `.frame(minHeight: 44)` + `.padding(.vertical, -13)`：行高不变，
+    /// 但那 13pt 是从上下邻居身上借的。`minTapTarget.siblingClearance`（批次 016）
+    /// 点名这种写法 —— 差的那截会吐到邻居身上，而这一行在绘制顺序里靠后、它赢，
+    /// 于是邻居那条窄带上的点击 / 长按被这颗钮吃掉。
+    /// 正确做法是把行撑到真实的 44，钮在行里长满。
+    /// - Parameter align: 文字在这 44 里靠哪儿。**strip 形必须传 `.top`** ——
+    ///   它那个 HStack 是 `.top` 对齐的，44 的框被顶到行首，文字若还居中就比同一句话里的
+    ///   图标和正文低了约 13pt，读起来不像一句话里的钮。banner 形的 HStack 是 `.center`，
+    ///   用默认的居中正好。
+    private func actionLink(_ align: Alignment = .center) -> some View {
         Button(action: action) {
             Text(actionTitle)
                 .font(UmbraFont.sans(12.5, .w600))
                 .foregroundColor(tint)
                 .fixedSize()
+                // **定尺 44**，不是 `maxHeight: .infinity`：贪婪写法会把整行的尺寸范围
+                // 变成 [44, ∞)，在非滚动容器里（比如离线条将来要挂的页面顶部）会被拉长。
+                .frame(height: UmbraMetric.tapMin, alignment: align)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(minHeight: UmbraMetric.tapMin)
-        .padding(.vertical, -(UmbraMetric.tapMin - 18) / 2)
     }
 
     // MARK: card
@@ -216,12 +232,16 @@ struct UmbraErrorCard: View {
     /// 常显会让一张本来在说人话的卡变成一坨日志。
     @ViewBuilder
     private func rawSection(_ r: String) -> some View {
+        // ⚠️ 这颗折叠钮**不给负边距**（`minTapTarget.siblingClearance`）：它上下都是
+        // 卡里的真内容（上面是原因文字、下面是两颗 44 高的动作钮），负 13.5 会直接
+        // 盖到下面那两颗钮的上沿 —— 那是「向可点的东西借」，规矩明令不许。
+        // 卡因此高出约 27pt，认这个代价。
         Button { withAnimation(UmbraMotion.tint) { showRaw.toggle() } } label: {
             Text(showRaw ? "收起原始返回" : "看原始返回")
                 .font(UmbraFont.sans(12, .w600))
                 .foregroundColor(UmbraColor.muted)
-                .frame(minHeight: UmbraMetric.tapMin, alignment: .leading)
-                .padding(.vertical, -(UmbraMetric.tapMin - 17) / 2)
+                .frame(maxWidth: .infinity, minHeight: UmbraMetric.tapMin, alignment: .leading)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         if showRaw {
@@ -260,8 +280,9 @@ struct UmbraErrorCard: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
-            actionLink
+            actionLink()
         }
+        .frame(minHeight: UmbraMetric.tapMin)
         .padding(.horizontal, UmbraMetric.pagePadX)
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, alignment: .leading)

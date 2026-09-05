@@ -57,7 +57,8 @@ struct ReminderAttsSection: View {
     var creating: Bool
 
     @EnvironmentObject private var router: UmbraRouter
-    @State private var viewerItem: UmbraViewerItem?
+    // viewerItem 已删：编辑态不给点开预览（`attachThumb.editing`，见 savedThumb 的注释），
+    // 这一屏没有预览器了。看大图去详情页（ReminderAttsPreviewRow 那边照旧）。
     @State private var showPhotos = false
     @State private var photoItem: PhotosPickerItem?
     @State private var showCamera = false
@@ -90,7 +91,6 @@ struct ReminderAttsSection: View {
             RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous)
                 .strokeBorder(UmbraColor.borderSoft, lineWidth: UmbraMetric.borderW)
         )
-        .umbraImageViewer(item: $viewerItem)
         // 加图的三个来源（沿用记账批次 004）。相册的有限授权、权限弹窗都在 PhotosPicker 里；
         // 文件要先拿安全作用域，不拿在真机上必读不出来。
         .photosPicker(isPresented: $showPhotos, selection: $photoItem, matching: .images)
@@ -139,26 +139,21 @@ struct ReminderAttsSection: View {
             .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-            .onTapGesture {
-                if let u = HTTPService.shared.moneyFileURL(a.fileId) {
-                    viewerItem = UmbraViewerItem(url: u, name: a.label.isEmpty ? "图片" : a.label)
-                }
-            }
+            // ⚠️ 这一屏是**编辑态**，所以按 `attachThumb.editing` 走：
+            // **图不再点开预览**，× 是这张图上唯一的动作。
+            // 原来两个动作叠在一张 78 的图上：点图预览 + 右上角一颗约 25 的 ×。
+            // × 撑到 44 的话正中心会落进删除区，不撑又违反 minTapTarget ——
+            // 设计侧的解法是把预览这一档从编辑态**拿掉**（编辑时看大图不是主诉求），
+            // 冲突就不存在了。看大图去详情页。
             .overlay(alignment: .topTrailing) {
-                Button {
+                UmbraAttachRemoveBadge(label: "移除这张附件") {
                     router.confirm(UmbraAlert(
                         title: "移除这张附件？",
                         body: "保存后这张图会从这条提醒上摘掉，服务端的文件也一起清。",
                         confirmLabel: "移除",
                         confirmDestructive: true,
                         onConfirm: { atts.removeAll { $0.fileId == a.fileId } }))
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 17))
-                        .foregroundStyle(.white, Color.black.opacity(0.45))
-                        .padding(4)
                 }
-                .buttonStyle(.plain)
             }
             Text(a.label.isEmpty ? "图片" : a.label)
                 .font(UmbraFont.sans(10.5)).foregroundColor(UmbraColor.faint)
@@ -184,13 +179,7 @@ struct ReminderAttsSection: View {
             .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
             .overlay(alignment: .topTrailing) {
-                Button { pending.removeAll { $0.id == p.id } } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.system(size: 17))
-                        .foregroundStyle(.white, Color.black.opacity(0.45))
-                        .padding(4)
-                }
-                .buttonStyle(.plain)
+                UmbraAttachRemoveBadge(label: "撤掉这张") { pending.removeAll { $0.id == p.id } }
             }
             Text("待上传 · \(p.label)")
                 .font(UmbraFont.sans(10.5)).foregroundColor(UmbraColor.faint)
