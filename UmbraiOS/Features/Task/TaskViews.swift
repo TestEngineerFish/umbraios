@@ -99,10 +99,22 @@ struct UmbraTaskListView: View {
             ))
 
             if filtered.isEmpty {
-                UmbraEmptyState(
-                    iconPath: UmbraIconPath.task,
-                    title: emptyTitle,
-                    hint: emptyBody)
+                // 「空」和「无结果」分家（`states.emptyVsNoResult`）：文案本来就分了档，
+                // 但**无结果那一档只在正文里说「清掉筛选试试」，没给按钮** ——
+                // 说了要人干什么却不给干的地方，是这条规矩点名的那种半截。
+                if isFiltered {
+                    UmbraEmptyState(iconPath: UmbraIconPath.filter,
+                                    title: emptyTitle,
+                                    hint: emptyBody,
+                                    actionTitle: "清掉筛选") {
+                        query = ""
+                        filter = nil
+                    }
+                } else {
+                    UmbraEmptyState(iconPath: UmbraIconPath.task,
+                                    title: emptyTitle,
+                                    hint: emptyBody)
+                }
             } else {
                 VStack(spacing: 9) {
                     ForEach(filtered) { t in
@@ -112,6 +124,12 @@ struct UmbraTaskListView: View {
                 .padding(.horizontal, UmbraMetric.pagePadX)
             }
         }
+    }
+
+    /// 现在这一屏空，是因为「真没有」还是「被搜索/筛选挡住了」。
+    /// 两件事的出路不一样，所以要分得出来。
+    private var isFiltered: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || filter != nil
     }
 
     private var emptyTitle: String {
@@ -229,7 +247,8 @@ struct UmbraTaskDetailView: View {
     @EnvironmentObject private var router: UmbraRouter
     @EnvironmentObject private var tasks: TasksViewModel
 
-    @State private var showRawError = false
+    // showRawError 已删：折叠状态跟着 UmbraErrorCard 走，页面不再自己存一份 ——
+    // 两份状态迟早会有一份忘了重置。
     /// 步骤截图点开的应用内预览器（批次 005：不再跳系统浏览器）。
     @State private var viewerItem: UmbraViewerItem?
 
@@ -240,12 +259,11 @@ struct UmbraTaskDetailView: View {
             if let d = detail {
                 content(d)
             } else {
-                // 拉取中：不摆骨架屏假装有内容，就一行字。
-                Text("正在读取任务…")
-                    .font(UmbraFont.body)
-                    .foregroundColor(UmbraColor.muted)
-                    .padding(.horizontal, UmbraMetric.pagePadX)
-                    .padding(.top, UmbraMetric.sp6)
+                // 原来这里是一行「正在读取任务…」，注释写着「不摆骨架屏假装有内容」——
+                // 那句判断在**没有骨架规格**的时候是对的（乱摆一堆灰块确实是假装）。
+                // 骨架 `states.skeleton` 现在给了准确取值和一条硬规矩「不转圈也不呼吸」，
+                // 静止的灰条不假装进展，只占位。改用统一骨架。
+                UmbraSkeleton()
             }
         }, bottom: {
             if let d = detail { bottomBar(d) }
@@ -567,51 +585,24 @@ struct UmbraTaskDetailView: View {
     /// 错误三段式：发生了什么 → 为什么 → 现在能做什么。
     /// 第一段取失败步骤的名字（服务端给得出），第二段是它的错误信息，
     /// 第三段是可点的按钮。三段缺一不可 —— 这条是文案硬规则。
+    ///
+    /// 骨架 `states.errorCard` 说「一件三形，**不新造第四形**」，所以这里从手写改成
+    /// 通用件的 card 形。原来的写法有四处对不上稿：分成了四段（小标签 / what / why / 钮），
+    /// 而稿是「标题 + 原因」两段；图标用的是状态家族的 `xCircle`（该用通知家族的
+    /// `alertOctagon`）；钮 40 高（该 44）；没有 1px `--danger` 描边。
+    /// 原始返回块的取值也一并修对了（`--track` 底 / 圆角 9 / padding 9-11 /
+    /// **max-height 96 内部滚动** —— 原来是 card 底、圆角 8、无高度上限，
+    /// 一段长堆栈能把整页顶下去）。
     private func errorBlock(_ summary: String) -> some View {
         let failedStep = detail?.steps.first { UmbraStatus(taskStatus: $0.status) == .failed }
         let what = failedStep.map { "第 \($0.seq) 步中断：\($0.title ?? "未命名步骤")" } ?? "任务失败"
         let why = failedStep?.error?.message ?? summary
-        return VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
-            HStack(spacing: 7) {
-                UmbraIcon(d: UmbraIconPath.xCircle, size: 15, strokeWidth: 2.1)
-                Text("任务失败")
-                    .font(UmbraFont.sans(12, .w600))
-                    .tracking(UmbraFont.labelTracking(12))
-            }
-            .foregroundColor(UmbraColor.danger)
-
-            Text(what)
-                .font(UmbraFont.sans(15.5, .w560))
-                .foregroundColor(UmbraColor.text)
-                .lineSpacing(15.5 * 0.45)
-            Text(why)
-                .font(UmbraFont.sans(14, .w400))
-                .foregroundColor(UmbraColor.muted)
-                .lineSpacing(14 * 0.6)
-
-            HStack(spacing: 7) {
-                UmbraButton(title: "去看能力", kind: .primary, height: 40) {
-                    router.go(.meCaps)
-                }
-                UmbraButton(title: showRawError ? "收起原始返回" : "看原始返回", kind: .secondary, height: 40) {
-                    showRawError.toggle()
-                }
-            }
-
-            if showRawError {
-                Text(summary)
-                    .font(UmbraFont.mono(12, .w400))
-                    .foregroundColor(UmbraColor.muted)
-                    .lineSpacing(12 * 0.7)
-                    .textSelection(.enabled)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(UmbraColor.card))
-            }
-        }
-        .padding(13)
-        .background(RoundedRectangle(cornerRadius: UmbraMetric.radiusCard, style: .continuous).fill(UmbraColor.dangerSoft))
-        .padding(UmbraMetric.pagePadX)
+        return UmbraErrorCard(variant: .card,
+                              title: what,
+                              reason: why,
+                              actionTitle: "去看能力",
+                              action: { router.go(.meCaps) },
+                              raw: summary)
     }
 
     /// 底部动作条。**还没有「重试任务」**——服务端已有 /tasks/{id}/retry（PC 已接），

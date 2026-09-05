@@ -20,12 +20,24 @@ struct UmbraMoneyHomeView: View {
         UmbraScreen {
             switch money.phase {
             case .idle, .loading:
-                loadingSkeleton
+                // 原来是三个 card 底的大圆角矩形 + `.redacted(.placeholder)`，
+                // 尺寸 150/300/200 —— 那是「三张卡的影子」，不是骨架。
+                // 骨架的取值（三组、每组两条、62/84 · 48/72 · 55/66、条高 14/11、
+                // `--track` 底、不呼吸）现在归 UmbraSkeleton。
+                UmbraSkeleton()
             case .error:
-                UmbraEmptyState(iconPath: UmbraIconPath.wallet,
-                                title: "暂时连不上服务端",
-                                hint: "统计和流水都在服务端。检查网络或服务端状态，然后重试。",
-                                actionTitle: "重试") { Task { await money.reload() } }
+                // 原来这一档借的是**空态**的壳 —— 空态和错误画得一模一样，
+                // 正是骨架 `states.iconBoxTone` 点名的那个毛病。整屏拿不到数据是
+                // 错误卡的 card 形（`states.errorCard`）。
+                UmbraErrorCard(variant: .card,
+                               title: "暂时连不上服务端",
+                               reason: "统计和流水都在服务端。检查网络或服务端状态，然后重试。",
+                               actionTitle: "重试",
+                               action: { Task { await money.reload() } },
+                               // 第二颗把人送到能解决问题的地方去，和聊天失败行同一条口径。
+                               // 用 jump 不是 go：连接设置在「我」那个 tab 里。
+                               secondaryTitle: "检查服务端",
+                               secondaryAction: { router.jump(.setConn) })
             case .ready:
                 if isEmpty {
                     UmbraEmptyState(iconPath: UmbraIconPath.wallet,
@@ -217,9 +229,19 @@ struct UmbraMoneyHomeView: View {
             HStack(spacing: 10) {
                 Text("分类占比").font(UmbraFont.sans(15.5, .w600)).foregroundColor(UmbraColor.text)
                 Spacer()
-                togglePill(catTable ? "看图" : "以表格查看") { catTable.toggle() }
+                // 没数时不出切换钮：图和表都是空的，点它只会让自己的字来回变，
+                // 卡里什么都不动 —— 一颗看着能点、点了没反应的钮。
+                if !st.by_cat.isEmpty {
+                    togglePill(catTable ? "看图" : "以表格查看") { catTable.toggle() }
+                }
             }
-            if catTable {
+            if st.by_cat.isEmpty {
+                // 卡内无数据走 compact 档（`states.cardNoData`），**不用整屏态** ——
+                // 屏上别的卡还有数，人不是无事可做，所以这一档不给正文也不给按钮。
+                // 原来这里画的是「只剩 chip 灰圈的环 + 中心 ¥0.00 + 零行排行 + 那句脚注」，
+                // 看上去像画好了，其实什么也没说。
+                UmbraCardNoData(iconPath: UmbraIconPath.columns, title: "本月还没有支出分类")
+            } else if catTable {
                 catTableView(st)
             } else {
                 donut(st)
@@ -367,10 +389,17 @@ struct UmbraMoneyHomeView: View {
             HStack(spacing: 8) {
                 Text("月度趋势").font(UmbraFont.sans(15.5, .w600)).foregroundColor(UmbraColor.text)
                 Spacer()
-                rangePill("近 6 月", on: !trend12) { trend12 = false }
-                rangePill("近 12 月", on: trend12) { trend12 = true }
+                // 同分类占比：没数时三颗钮全不出（近 6 月 / 近 12 月 / 以表格查看）。
+                if !pts.isEmpty {
+                    rangePill("近 6 月", on: !trend12) { trend12 = false }
+                    rangePill("近 12 月", on: trend12) { trend12 = true }
+                }
             }
-            if trendTable {
+            if pts.isEmpty {
+                // 原来这一档画的是一个空的 150 高柱状区 + 一颗「以表格查看」胶囊，
+                // 看着像图没加载出来。卡内 compact 档（`states.cardNoData`）。
+                UmbraCardNoData(iconPath: UmbraIconPath.sortLines, title: "还没有可比较的月份")
+            } else if trendTable {
                 VStack(spacing: 0) {
                     ForEach(pts, id: \.ym) { p in
                         HStack(spacing: 8) {
@@ -415,7 +444,9 @@ struct UmbraMoneyHomeView: View {
                 }
                 .frame(height: 150, alignment: .bottom)
             }
-            togglePill(trendTable ? "看图" : "以表格查看") { trendTable.toggle() }
+            if !pts.isEmpty {
+                togglePill(trendTable ? "看图" : "以表格查看") { trendTable.toggle() }
+            }
         }
         .padding(15)
         .moneyCard()
@@ -429,6 +460,11 @@ struct UmbraMoneyHomeView: View {
         return VStack(alignment: .leading, spacing: 4) {
             Text("大额支出").font(UmbraFont.sans(15.5, .w600)).foregroundColor(UmbraColor.text)
                 .padding(.bottom, 5)
+            // 本月没有支出时，这张卡原来只剩一行标题、底下一片空 ——
+            // 像是内容没渲染出来。卡内 compact 档（`states.cardNoData`）。
+            if top.isEmpty {
+                UmbraCardNoData(iconPath: UmbraIconPath.wallet, title: "本月还没有支出")
+            }
             ForEach(Array(top.enumerated()), id: \.element.id) { idx, e in
                 Button {
                     money.listDir = "expense"
@@ -500,16 +536,6 @@ struct UmbraMoneyHomeView: View {
         return String(format: "%.1f%%", Double(cents) / Double(total) * 100)
     }
 
-    private var loadingSkeleton: some View {
-        VStack(spacing: UmbraMetric.sp4) {
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard).fill(UmbraColor.card).frame(height: 150)
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard).fill(UmbraColor.card).frame(height: 300)
-            RoundedRectangle(cornerRadius: UmbraMetric.radiusCard).fill(UmbraColor.card).frame(height: 200)
-        }
-        .padding(.horizontal, UmbraMetric.pagePadX)
-        .padding(.top, UmbraMetric.sp4)
-        .redacted(reason: .placeholder)
-    }
 }
 
 // MARK: - 流水屏（money.list）
@@ -542,21 +568,58 @@ struct UmbraMoneyListView: View {
                     .listRowSeparator(.hidden)
             }
 
-            if filtered.isEmpty {
+            // ⚠️ 这一屏原来**完全不看 `money.phase`**，只判 `filtered.isEmpty` ——
+            // 而它是能**冷进**的（聊天里记完一笔，卡片上的「看流水」直接 jump 过来，
+            // 此时 store 还是 .idle）。于是：
+            //   · 请求还在飞 → 画「这个月还没有记录」，是假空态；
+            //   · 请求失败   → 一直停在「这个月还没有记录」，把「连不上」说成「你没记账」。
+            // 后者正是这一批刚在统计屏修掉的毛病（见本文件顶部那段注释），只是搬到了隔壁屏。
+            if money.phase == .idle || money.phase == .loading {
                 Section {
-                    UmbraEmptyState(iconPath: UmbraIconPath.wallet,
-                                    title: money.entries.isEmpty ? "这个月还没有记录" : "这个筛选条件下没有记录",
-                                    hint: money.entries.isEmpty ? "记一笔，流水会按天分组出现在这里。" : nil,
-                                    actionTitle: money.entries.isEmpty ? "记一笔" : "清空筛选") {
-                        if money.entries.isEmpty {
-                            router.go(.moneyAdd(id: nil))
-                        } else {
+                    UmbraSkeleton()
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets())
+                }
+            } else if money.phase == .error && money.entries.isEmpty {
+                // 有旧数据就别拿错误卡把它盖掉（下拉刷新失败是这种情况）——
+                // 只有「一条都没有 + 拿不到」才是真的没东西可看。
+                Section {
+                    UmbraErrorCard(variant: .card,
+                                   title: "暂时连不上服务端",
+                                   reason: "流水在服务端。检查网络或服务端状态，然后重试。",
+                                   actionTitle: "重试",
+                                   action: { Task { await money.reload() } },
+                                   secondaryTitle: "检查服务端",
+                                   secondaryAction: { router.jump(.setConn) })
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
+                        .listRowInsets(EdgeInsets())
+                }
+            } else if filtered.isEmpty {
+                Section {
+                    // 「空」和「无结果」是**两件不同的事**（`states.emptyVsNoResult`）：
+                    // 空态说「怎么开始」并给主动作，无结果说「改什么条件」并给「清掉筛选」。
+                    // 原来挤在一次调用里用三元分档，无结果那一档连 hint 都是 nil ——
+                    // 等于只说了「没有」，没说该改什么。拆成两次调用。
+                    if money.entries.isEmpty {
+                        UmbraEmptyState(iconPath: UmbraIconPath.wallet,
+                                        title: "这个月还没有记录",
+                                        hint: "记一笔，流水会按天分组出现在这里。",
+                                        actionTitle: "记一笔") { router.go(.moneyAdd(id: nil)) }
+                            .listRowBackground(Color.clear)
+                            .listRowSeparator(.hidden)
+                    } else {
+                        UmbraEmptyState(iconPath: UmbraIconPath.filter,
+                                        title: "这个筛选条件下没有记录",
+                                        hint: "这个月是有记录的，只是不符合当前的方向或分类。放宽条件再看看。",
+                                        actionTitle: "清掉筛选") {
                             money.listDir = "all"
                             money.listCat = nil
                         }
+                        .listRowBackground(Color.clear)
+                        .listRowSeparator(.hidden)
                     }
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
                 }
             } else {
                 ForEach(groups, id: \.day) { g in

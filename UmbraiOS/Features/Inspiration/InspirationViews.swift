@@ -37,12 +37,26 @@ struct UmbraInspirationListView: View {
                 .padding(.bottom, UmbraMetric.sp4)
 
             if rows.isEmpty {
-                UmbraEmptyState(
-                    iconPath: UmbraIconPath.bulb,
-                    title: "这个筛选下还没有灵感",
-                    hint: "在任意端发一条「记个灵感：…」，秘书会自动补标题和标签；也可以点右上角手动添加。",
-                    actionTitle: "记一条灵感",
-                    action: { router.go(.inspEdit(id: nil)) })
+                // 原来一句「这个筛选下还没有灵感」通吃两个态，而正文讲的却是「怎么开始」——
+                // 一个人明明只是搜了个词没搜到，却被教了一遍怎么记灵感。
+                // `states.emptyVsNoResult`：空态说「怎么开始」，无结果说「改什么条件」。
+                if isFiltered {
+                    UmbraEmptyState(
+                        iconPath: UmbraIconPath.filter,
+                        title: searchQ.isEmpty ? "这个筛选下没有灵感" : "没有匹配「\(searchQ)」的灵感",
+                        hint: "灵感是有的，只是不符合当前的状态、标签或关键词。",
+                        actionTitle: "清掉筛选",
+                        // 三个筛选条件一起清 —— 只清一个的话人点完还是空屏，
+                        // 会以为按钮坏了。
+                        action: { query = ""; tag = nil; status = "" })
+                } else {
+                    UmbraEmptyState(
+                        iconPath: UmbraIconPath.bulb,
+                        title: "还没有灵感",
+                        hint: "在任意端发一条「记个灵感：…」，秘书会自动补标题和标签；也可以点右上角手动添加。",
+                        actionTitle: "记一条灵感",
+                        action: { router.go(.inspEdit(id: nil)) })
+                }
             } else {
                 VStack(spacing: 10) {
                     ForEach(rows) { i in card(i) }
@@ -137,6 +151,12 @@ struct UmbraInspirationListView: View {
             .padding(.bottom, 10)
         }
     }
+
+    /// 去空白后的搜索词。空态文案和 `isFiltered` 都要用，别在两处各 trim 一遍。
+    private var searchQ: String { query.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// 这一屏空，是「真没有」还是「被条件挡住了」。三个条件任一生效都算被挡住。
+    private var isFiltered: Bool { !searchQ.isEmpty || tag != nil || !status.isEmpty }
 
     private var rows: [Inspiration] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)

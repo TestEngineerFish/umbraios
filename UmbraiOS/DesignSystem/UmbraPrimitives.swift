@@ -535,33 +535,82 @@ struct UmbraTagPill: View {
 // MARK: - 空态
 //
 // 空态必须有具体文案，光一句「暂无数据」不算。可给一个主动作。
+//
+// 骨架 `iosShell.states` 的三个「文字态」（空 / 无结果 / 离线）共用这一副骨架，
+// **靠图标块的底色分档**，不靠文案。规矩原话：
+//
+//   「图标块的底色承载态的分档，不是装饰。**旧 iOS 稿里那种裸的 34px --faint 字形作废**
+//    —— 三个态长得一模一样，分不出来。」
+//
+// 这句说的正是这个文件之前的写法：十几个调用点里「本月还没有记录」「读不到记账数据」
+// 「这条记录不在了」画出来一模一样，只有字不同。现在换成 64 的图标块，底色分三档。
+
+/// 文字态的分档。决定图标块的底色与字形色，**不决定文案** —— 文案永远由调用方给，
+/// 因为「怎么开始」和「改什么条件」是两句不同的话（见 `emptyVsNoResult`）。
+enum UmbraStateTone {
+    /// 空 / 无结果：中性。
+    case neutral
+    /// 离线、需要授权这类「等条件满足」的态。
+    case warning
+    /// 拿不到数据、出错。
+    case danger
+
+    var bg: Color {
+        switch self {
+        case .neutral: return UmbraColor.chip
+        case .warning: return UmbraColor.warningSoft
+        case .danger:  return UmbraColor.dangerSoft
+        }
+    }
+    var fg: Color {
+        switch self {
+        case .neutral: return UmbraColor.muted
+        case .warning: return UmbraColor.warning
+        case .danger:  return UmbraColor.danger
+        }
+    }
+}
+
 struct UmbraEmptyState: View {
     var iconPath: String? = nil
     let title: String
     var hint: String? = nil
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
+    /// 图标块的档。默认中性 —— 既有调用点一行都不用改就能拿到新形，
+    /// 只有那几个「其实是错误/离线」的调用点需要显式传档。
+    var tone: UmbraStateTone = .neutral
+    /// 次要动作（无结果那一档的「清掉筛选」走这里）。描边钮，排在主动作下面。
+    var secondaryTitle: String? = nil
+    var secondaryAction: (() -> Void)? = nil
 
     var body: some View {
-        VStack(spacing: UmbraMetric.sp4) {
+        VStack(spacing: 11) {
             if let p = iconPath {
-                UmbraIcon(d: p, size: 34, strokeWidth: 1.8)
-                    .foregroundColor(UmbraColor.faint)
+                // 64 / 圆角 16 / 字形 28 —— 三个取值都来自 `states.shared`，
+                // 和 PC 空态是同一件的 iOS 密度（PC 52 / 14 / 24）。
+                UmbraIconBlock(d: p, block: 64, icon: 28, bg: tone.bg, fg: tone.fg, corner: 16)
             }
             Text(title)
-                .font(UmbraFont.sans(16, .w600))
+                .font(UmbraFont.sans(15, .w560))
                 .foregroundColor(UmbraColor.text)
+                .multilineTextAlignment(.center)
             if let h = hint {
                 Text(h)
                     .font(UmbraFont.sans(13, .w400))
                     .foregroundColor(UmbraColor.muted)
                     .multilineTextAlignment(.center)
-                    .lineSpacing(4)
+                    // 行高 1.65（原来 lineSpacing(4) ≈ 1.31，偏紧）。
+                    .lineSpacing(13 * 0.65)
             }
             if let t = actionTitle, let a = action {
                 UmbraButton(title: t, kind: .primary, height: 44, action: a)
                     .frame(maxWidth: 200)
                     .padding(.top, UmbraMetric.sp1)
+            }
+            if let t = secondaryTitle, let a = secondaryAction {
+                UmbraButton(title: t, kind: .secondary, height: 44, action: a)
+                    .frame(maxWidth: 200)
             }
         }
         .padding(.horizontal, 34)

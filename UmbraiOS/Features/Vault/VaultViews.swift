@@ -806,23 +806,32 @@ struct UmbraVaultHomeView: View {
         }))
     }
 
+    /// 原来是自绘的一份（没走公共件、没有图标块），而且**按钮恒为「存一条新的」**——
+    /// 搜不到记录时让人去新建一条，是把「你的条件不对」答成了「你没有数据」。
+    /// 收编到 `UmbraEmptyState` 并按 `states.emptyVsNoResult` 分档。
     private var emptyState: some View {
-        VStack(spacing: 7) {
-            Text(emptyTitle)
-                .font(UmbraFont.sans(15, .w560))
-                .foregroundColor(UmbraColor.text)
-            Text(emptyBody)
-                .font(UmbraFont.sans(13, .w400))
-                .foregroundColor(UmbraColor.muted)
-                .lineSpacing(13 * 0.65)
-                .multilineTextAlignment(.center)
-            UmbraButton(title: "存一条新的", kind: .primary, height: 44) { addRecord() }
-                .frame(maxWidth: 160)
-                .padding(.top, 6)
+        Group {
+            if isFiltered {
+                UmbraEmptyState(iconPath: UmbraIconPath.filter,
+                                title: emptyTitle,
+                                hint: emptyBody,
+                                actionTitle: "清掉筛选") {
+                    session.touch()
+                    query = ""
+                    cat = ""
+                }
+            } else {
+                UmbraEmptyState(iconPath: UmbraIconPath.lockKeyhole,
+                                title: emptyTitle,
+                                hint: emptyBody,
+                                actionTitle: "存一条新的") { addRecord() }
+            }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 24)
-        .padding(.vertical, 34)
+    }
+
+    /// 这一屏空，是真没有还是被搜索/分组挡住了。
+    private var isFiltered: Bool {
+        !query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !cat.isEmpty
     }
 
     private var emptyTitle: String {
