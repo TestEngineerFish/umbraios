@@ -44,6 +44,8 @@
 	<string>Umbra用Face ID确认是你本人，以此解锁密码保险箱。主密码只存在这台设备的安全隔区里，不会上传，Umbra也读不到你的面容数据。</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>Umbra需要使用麦克风以进行语音输入</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Umbra需要写入相册权限，才能把聊天里的图片存到你的相册</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Umbra需要访问相册以选择和发送图片</string>
 	<key>NSSpeechRecognitionUsageDescription</key>

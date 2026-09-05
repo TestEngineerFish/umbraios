@@ -103,7 +103,14 @@ struct UmbraImageViewer: View {
                             .scaleEffect(steady * pinch)
                             .offset(x: panSteady.width + pan.width,
                                     y: panSteady.height + pan.height)
-                            .gesture(zoomGesture.simultaneously(with: panGesture))
+                            // ⚠️ 没放大时**不挂**平移手势：它本来就什么都不做
+                            //（onEnded 里 guard steady > 1 直接 return），挂着却会把
+                            // 外层多图预览的左右翻页手势吃掉。放大之后才挂，此时
+                            // 拖动本来就该归平移，翻页让位是对的。
+                            .gesture(steady > 1
+                                     ? AnyGesture(zoomGesture.simultaneously(with: panGesture)
+                                        .map { _ in () })
+                                     : AnyGesture(zoomGesture.map { _ in () }))
                     case .failure:
                         // 加载失败也要能出去/能分享，所以顶栏在外层不受影响；
                         // 这里给一句说明而不是空屏 —— 空屏像预览器坏了。
@@ -151,7 +158,43 @@ struct UmbraImageViewer: View {
     }
 }
 
+/// 一条消息里的一组图（批次 011 ③）。`imageMessage.grouping` 点名：
+/// 「一条消息 = N 张图，预览器里左右切的就是这一条里的图」。
+struct UmbraViewerGroup: Identifiable {
+    let items: [UmbraViewerItem]
+    /// 点开的是第几张。
+    let start: Int
+    var id: String { (items.first?.id ?? "") + "#\(start)" }
+}
+
+/// 多图预览器：一页一张，左右翻。每页就是单图预览器本身 ——
+/// 顶栏（关闭 / 文件名 / 分享）和缩放平移一份代码两处用，不另写一套。
+struct UmbraImageViewerPager: View {
+    let group: UmbraViewerGroup
+    @State private var index: Int
+
+    init(group: UmbraViewerGroup) {
+        self.group = group
+        _index = State(initialValue: min(max(0, group.start), max(0, group.items.count - 1)))
+    }
+
+    var body: some View {
+        TabView(selection: $index) {
+            ForEach(Array(group.items.enumerated()), id: \.element.id) { i, it in
+                UmbraImageViewer(item: it).tag(i)
+            }
+        }
+        .tabViewStyle(.page(indexDisplayMode: group.items.count > 1 ? .always : .never))
+        .background(UmbraColor.viewerBg.ignoresSafeArea())
+    }
+}
+
 extension View {
+    /// 挂多图预览器：`.umbraImageViewerGroup(group: $viewerGroup)`。
+    func umbraImageViewerGroup(group: Binding<UmbraViewerGroup?>) -> some View {
+        fullScreenCover(item: group) { UmbraImageViewerPager(group: $0) }
+    }
+
     /// 挂预览器的统一入口：`.umbraImageViewer(item: $viewerItem)`。
     /// 用 fullScreenCover 而不是自绘浮层：系统帮我们处理转场、手势冲突和状态栏配色，
     /// 且它天然在导航栈之上 —— 自绘浮层在推入页里会被 toolbar 盖住（踩过）。

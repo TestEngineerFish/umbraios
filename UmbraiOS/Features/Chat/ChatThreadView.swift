@@ -10,6 +10,7 @@
 // 工程侧有、设计稿没画的：device（设备发来的消息）、done（任务产出）、locate（电脑操作求助）、
 // error。这四种照设计语言补齐，其中 locate 直接复用既有的 LocateCard —— 那套箭头指位
 // 交互（缩放、平移、抓箭杆）已经调好了，没有新设计稿之前重画一遍只会更差。
+import Photos
 import SwiftUI
 import UIKit
 
@@ -28,8 +29,15 @@ struct UmbraChatThreadView: View {
     @State private var quickVoiceActive = false
     /// 输入框焦点。点消息区、往下拖、切到语音态都靠它收键盘。
     @FocusState private var inputFocused: Bool
-    /// 应用内图片预览器（产出图片点开）。非 nil 即全屏展示。
-    @State private var viewerItem: UmbraViewerItem?
+    /// 应用内图片预览器。**一个 State 管两种形态** —— 单张（任务产出图）和一条消息里的
+    /// 那一组（批次 011 ③）。不拆成两个 @State + 两个 fullScreenCover：同一层挂两个
+    /// cover，SwiftUI 只有最后挂的那个稳定生效，先挂的会静默失效（产出图就再也点不开了）。
+    @State private var viewer: UmbraViewerGroup?
+    /// 待发的图（输入框上方那条）。发出去就清空。
+    @State private var pending: [ChatPendingImage] = []
+    @State private var showPhotos = false
+    @State private var showCamera = false
+    @State private var showFiles = false
     /// 「点被引用的那块回到原消息」：装被引消息的服务端 id，`messages` 里滚过去后清空。
     /// 不直接在 userBubble 里滚 —— ScrollViewReader 的 proxy 只在 `messages` 作用域里拿得到。
     @State private var jumpTo: Int?
@@ -71,7 +79,9 @@ struct UmbraChatThreadView: View {
             inputBar
         }
         .background(UmbraColor.bg)
-        .umbraImageViewer(item: $viewerItem)
+        .umbraImageViewerGroup(group: $viewer)
+        .chatImagePickers(showPhotos: $showPhotos, showCamera: $showCamera, showFiles: $showFiles,
+                          remaining: ChatImageMetric.maxCount - pending.count) { takeImages($0) }
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
         .toolbar {
@@ -207,6 +217,8 @@ struct UmbraChatThreadView: View {
             // 键盘**弹起**要跟滚（正在看的那条会被顶到键盘后面），
             // 键盘**收起**也要跟滚（不然列表停在上移后的位置，底下空一截）——两个方向都回底。
             .onChange(of: inputFocused) { _ in scrollToEnd(proxy) }
+            // 待发条一出现 / 消失，输入区高度就变，最后一条消息会被盖住 —— 跟着回底。
+            .onChange(of: pending.count) { _ in scrollToEnd(proxy) }
             .onChange(of: jumpTo) { id in
                 guard let id else { return }
                 jumpTo = nil
@@ -255,7 +267,7 @@ struct UmbraChatThreadView: View {
 
     private func alignment(_ b: ChatBlock) -> Alignment {
         switch b {
-        case .user: return .trailing
+        case .user, .image: return .trailing
         case .note, .error: return .center
         default: return .leading
         }
@@ -284,6 +296,9 @@ struct UmbraChatThreadView: View {
                     if let kept = ChatKeptTool.line(for: a.toolsRun) { keptToolsRow(kept) }
                 }
             }
+
+        case .image(let img):
+            imageRow(img)
 
         case .device(let did, let text, _):
             VStack(alignment: .leading, spacing: 5) {
@@ -354,6 +369,207 @@ struct UmbraChatThreadView: View {
     // 和「底栏用真·系统 tab bar」「列表用系统 .swipeActions」是同一条铁律。稿上那些取值
     //（208 / 圆角 16 / 玻璃 / 44 行高 / 图标在右）本来就是系统菜单的样子。
     // 稿②的「选中态 halo」也随之不需要：系统菜单会把气泡抬起来，那就是选中态。
+
+    /// 一条图片消息：气泡 + 上传中的字节行 / 失败行。
+    private func imageRow(_ img: ChatBlock.ImageBlock) -> some View {
+        HStack(spacing: 0) {
+            Spacer(minLength: UmbraMetric.sp5)
+            VStack(alignment: .trailing, spacing: 4) {
+                ChatImageBubble(block: img) { openImage(img, at: $0) }
+                    .overlay { halo(img.id.uuidString, mine: true) }
+                    // 上传中不挂菜单：它自带「取消上传」，再叠一层菜单是同一件事两个入口
+                    //（`messageMenu.byKind` 里也只有 image / imgFailed 两档，没有「上传中」）。
+                    .modifier(UmbraConditionalMenu(on: img.state != .uploading &&
+                                                       img.state != .awaitingReceipt) { imageMenu(img) })
+                if img.state == .uploading { uploadingRow(img) }
+                if img.state == .awaitingReceipt { awaitingRow }
+                if img.state == .failed { imageFailedRow(img) }
+            }
+        }
+    }
+
+    /// 上传中那一行：「正在上传 · 1.8 MB / 2.9 MB」+「取消上传」。
+    /// 字节是**整条**的（环画在每一格上，说的是那一张；这一行说的是这一条）。
+    private func uploadingRow(_ img: ChatBlock.ImageBlock) -> some View {
+        HStack(spacing: 6) {
+            Text(L("chat.uploading", umbraMB(img.sentBytes), umbraMB(img.totalBytes)))
+                .font(UmbraFont.sans(11.5, .w400))
+                .foregroundColor(UmbraColor.faint)
+                .fixedSize()
+            failedAction(L("chat.img.cancelUpload"), weight: .w400, tint: UmbraColor.muted) {
+                dropImages(img)
+            }
+        }
+    }
+
+    /// 图都传完、WS 也送出去了，在等服务端回执。**这一档不给「取消上传」** ——
+    /// 服务端已经有这条了，撤掉本地只会让用户再发一次，变成两条。
+    private var awaitingRow: some View {
+        Text(L("chat.img.sending"))
+            .font(UmbraFont.sans(11.5, .w400))
+            .foregroundColor(UmbraColor.faint)
+            .fixedSize()
+    }
+
+    /// 图片没发出去那一行。和文字那条同一个形，只是原因由上传链路给。
+    private func imageFailedRow(_ img: ChatBlock.ImageBlock) -> some View {
+        HStack(spacing: 6) {
+            UmbraIcon(d: UmbraIconPath.alertCircle, size: 14, strokeWidth: 2)
+                .foregroundColor(UmbraColor.danger)
+            Text(img.failReason.isEmpty ? L("chat.uploadFailed") : img.failReason)
+                .font(UmbraFont.sans(12.5, .w400))
+                .foregroundColor(UmbraColor.danger)
+                .fixedSize(horizontal: false, vertical: true)
+            failedAction(L("chat.menu.resend"), weight: .w600, tint: UmbraColor.danger) {
+                chat.retryImages(blockId: img.id)
+            }
+        }
+    }
+
+    /// 撤掉一条还没发成的图片消息，并把本地那几张**放回待发条** ——
+    /// 图还在本地，让用户再去相册翻一遍说不过去（PC 端同一条行为）。
+    private func dropImages(_ img: ChatBlock.ImageBlock) {
+        let back = chat.cancelImageUpload(blockId: img.id)
+        guard !back.isEmpty else { return }
+        let room = ChatImageMetric.maxCount - pending.count
+        pending.append(contentsOf: back.prefix(max(0, room)).map { ChatPendingImage(data: $0) })
+        // 块已经撤掉了，条里又放不下 —— 不说一声的话图就一声不吭地没了。
+        if back.count > room { router.showToast(L("chat.img.tooMany")) }
+    }
+
+    /// 图片消息的长按菜单（`messageMenu.byKind.image` / `.imgFailed`）。
+    /// 失败的那条砍到三项、「重新发送」置顶；正常的五项。
+    @ViewBuilder
+    private func imageMenu(_ img: ChatBlock.ImageBlock) -> some View {
+        if img.state == .failed {
+            Button { chat.retryImages(blockId: img.id) } label: {
+                Label(L("chat.menu.resend"), systemImage: "arrow.clockwise")
+            }
+            // 一张都没传成的时候不给「查看大图」—— 服务端上还没有这张，点了只会静默无反应。
+            if !img.atts.isEmpty {
+                Button { openImage(img, at: 0) } label: {
+                    Label(L("chat.menu.viewImage"), systemImage: "arrow.up.left.and.arrow.down.right")
+                }
+            }
+            // 删除是**丢掉**，不回填待发条：点了红色「删除」却看见九张图原样回到输入框上方，
+            // 观感上像没删掉。回填只归「取消上传」。
+            Button(role: .destructive) { chat.cancelImageUpload(blockId: img.id) } label: {
+                Label(L("chat.menu.delete"), systemImage: "trash")
+            }
+        } else {
+            Button { openImage(img, at: 0) } label: {
+                Label(L("chat.menu.viewImage"), systemImage: "arrow.up.left.and.arrow.down.right")
+            }
+            Button { copyImage(img) } label: {
+                Label(L("chat.menu.copyImage"), systemImage: "doc.on.doc")
+            }
+            actionQuote(id: img.serverId, role: "user", text: L("chat.quoteImage", img.count))
+            Button { saveImageToAlbum(img) } label: {
+                Label(L("chat.menu.saveToAlbum"), systemImage: "square.and.arrow.down")
+            }
+            actionDelete(serverId: img.serverId)
+        }
+    }
+
+    /// 点开这一条里的第 i 张。**带上整条的图** —— 预览器里左右切的就是这一条里的图。
+    private func openImage(_ img: ChatBlock.ImageBlock, at i: Int) {
+        let items = img.atts.enumerated().compactMap { j, fid -> UmbraViewerItem? in
+            guard let url = HTTPService.shared.moneyFileURL(fid) else { return nil }
+            return UmbraViewerItem(url: url, name: L("chat.img.nth", j + 1))
+        }
+        guard !items.isEmpty else { return }
+        viewer = UmbraViewerGroup(items: items, start: min(i, items.count - 1))
+    }
+
+    /// 复制图片：进系统剪贴板的是**图本身**不是链接 —— 粘到别处要能直接出图。
+    /// 本地还留着原图就用本地那份（不用等下载）；只有 file_id 的现下一次。
+    ///
+    /// **只复制第一张**，而「存到相册」存整条 —— 两个动作口径不同是有意的：
+    /// 剪贴板实际只有一格（多图粘贴几乎没有接收方认），相册没有这个限制。
+    /// 已在回执里通报，等设计侧一句准话。
+    private func copyImage(_ img: ChatBlock.ImageBlock) {
+        if let d = img.data.first, let ui = UIImage(data: d) {
+            UIPasteboard.general.image = ui
+            router.showToast(L("chat.img.copied"))
+            return
+        }
+        guard let fid = img.atts.first, let url = HTTPService.shared.moneyFileURL(fid) else { return }
+        Task {
+            guard let d = try? await URLSession.shared.data(from: url).0,
+                  let ui = UIImage(data: d) else {
+                router.showToast(L("chat.img.copyFailed")); return
+            }
+            UIPasteboard.general.image = ui
+            router.showToast(L("chat.img.copied"))
+        }
+    }
+
+    /// 存到相册。**这一条里的图全存** —— 菜单挂在整条消息上，只存第一张说不通
+    ///（「复制图片」只取第一张是另一回事：剪贴板实际只有一格）。
+    ///
+    /// ⚠️ 不用 `UIImageWriteToSavedPhotosAlbum`：它是异步的、而且**不回报成败**。
+    /// 用户在权限弹窗上点「不允许」时一张都存不进去，吐司却照样说「已存 N 张」。
+    /// PhotoKit 的 performChanges 能 await 到真实结果。
+    private func saveImageToAlbum(_ img: ChatBlock.ImageBlock) {
+        Task {
+            // 显式要一次权限：只拦 .denied 的话，.notDetermined 会靠 performChanges
+            // 隐式弹框，用户点「不允许」之后抛的错被当成「图片取不下来」——
+            // 文案在甩锅给网络，人会去查 WiFi 而不是去开权限。.restricted 同理。
+            var st = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+            if st == .notDetermined { st = await PHPhotoLibrary.requestAuthorization(for: .addOnly) }
+            guard st == .authorized || st == .limited else {
+                router.showToast(L("chat.img.noAlbumPermission")); return
+            }
+            var ok = 0
+            for (j, fid) in img.atts.enumerated() {
+                var bytes: Data? = j < img.data.count ? img.data[j] : nil
+                if bytes == nil, let url = HTTPService.shared.moneyFileURL(fid) {
+                    bytes = try? await URLSession.shared.data(from: url).0
+                }
+                guard let d = bytes, let ui = UIImage(data: d) else { continue }
+                // 用 completion 版包一层，不用 async 重载：那个重载在不同 SDK 上
+                // 可能是 `async throws` 也可能是 `async throws -> Bool`，后者在
+                // success == false 且不抛错时会被误记成功。这里拿到的就是那个 Bool。
+                let done: Bool = await withCheckedContinuation { cont in
+                    PHPhotoLibrary.shared().performChanges {
+                        PHAssetChangeRequest.creationRequestForAsset(from: ui)
+                    } completionHandler: { success, _ in
+                        cont.resume(returning: success)
+                    }
+                }
+                // 逐张记账：三张里成功两张要说「已存 2 张」，不能整批当失败。
+                if done { ok += 1 }
+            }
+            router.showToast(ok > 0 ? L("chat.img.saved", ok) : L("chat.img.saveFailed"))
+        }
+    }
+
+    /// 选图回来：超限的那张也收进条里（标红说明），**不吞掉** ——
+    /// 吞掉的话用户会以为自己没选中。
+    private func takeImages(_ datas: [Data]) {
+        let room = ChatImageMetric.maxCount - pending.count
+        guard room > 0 else { router.showToast(L("chat.img.tooMany")); return }
+        pending.append(contentsOf: datas.prefix(room).map { ChatPendingImage(data: $0) })
+        if datas.count > room { router.showToast(L("chat.img.tooMany")) }
+    }
+
+    /// 「+」：三入口的 action sheet（`imageMessage.entry.ios`）。
+    private func askAddImage() {
+        guard pending.count < ChatImageMetric.maxCount else {
+            router.showToast(L("chat.img.tooMany")); return
+        }
+        router.present(UmbraSheet(
+            title: L("chat.img.sheetTitle"), subtitle: L("chat.img.sheetSub"),
+            items: [
+                UmbraSheetItem(label: L("chat.attach.album")) { showPhotos = true },
+                UmbraSheetItem(label: L("chat.attach.camera")) {
+                    // 模拟器 / 无摄像头设备直说，不给一个点了闪退的入口。
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) { showCamera = true }
+                    else { router.showToast(L("chat.img.noCamera")) }
+                },
+                UmbraSheetItem(label: L("chat.attach.file")) { showFiles = true },
+            ]))
+    }
 
     /// 我方气泡的菜单。发失败的那条按 `messageMenu.byKind.failed` 砍到三项、「重新发送」置顶
     ///（那条还没送出去，引用和存起来都无从谈起，而你长按它十次有九次就是为了重发）。
@@ -973,7 +1189,8 @@ struct UmbraChatThreadView: View {
         let meta = url.replacingOccurrences(of: #"^https?://[^/]+"#, with: "", options: .regularExpression)
         return Button {
             if isImg, let u = full {
-                viewerItem = UmbraViewerItem(url: u, name: name)
+                // 单张也走同一个预览器（组里只有一项，翻页条自己不出）。
+                viewer = UmbraViewerGroup(items: [UmbraViewerItem(url: u, name: name)], start: 0)
             } else {
                 openResult(url)
             }
@@ -1180,7 +1397,9 @@ struct UmbraChatThreadView: View {
         VStack(spacing: 0) {
             if let banner = chat.ideaBanner { ideaBannerView(banner) }
             if let q = chat.quote { quoteBar(q) }
+            if !pending.isEmpty { ChatPendingStrip(items: $pending, onAdd: askAddImage) }
             HStack(alignment: .bottom, spacing: 8) {
+                plusButton
                 ZStack {
                     if voiceMode { holdBar } else { textField }
                 }
@@ -1430,8 +1649,12 @@ struct UmbraChatThreadView: View {
     private func finishRecording(_ result: UmbraHoldRecorder.Result) {
         switch result {
         case .send(let t):
+            // 走 sendPending 而不是 chat.send()：挂着待发的图时，图文要一起走
+            // （图文分条，但同一次发送）。直接 send() 会把图落在条里。
             chat.draft = t
-            chat.send()
+            // 被超限拦下时要切回打字态：语音态显示的是按住说话条，
+            // 刚识别出来的那句话落在看不见的草稿里，用户会以为它丢了。
+            if !sendPending() { voiceMode = false }
         case .toText(let t):
             // 文字已经出现在输入框里，结果一目了然 —— 不再弹 toast 挡视线（用户点名）。
             chat.draft = t
@@ -1446,9 +1669,48 @@ struct UmbraChatThreadView: View {
         }
     }
 
-    /// 右侧按钮的三态：语音态=键盘（回到打字）；有草稿=发送；空草稿=麦克风。
+    /// 一次发送：先图后文（图文分条）。超限那张挡在这里 —— 它已经在条里标红说明了，
+    /// 这一步只需要不让它混进去，不用再吐一次同样的话。
+    @discardableResult
+    private func sendPending() -> Bool {
+        // 有超限的就**整条拦下**（图和文都不发），并点名是第几张 —— 和 PC 一致。
+        // 「好的照发、超限的留在条里」看着更宽容，但会出现「三张全超限 + 草稿为空 →
+        // 点发送什么都没发生」这种毫无反应的死角；而且文字先跑了、图还留着也很割裂。
+        if let bad = pending.firstIndex(where: { $0.oversize }) {
+            router.showToast(L("chat.img.oversize", bad + 1, umbraMB(pending[bad].bytes),
+                               umbraMB(ChatImageMetric.maxBytes)))
+            return false
+        }
+        if !pending.isEmpty {
+            chat.sendImages(pending.map(\.data))
+            pending = []
+        }
+        if !chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { chat.send() }
+        return true
+    }
+
+    /// 输入框左侧那颗 36 圆钮「+」（`imageMessage.entry.ios`）。
+    private var plusButton: some View {
+        Button(action: askAddImage) {
+            UmbraIcon(d: UmbraIconPath.plus, size: 19, strokeWidth: 1.9)
+                .foregroundColor(UmbraColor.muted)
+                .frame(width: 36, height: 36)
+                .background(Circle().fill(UmbraColor.card))
+                .overlay(Circle().strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW))
+                // 同 rightButton：36 够不到 44，透明外框底对齐撑触达区。
+                .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin, alignment: .bottom)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(L("chat.attach.add"))
+    }
+
+    /// 右侧按钮的三态：语音态=键盘（回到打字）；有草稿或待发的图=发送；都没有=麦克风。
     private var rightButton: some View {
+        // 挂着待发的图时也是「发送」态：图文分条 —— 一次点击先发图那一条，
+        // 草稿里还有字就紧跟着发文字那一条（稿：图片单独成条，配的文字紧跟一条）。
         let hasDraft = !chat.draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !pending.isEmpty
         let icon = voiceMode ? UmbraIconPath.keyboard : (hasDraft ? UmbraIconPath.send : UmbraIconPath.mic)
         let bg = voiceMode ? UmbraColor.orangeSoft : (hasDraft ? UmbraColor.orange : UmbraColor.chip)
         let fg = voiceMode ? UmbraColor.orangeText : (hasDraft ? Color.white : UmbraColor.muted)
@@ -1458,7 +1720,7 @@ struct UmbraChatThreadView: View {
                 voiceMode = false
                 inputFocused = true          // 回到打字态就把键盘叫回来，少一次点击
             } else if hasDraft {
-                chat.send()                  // 发完**不收键盘** —— IM 里都是连着打下一句
+                sendPending()                // 发完**不收键盘** —— IM 里都是连着打下一句
             } else {
                 inputFocused = false         // 切语音前先收键盘，否则浮层被键盘顶掉一半
                 voiceMode = true
@@ -1486,6 +1748,7 @@ struct UmbraChatThreadView: View {
             switch b {
             case .user(let u): return "我：\(u.text)"
             case .assistant(let a): return a.text.isEmpty ? nil : "秘书：\(a.text)"
+            case .image(let i): return "\(L("chat.quoteMe"))：\(L("chat.quoteImage", i.count))"
             case .device(_, let t, _): return "\(title)：\(t)"
             case .note(let n): return n.text
             default: return nil

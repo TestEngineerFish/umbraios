@@ -274,9 +274,13 @@ class ChatViewModel: ObservableObject {
         switch msg.role {
         case "user":
             // 历史里的一条我发的消息：id / 引用 / 附件都从服务端那份带回来（删除与引用指着它们）。
-            // 纯图片消息（kind=image）的 content 是空串，当文字气泡画出来就是个空泡 ——
-            // 图片块是 ③ 那一批的事，在那之前先不画（预览行另给占位文案）。
-            if (msg.kind ?? "text") == "image" { return nil }
+            // 纯图片消息（kind=image）的 content 是空串，走图片块 —— 当文字气泡画就是个空泡。
+            if (msg.kind ?? "text") == "image" {
+                let atts = (msg.atts ?? []).filter { !$0.isEmpty }
+                guard !atts.isEmpty else { return nil }
+                return .image(ChatBlock.ImageBlock(atts: atts, ts: msg.created_at,
+                                                   serverId: msg.id, state: .sent))
+            }
             return .user(ChatBlock.UserBlock(
                 text: msg.content, ts: msg.created_at, serverId: msg.id,
                 quote: historyQuote(msg.meta), atts: msg.atts ?? []))
@@ -407,6 +411,208 @@ class ChatViewModel: ObservableObject {
         armReplyTimeout()
     }
 
+    // MARK: - 图片消息（批次 011 ③）
+
+    /// 正在跑的上传任务，按块 id 存 —— 「取消上传」和「块被删掉了」都靠它把 Task 掐掉。
+    private var uploads: [UUID: Task<Void, Never>] = [:]
+    /// 上一次真正落库的整数百分比，按块存。节流的第一道闸 ——
+    /// 原来要先全量扫一遍找块才能比对，贵的那半没省下来。
+    private var lastPct: [UUID: Int] = [:]
+    /// 每个块的上传**代次**。旧任务被 cancel 之后要等一次主线程轮转才恢复执行，
+    /// 那时槽里已经是新任务了 —— 没有代次号的话旧任务的收尾会把新任务的槽清掉
+    /// （于是「取消上传」变成空转：界面上撤了，HTTP 还在跑，服务端留孤儿文件）。
+    /// 迟到的进度回调同理，会把重传后的进度条往回拨。
+    private var uploadGen: [UUID: Int] = [:]
+
+    /// 发一条图片消息。先把块画出来（本地图当预览），再逐张传，全传完才送 WS。
+    func sendImages(_ images: [Data]) {
+        guard !images.isEmpty else { return }
+        let conv = activeConv
+        let s = store(conv)
+        stickToBottom = true
+        var blk = ChatBlock.ImageBlock(data: images,
+                                       ts: ISO8601DateFormatter().string(from: Date()))
+        blk.totalBytes = images.reduce(0) { $0 + $1.count }
+        // 单图的比例趁本地还有原图算一次。钳进 [0.4, 2.5]：长截图（1:8）不钳的话
+        // 会画成 220×1760 再被裁掉中间一截，破图的 size 还可能是 0 → NaN。
+        if images.count == 1, let ui = UIImage(data: images[0]), ui.size.height > 0 {
+            blk.ratioHint = min(2.5, max(0.4, ui.size.width / ui.size.height))
+        }
+        s.blocks.append(.image(blk))
+        setPreview(conv, L("chat.imageMsgPreview"), blk.ts)
+        reflect(conv)
+        runUpload(blockId: blk.id, conv: conv)
+    }
+
+    /// 断点续传：从 `atts.count` 那张接着传，传完送 WS。
+    /// **不重传已经传成功的** —— 重传会在服务端留孤儿文件。
+    private func runUpload(blockId: UUID, conv: String) {
+        uploads[blockId]?.cancel()
+        let gen = (uploadGen[blockId] ?? 0) + 1
+        uploadGen[blockId] = gen
+        uploads[blockId] = Task { @MainActor [weak self] in
+            // 只清自己那一代的槽，别把接手的新任务掐了。
+            defer { if self?.uploadGen[blockId] == gen { self?.uploads[blockId] = nil } }
+            guard let self else { return }
+            while let blk = self.imageBlock(blockId), blk.atts.count < blk.data.count {
+                let idx = blk.atts.count
+                let bytes = blk.data[idx]
+                let doneBytes = blk.data.prefix(idx).reduce(0) { $0 + $1.count }
+                let name = "chat-\(Int(Date().timeIntervalSince1970))-\(idx).jpg"
+                do {
+                    let up = try await HTTPService.shared.uploadFileWithProgress(name: name, data: bytes) { sent, total in
+                        // 进度回调可能比「块已经没了 / 已经重传了」晚到，靠代次号拦。
+                        // cur 钳到这张图的裸字节数：multipart 的 boundary/header 也算在
+                        // sent 里，不钳的话会出现「1.9 MB / 1.8 MB」这种超过 100% 的行。
+                        Self.noteProgress(self, blockId: blockId, gen: gen, idx: idx,
+                                          frac: total > 0 ? Double(sent) / Double(total) : 0,
+                                          doneBytes: doneBytes, cur: min(Int(sent), bytes.count))
+                    }
+                    guard !Task.isCancelled else { return }
+                    self.mutateImage(blockId) { b in
+                        b.atts.append(up.file_id)
+                        b.sentBytes = doneBytes + bytes.count
+                        b.currentFrac = 0
+                    }
+                } catch {
+                    // 被取消（用户点「取消上传」/ 删了这条）就到此为止，不改成失败态 ——
+                    // 那两条路自己会处理块的去留。
+                    guard !Task.isCancelled else { return }
+                    self.mutateImage(blockId) { b in
+                        b.state = .failed
+                        b.failReason = L("chat.uploadFailed")
+                    }
+                    return
+                }
+            }
+            guard !Task.isCancelled, let blk = self.imageBlock(blockId),
+                  blk.state == .uploading, blk.atts.count == blk.data.count else { return }
+            // 全传完才送 WS。成功路径**不动状态** —— message_saved 回执来认领（带正式 id）。
+            guard self.ws.sendImageMessage(atts: blk.atts, conversation: conv) else {
+                self.mutateImage(blockId) { b in
+                    b.state = .failed
+                    b.failReason = L("chat.notConnected")
+                }
+                return
+            }
+            // 送出去了就转「等回执」：这一档不再给「取消上传」——
+            // 服务端已经有这条了，撤本地只会让用户再发一次，变成两条。
+            self.mutateImage(blockId) { b in if b.state == .uploading { b.state = .awaitingReceipt } }
+            // 回执兜底：图都传上去了、WS 也送出去了，但 message_saved 可能丢
+            //（连接刚好在这一刻断）。不兜的话这条会**永远转**，而它其实已经在服务端了。
+            // 转成失败态并说实话；「重新发送」此时只是再送一次 WS —— atts 齐了不会重传文件。
+            try? await Task.sleep(nanoseconds: 15_000_000_000)
+            guard !Task.isCancelled, let after = self.imageBlock(blockId),
+                  after.state == .awaitingReceipt, after.serverId == nil else { return }
+            self.mutateImage(blockId) { b in
+                b.state = .failed
+                b.failReason = L("chat.uploadNoReceipt")
+            }
+        }
+    }
+
+    /// 进度回调专用的静态入口：闭包里直接捕获 self 会把 @Sendable 的要求传染开，
+    /// 绕一层静态方法最省事，语义完全一样。
+    /// `idx`：这一帧说的是**第几张**。`didSendBodyData` 是另跳一个 Task 派发的，和
+    /// `upload(...)` 的恢复之间没有顺序保证 —— 第 k 张的最后一帧完全可能落在
+    /// 「atts.append + currentFrac = 0」之后，于是第 k+1 张的格子先闪一个 100% 的环、
+    /// 字节数还往回退。所以除了代次号，还要确认「这一张仍然是当前正在传的那张」。
+    private static func noteProgress(_ vm: ChatViewModel, blockId: UUID, gen: Int, idx: Int,
+                                     frac: Double, doneBytes: Int, cur: Int) {
+        guard vm.uploadGen[blockId] == gen else { return }
+        // **按整数百分比节流**，而且这道闸放在最前面（O(1)）：didSendBodyData 每个网络
+        // 分片就回调一次（每秒几十次），而落库一次就要整条会话重新赋值 @Published blocks、
+        // 整页重算。放到扫描之后拦的话，贵的那半（每次遍历所有会话所有块）并没省下来。
+        let pct = Int(min(1, max(0, frac)) * 100)
+        guard vm.lastPct[blockId] != pct else { return }
+        var applied = false
+        vm.mutateImage(blockId) { b in
+            guard b.state == .uploading, b.atts.count == idx else { return }
+            b.currentFrac = min(1, max(0, frac))
+            b.sentBytes = doneBytes + cur
+            applied = true
+        }
+        if applied { vm.lastPct[blockId] = pct }
+    }
+
+    /// 找到某个图片块。找不到 = 它已经被撤掉了（取消上传 / 删除），调用方据此收工。
+    private func imageBlock(_ blockId: UUID) -> ChatBlock.ImageBlock? {
+        for (_, s) in stores {
+            for b in s.blocks {
+                if case .image(let img) = b, img.id == blockId { return img }
+            }
+        }
+        return nil
+    }
+
+    /// 就地改一个图片块并刷新它所在的会话。
+    private func mutateImage(_ blockId: UUID, _ body: (inout ChatBlock.ImageBlock) -> Void) {
+        for (conv, s) in stores {
+            for (i, b) in s.blocks.enumerated() {
+                guard case .image(var img) = b, img.id == blockId else { continue }
+                body(&img)
+                s.blocks[i] = .image(img)
+                refresh(conv)
+                return
+            }
+        }
+    }
+
+    /// 「取消上传」：掐掉任务、把这条撤掉，并把**本地那几张图原样交还**给调用方 ——
+    /// 图还在本地，放回待发条就行，不该让用户再去相册翻一遍（PC 端同一条行为）。
+    ///
+    /// 返回的是**整条的图**，不是「还没传成的那几张」：用户拿回来的应该是完整一条消息，
+    /// 缺几张的一条他自己也拼不回去。代价是已经传上去的那几份在服务端成了孤儿文件 ——
+    /// 这条记在台账里，等服务端加一个「没有消息引用的文件定期清掉」。
+    @discardableResult
+    func cancelImageUpload(blockId: UUID) -> [Data] {
+        uploads[blockId]?.cancel()
+        uploads[blockId] = nil
+        // 置 nil 而不是 +1：迟到回调那边 `nil == gen` 同样为 false，拦截效果一样，
+        // 还顺手把字典项回收了（不清的话它会随会话时长单调增长）。
+        uploadGen[blockId] = nil
+        lastPct[blockId] = nil
+        for (conv, s) in stores {
+            guard let i = s.blocks.firstIndex(where: {
+                if case .image(let img) = $0 { return img.id == blockId } else { return false }
+            }) else { continue }
+            var back: [Data] = []
+            if case .image(let img) = s.blocks[i] { back = Array(img.data) }
+            dropBlocks(at: i, in: s)
+            refresh(conv)
+            return back
+        }
+        return []
+    }
+
+    /// 掐掉某个会话里所有在途的上传。整批清块的四条路（清空历史 / 开新话题 /
+    /// 别的端清空 / 回收站找回后重拉）都要先调它 —— 不掐的话上传会继续跑到底，
+    /// 白耗流量、在服务端留孤儿文件，最后因为找不到块而**静默地什么都不发**。
+    private func cancelUploads(in s: ConvStore) {
+        for b in s.blocks {
+            guard case .image(let img) = b else { continue }
+            uploads[img.id]?.cancel()
+            uploads[img.id] = nil
+            uploadGen[img.id] = nil
+            lastPct[img.id] = nil
+        }
+    }
+
+    /// 图片消息「重新发送」：从断的那张续传。
+    func retryImages(blockId: UUID) {
+        // 只有失败态能重传。不校验的话，一条正在传的块被再点一次就会有两个任务
+        // 并发往同一个 atts 里 append（PC 的 retryImageSend 首行也是这条守卫）。
+        guard let b = imageBlock(blockId), b.state == .failed else { return }
+        let conv = activeConv
+        mutateImage(blockId) { b in
+            b.state = .uploading
+            b.failReason = ""
+            b.sentBytes = b.data.prefix(b.atts.count).reduce(0) { $0 + $1.count }
+            b.currentFrac = 0
+        }
+        runUpload(blockId: blockId, conv: conv)
+    }
+
     /// 把某会话里还在转的占位气泡就地收尾（只停转，不追错误行）。
     /// 用在「这一轮的占位要被新一轮顶掉」的场合 —— 旧那颗的 delta/reply 本来就已经
     /// 找不到落点了（currentAssistant 只认 assistantIdx），至少别让它一直转下去。
@@ -442,6 +648,31 @@ class ChatViewModel: ObservableObject {
                 return
             }
             i -= 1
+        }
+    }
+
+    /// 图片消息的落库回执：按 atts 认领（file_id 一次上传一个，天然唯一，不会认错）。
+    /// 认到之后这条就从「在途」转成「已发」，长按菜单里的删除 / 引用才有对象可指。
+    private func claimImageMessageId(_ mid: Int, atts: [String]) {
+        guard !atts.isEmpty else { return }
+        for (conv, s) in stores {
+            for (i, b) in s.blocks.enumerated() {
+                // 守卫是 `!= .sent` 而不是 `== .uploading`：15 秒兜底会把「回执迟到」的块
+                // 转成失败态，但它在服务端**是真存在的** —— 第 16 秒才到的回执必须认下来，
+                // 否则用户会照着那条红字再发一次，服务端就有两条一模一样的图片消息。
+                guard case .image(var img) = b, img.serverId == nil,
+                      img.state != .sent, img.atts == atts else { continue }
+                img.serverId = mid
+                img.state = .sent
+                img.failReason = ""
+                // 本地原图到此为止：服务端那份已经是正本，再留着就是最多 9×10 MB
+                // 一直挂在 VM 上、换会话也不释放（PC 端也是认领时就 files = undefined）。
+                // 代价是「复制图片 / 存到相册」要现下一次 —— 值。
+                img.data = []
+                s.blocks[i] = .image(img)
+                refresh(conv)
+                return
+            }
         }
     }
 
@@ -536,6 +767,7 @@ class ChatViewModel: ObservableObject {
         let s = store(conv)
         // 挂着的引用指向的那条马上就没了，一起摘掉（同 switchConversation 的理由）。
         quote = nil
+        cancelUploads(in: s)
         s.blocks.removeAll()
         s.assistantIdx = nil
         s.taskMap.removeAll()
@@ -557,6 +789,7 @@ class ChatViewModel: ObservableObject {
         // 同 clearActiveHistory：引用指着的那条即将从列表里消失。
         // 放在 if 之外 —— 已经在主会话时走的是 else 分支，不经过 switchConversation。
         quote = nil
+        cancelUploads(in: s)
         s.blocks.removeAll()
         s.assistantIdx = nil
         s.taskMap.removeAll()
@@ -805,9 +1038,12 @@ class ChatViewModel: ObservableObject {
             // 落库回执（只发给发起端）：把在途的乐观气泡认领成正式消息 —— 有了 id，
             // 删除和引用才有对象可指。带附件的文字消息先回这条、再回 reply，两次认领同一个 id，
             // claimUserMessageId 里的「认过就不再找」保证不会把 id 错发给更早那条。
-            // kind=image 走的是另一种块（纯图消息，③ 那一批），这里先不认 —— 认了会挂到文字气泡上。
-            if let mid = msg.messageId, (msg.kind ?? "text") != "image" {
-                claimUserMessageId(mid, conv: msg.conversation ?? ChatViewModel.mainConv)
+            if let mid = msg.messageId {
+                if (msg.kind ?? "text") == "image" {
+                    claimImageMessageId(mid, atts: msg.atts ?? [])
+                } else {
+                    claimUserMessageId(mid, conv: msg.conversation ?? ChatViewModel.mainConv)
+                }
             }
 
         case "message_deleted":
@@ -904,6 +1140,7 @@ class ChatViewModel: ObservableObject {
             // 否则用户会以为是自己这边把消息弄丢了。
             let conv = msg.conversation ?? ChatViewModel.mainConv
             let s = store(conv)
+            cancelUploads(in: s)
             s.blocks.removeAll()
             s.assistantIdx = nil
             s.taskMap.removeAll()
@@ -933,12 +1170,19 @@ class ChatViewModel: ObservableObject {
             let ts = msg.created_at ?? ISO8601DateFormatter().string(from: Date())
             let s = store(conv)
             if (msg.kind ?? "text") == "image" {
-                // 别的端发的纯图片消息。图片块是 ③ 那一批的事；在那之前**宁可不画**，
-                // 也不要画成一个空气泡（content 是空串）——「对面发了条空消息」比少一条更糟。
-                // 联系人列表的预览行给一句占位，不然那一栏会停在上一条上。
+                // 别的端发的图片消息。它只有 file_id，没有本地数据 —— 直接从服务端取图。
+                // 重连补发会重复推同一条，按 id 去重。
+                let atts = (msg.atts ?? []).filter { !$0.isEmpty }
+                if let mid = msg.messageId,
+                   s.blocks.contains(where: { if case .image(let i) = $0 { return i.serverId == mid } else { return false } }) {
+                    return
+                }
+                // 一张都没有就当没这条：只更预览 / 标未读的话，联系人那行冒个红点、
+                // 点进去什么都没有。
+                guard !atts.isEmpty else { return }
+                s.blocks.append(.image(ChatBlock.ImageBlock(
+                    atts: atts, ts: ts, serverId: msg.messageId, state: .sent)))
                 setPreview(conv, L("chat.imageMsgPreview"), ts)
-                // reflect 不能省：它是「标未读」的唯一入口。只更预览的话，联系人那一行
-                // 内容变了却不冒红点 —— 比不显示更让人摸不着头脑。
                 reflect(conv)
                 return
             }
@@ -999,11 +1243,22 @@ class ChatViewModel: ObservableObject {
         // 之后的 delta / reply 全部落空，这一轮的回复就在界面上人间蒸发了。
         // 找回一条旧消息不急在这一秒 —— 等这一轮结束后下次进这个会话自然会看到。
         guard s.assistantIdx == nil else { return }
+        // 正在传图的也不冲：图片消息不设占位块，assistantIdx 拦不住它 ——
+        // 冲掉之后上传照跑，跑完却找不到块，这条消息就这么无声无息地没了。
+        guard !s.blocks.contains(where: {
+            if case .image(let i) = $0 { return i.state == .uploading || i.state == .awaitingReceipt }
+            else { return false }
+        }) else { return }
         Task {
             let messages = await HTTPService.shared.fetchHistory(limit: 40, conversation: conv)
             await MainActor.run {
-                // 再确认一次：这一趟 HTTP 是异步的，回来时可能已经有新的一轮在跑了。
+                // 再确认一次：这一趟 HTTP 是异步的，回来时可能已经有新的一轮在跑、
+                // 或者用户刚发了一条图。前面那道守卫挡的是「发起的那一刻」。
                 guard s.assistantIdx == nil else { return }
+                guard !s.blocks.contains(where: {
+                    if case .image(let i) = $0 { return i.state == .uploading || i.state == .awaitingReceipt }
+                    else { return false }
+                }) else { return }
                 s.blocks = messages.compactMap { self.historyToBlock($0) }
                 // 下标类的状态全部作废：块换了一整批，旧下标指到哪儿都不作数。
                 // 顺带说明重拉的代价：任务卡 / 确认卡 / 问答卡 / locate 卡都不落 messages 表，
@@ -1096,6 +1351,9 @@ class ChatViewModel: ObservableObject {
 // MARK: - Chat Blocks
 enum ChatBlock: Identifiable {
     case user(UserBlock)
+    /// 我发的一条图片消息（批次 011 ③）。**图文分条**：图片单独成条，配的文字紧跟一条 ——
+    /// 塞进一个气泡的话，用户点「删除」时说不清删的是图还是话。
+    case image(ImageBlock)
     case assistant(AssistantBlock)
     case device(id: UUID, text: String, ts: String?)
     case task(TaskBlock)
@@ -1114,6 +1372,7 @@ enum ChatBlock: Identifiable {
     var serverId: Int? {
         switch self {
         case .user(let u): return u.serverId
+        case .image(let i): return i.serverId
         case .assistant(let a): return a.serverId
         case .note(let n): return n.serverId
         default: return nil
@@ -1124,6 +1383,7 @@ enum ChatBlock: Identifiable {
     var id: String {
         switch self {
         case .user(let u): return u.id.uuidString
+        case .image(let i): return i.id.uuidString
         case .assistant(let a): return a.id.uuidString
         case .device(let id, _, _): return id.uuidString
         case .task(let j): return j.id.uuidString
@@ -1155,6 +1415,44 @@ extension ChatBlock {
         var failure: SendFailure?
 
         var failed: Bool { failure != nil }
+    }
+
+    /// 一条图片消息。**一条 = N 张图（N ≤ 9），不是 N 条** —— 预览器里左右切的就是这一条里的图。
+    ///
+    /// 上传是**逐张顺序**做的，`atts` 攒着已经传成功的 file_id：中途失败/取消之后点「重新发送」
+    /// 从断的那张续传，已经传上去的不重传（重传会在服务端留孤儿文件，PC 端同一套做法）。
+    struct ImageBlock: Hashable {
+        let id = UUID()
+        /// 已经上传成功的 file_id，按 `data` 的顺序前缀对齐。
+        var atts: [String] = []
+        /// 每张图的本地原始数据。**上传成功之后也留着** —— 「重新发送」要用。
+        /// 别的端同步来的、以及拉历史拿到的那些只有 `atts` 没有本地数据，所以给默认空数组。
+        var data: [Data] = []
+        var ts: String?
+        var serverId: Int?
+        var state: State = .uploading
+        /// 已传字节 / 总字节。meta 行「正在上传 · 1.8 MB / 2.9 MB」用它。
+        var sentBytes: Int = 0
+        var totalBytes: Int = 0
+        /// 正在传第几张（= `atts.count`）的那一张自己的进度 0…1。稿把进度环画在**格子上**，
+        /// 所以每格要各自的百分比：传完的不盖罩、正在传的走这个值、还没轮到的盖 0%。
+        var currentFrac: Double = 0
+        /// 失败原因（`state == .failed` 时给的那一行）。
+        var failReason: String = ""
+        /// 单图的宽高比，**发送时算一次存下来**。认领回执之后本地 data 会被清掉，
+        /// 现算的话比例会在那一帧从真实比例跳成占位比例、图两边冒出灰边。
+        var ratioHint: CGFloat?
+
+        enum State: Hashable {
+            case uploading
+            /// 图都传完、WS 也送出去了，在等 message_saved。
+            /// 单列一档是因为**这一档不能再「取消上传」** —— 服务端已经有这条了，
+            /// 撤掉本地只会让用户再发一次，变成两条。
+            case awaitingReceipt
+            case sent, failed
+        }
+
+        var count: Int { max(data.count, atts.count) }
     }
 
     /// 为什么没发出去。**分档不是为了好看** —— `replyCancel.textFailed` 要求原因照实说、

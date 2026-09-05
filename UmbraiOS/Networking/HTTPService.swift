@@ -413,6 +413,41 @@ class HTTPService {
     }
 
     // MARK: - File Upload
+    /// 带进度的上传（批次 011 ③ 图片消息）。`onProgress` 在主线程回调（已传字节, 总字节）。
+    ///
+    /// 为什么不复用下面那个 `uploadFile`：稿点名「**有真百分比就别用旋转弧** —— 旋转弧说的是
+    /// 『不知道要多久』」。`data(for:)` 拿不到发送进度，只能画旋转弧；`upload(for:from:delegate:)`
+    /// 才有 `didSendBodyData`。
+    ///
+    /// **取消**：把调用方的 Task 取消掉就行，URLSession 的 async 版会跟着抛 CancellationError。
+    func uploadFileWithProgress(name: String, data: Data,
+                                onProgress: @escaping @Sendable @MainActor (Int64, Int64) -> Void)
+        async throws -> UploadResponse {
+        guard let url = URL(string: "\(baseUrl)/files/upload") else { throw NetworkError.invalidURL }
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        if !token.isEmpty { request.setValue(token, forHTTPHeaderField: "X-Umbra-Token") }
+        let boundary = UUID().uuidString
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        body.append("--\(boundary)\r\n")
+        body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(name)\"\r\n")
+        body.append("Content-Type: application/octet-stream\r\n\r\n")
+        body.append(data)
+        body.append("\r\n--\(boundary)--\r\n")
+        // ⚠️ 走 upload(for:from:) 时**不能**设 httpBody —— 设了会被 from: 覆盖，
+        // 但 Content-Length 已经按 httpBody 算过一次，个别代理会因此把请求判成畸形。
+
+        let reporter = UploadProgressReporter(onProgress: onProgress)
+        let (respData, response) = try await APISession.shared.upload(for: request, from: body,
+                                                                      delegate: reporter)
+        guard let http = response as? HTTPURLResponse, http.statusCode < 400 else {
+            throw NetworkError.serverError
+        }
+        return try JSONDecoder().decode(UploadResponse.self, from: respData)
+    }
+
     func uploadFile(name: String, data: Data) async throws -> UploadResponse {
         guard let url = URL(string: "\(baseUrl)/files/upload") else {
             throw NetworkError.invalidURL
@@ -579,6 +614,30 @@ class HTTPService {
         } catch {
             return []
         }
+    }
+}
+
+/// 上传进度的转发器。`URLSession.upload(for:from:delegate:)` 只认 URLSessionTaskDelegate，
+/// 拿不到 async 版的进度流，所以要这么一个小对象把 `didSendBodyData` 转给调用方。
+///
+/// 回调在 URLSession 自己的代理队列上到达（不是主线程），所以这里显式跳一次 MainActor ——
+/// 直接改 @Published 会是后台线程改 UI 状态，SwiftUI 上是随机崩溃而不是报错。
+/// `@unchecked Sendable`：唯一的存储属性是个 `@Sendable` 闭包、构造后不再变，
+/// 事实上不可变。标上之后，把它交给 nonisolated 的 `upload(for:from:delegate:)`
+/// 在将来打开严格并发时也不会变成「sending value risks data races」。
+private final class UploadProgressReporter: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+    private let onProgress: @Sendable @MainActor (Int64, Int64) -> Void
+
+    init(onProgress: @escaping @Sendable @MainActor (Int64, Int64) -> Void) {
+        self.onProgress = onProgress
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask,
+                    didSendBodyData bytesSent: Int64,
+                    totalBytesSent: Int64, totalBytesExpectedToSend: Int64) {
+        let sent = totalBytesSent, total = totalBytesExpectedToSend
+        let cb = onProgress
+        Task { @MainActor in cb(sent, total) }
     }
 }
 
