@@ -172,7 +172,7 @@ struct UmbraMoneyHomeView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.top, 11)
-            .overlay(Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW), alignment: .top)
+            .overlay(moneyRowSeparator(pad: 16), alignment: .top)
         }
         .padding(16)
         .moneyCard()
@@ -306,7 +306,7 @@ struct UmbraMoneyHomeView: View {
             .padding(.vertical, 7)
             .frame(minHeight: 44)
             .overlay(alignment: .top) {
-                if !first { Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW) }
+                if !first { moneyRowSeparator(pad: 15) }
             }
             .contentShape(Rectangle())
         }
@@ -337,7 +337,9 @@ struct UmbraMoneyHomeView: View {
                 }
                 .foregroundColor(UmbraColor.text)
                 .frame(minHeight: 36)
-                .overlay(alignment: .top) { Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW) }
+                // 这张表第一行**要**画线：它上面是表头行，这条线分的是表头和数据，
+                // 不是「第一行的行间线」。
+                .overlay(alignment: .top) { moneyRowSeparator(pad: 15) }
             }
             // 合计行：占比恒 100%，笔数 = 支出笔数合计。
             HStack(spacing: 8) {
@@ -349,7 +351,9 @@ struct UmbraMoneyHomeView: View {
             .font(UmbraFont.sans(13, .w600))
             .foregroundColor(UmbraColor.text)
             .frame(minHeight: 36)
-            .overlay(alignment: .top) { Rectangle().fill(UmbraColor.border).frame(height: UmbraMetric.borderW) }
+            // 合计行上面这条**故意用 border 而不是 borderSoft**：它分的是「明细」和「合计」
+            // 两段内容，不是行与行，深一档才读得出「上面结束了」。
+            .overlay(alignment: .top) { moneyRowSeparator(pad: 15, tint: UmbraColor.border) }
         }
     }
 
@@ -377,7 +381,13 @@ struct UmbraMoneyHomeView: View {
                                 .foregroundColor(p.ym == st.ym ? UmbraColor.orangeText : UmbraColor.muted)
                         }
                         .frame(minHeight: 36)
-                        .overlay(alignment: .top) { Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW) }
+                        // 第一行不画线（`iosShell.list.separator`）。这张表上面没有表头，
+                        // 第一行再画一条就成了「月度趋势」标题下面的一条横杠。
+                        //（下面分类表格的第一行**要**画 —— 那张表上面有表头行，
+                        // 那条线分的是表头和数据。）
+                        .overlay(alignment: .top) {
+                            if p.ym != pts.first?.ym { moneyRowSeparator(pad: 15) }
+                        }
                     }
                 }
             } else {
@@ -444,7 +454,7 @@ struct UmbraMoneyHomeView: View {
                     .padding(.vertical, 6)
                     .frame(minHeight: 46)
                     .overlay(alignment: .top) {
-                        if idx > 0 { Rectangle().fill(UmbraColor.borderSoft).frame(height: UmbraMetric.borderW) }
+                        if idx > 0 { moneyRowSeparator(pad: 15) }
                     }
                     .contentShape(Rectangle())
                 }
@@ -691,9 +701,12 @@ struct UmbraMoneyListView: View {
                     .foregroundColor(income ? UmbraColor.success : UmbraColor.text)
             }
             .padding(.vertical, 6)
-            .frame(minHeight: 48)
+            // 原来这里写死 48 —— 和骨架 `iosShell.list.row` 的取值一样，但写死就是「碰巧对」，
+            // 下次调 token 它不会跟着动。换成 token。
+            .frame(minHeight: UmbraMetric.rowMinH)
         }
         .listRowBackground(UmbraColor.card)
+        .umbraRowSeparatorFullWidth()
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // 删除放第一个（最靠边）。不用 role: .destructive —— 带 role 系统会先把行
             // 划走，确认弹窗点取消行就回不来了（提醒列表同一条注释）。
@@ -752,4 +765,21 @@ private struct MoneyCardMod: ViewModifier {
 extension View {
     /// 记账页的卡：18 圆角 + card 底 + border-soft 描边（稿的取值）。
     func moneyCard() -> some View { modifier(MoneyCardMod()) }
+}
+
+/// 统计屏卡内的行间分隔线，**满宽**（骨架 `iosShell.list.separator`）。
+///
+/// 这些线是画在**行**上的（`.overlay(alignment: .top)`），而行外面套着卡的内衬
+/// （概览卡 16、其余 15），所以照原样画出来左右各短一截 —— 规矩明说不许，
+/// 理由是「卡片已经内缩 16，再缩一级会读成『这几行是子项』」。
+/// 用负横向内边距把线顶到卡边。
+///
+/// ⚠️ 和 `minTapTarget.negativeMarginAxis` 那条**不是一回事**：那条管的是「撑点击热区的
+/// 负边距」，这里是一条纯装饰的出血线，身上没有任何手势，偷不到谁的点击。
+/// - Parameter pad: 这张卡的内衬。传错了线会短一截或探出卡外，改卡内衬时记得同步。
+private func moneyRowSeparator(pad: CGFloat, tint: Color = UmbraColor.borderSoft) -> some View {
+    Rectangle()
+        .fill(tint)
+        .frame(height: UmbraMetric.borderW)
+        .padding(.horizontal, -pad)
 }

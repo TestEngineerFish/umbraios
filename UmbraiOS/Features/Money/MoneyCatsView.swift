@@ -130,10 +130,14 @@ struct UmbraMoneyCatsView: View {
                     .foregroundColor(UmbraColor.faint)
             }
             .padding(.vertical, 6)
+            // 带副文（「N 个子类 · 本月 N 笔」），走 60 那一档。
+            .frame(minHeight: UmbraMetric.rowMinHSub)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .listRowBackground(UmbraColor.card)
+        // 分隔线满宽：这一行带 34 色块，默认线会从色块右边起。
+        .umbraRowSeparatorFullWidth()
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             if !c.locked {
                 Button { confirmDisable(c) } label: { Label("停用", systemImage: "nosign") }
@@ -180,7 +184,9 @@ struct UmbraMoneyCatsView: View {
                         .frame(width: 72)
                     }
                     .padding(.vertical, 4)
+                    .frame(minHeight: UmbraMetric.rowMinH)
                     .listRowBackground(UmbraColor.card)
+                    .umbraRowSeparatorFullWidth()
                 }
             } header: {
                 Text("已停用").font(UmbraFont.sans(12, .w600)).foregroundColor(UmbraColor.faint)
@@ -290,9 +296,7 @@ struct UmbraMoneyCatDetailView: View {
             .navigationTitle(cat?.name ?? "分类")
             .navigationBarTitleDisplayMode(.inline)
             .toolbarBackground(.ultraThinMaterial, for: .navigationBar)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) { trailingButtons }
-            }
+            .toolbar { trailingBar }
             .refreshable { await money.reload(silent: true); await loadUsed() }
             .task { await loadUsed() }
             .alert("新增子类", isPresented: $adding) {
@@ -342,10 +346,19 @@ struct UmbraMoneyCatDetailView: View {
         .background(UmbraColor.bg)
     }
 
-    private var trailingButtons: some View {
-        HStack(spacing: 2) {
+    /// 右上角两颗。**一颗一个 ToolbarItem**，不塞进一个 HStack —— 全仓其它页都这么写，
+    /// 而且塞在一起时那 2pt 的 spacing 会让两颗玻璃钮贴死。
+    /// 顺序照 `iosShell.toolbar.right`：主动作「＋」在左，⋯ 贴最右。
+    ///
+    /// ⚠️ **必须留在 body 主链之外**（返回 `some ToolbarContent` 而不是内联进 `.toolbar { }`）：
+    /// 这个文件的 body 曾经因为「List + 八个修饰符 + 三张带 TextField 的 alert 连成一条链」
+    /// 报过 type-check 超时，修法就是拆成五块，这是其中一块。内联回去等于撤掉一块缓解措施。
+    @ToolbarContentBuilder private var trailingBar: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
             Button { addText = ""; adding = true } label: { Image(systemName: "plus") }
                 .tint(UmbraColor.orange)
+        }
+        ToolbarItem(placement: .topBarTrailing) {
             Button { openMenu() } label: { Image(systemName: "ellipsis.circle") }
                 .tint(UmbraColor.muted)
         }
@@ -382,7 +395,9 @@ struct UmbraMoneyCatDetailView: View {
             Text(usedText(s)).font(UmbraFont.sans(12)).foregroundColor(UmbraColor.faint)
         }
         .padding(.vertical, 6)
+        .frame(minHeight: UmbraMetric.rowMinH)
         .listRowBackground(UmbraColor.card)
+        .umbraRowSeparatorFullWidth()
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button { confirmDeleteSub(s) } label: { Label("删除", systemImage: "trash") }
                 .tint(UmbraColor.danger)

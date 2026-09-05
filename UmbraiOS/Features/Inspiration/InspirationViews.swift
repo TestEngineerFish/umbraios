@@ -52,12 +52,24 @@ struct UmbraInspirationListView: View {
             }
         }
         .navigationTitle("灵感")
+        // 骨架规矩 `iosShell.titleMode`：**按「是不是 tab 根屏」分，不看内容多少**。
+        // 灵感是从工具页推出来的，是 push 屏 → 内联标题。不写的话它会跟着上级根屏
+        // 继承成大标题，同一个 tab 里就出现「有的屏有大标题、有的没有」，人会以为换了地方。
+        .navigationBarTitleDisplayMode(.inline)
         // 列表页不参与键盘避让：搜索框在页面上方用不着避让，
         // 反而搜索键盘收起后底部 inset 可能留着不走，让页面短一截（同保险箱首页的坑）。
         .ignoresSafeArea(.keyboard, edges: .bottom)
         // 点内容区任意空白收键盘。只在真有焦点时动手，不和别的点击抢。
         .simultaneousGesture(TapGesture().onEnded { if searchFocused { searchFocused = false } })
+        // 右侧动作组的顺序是规矩不是习惯（`iosShell.toolbar.right`）：
+        // 从右往左固定 ⋯ 更多 → 齿轮 → 次级 0–1 颗 → 主动作 1 颗，缺哪项空哪项、剩下的不移。
+        // 所以**主动作「＋」写在前（更靠左），次级「排序」写在后（更靠右）** ——
+        // SwiftUI 的 topBarTrailing 是按声明顺序从左往右排的，原来两块的顺序正好是反的。
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button { router.go(.inspEdit(id: nil)) } label: { Image(systemName: "plus") }
+                    .tint(UmbraColor.orange)
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 // 排序 = 系统 Menu 锚定弹出（≤6 项纯选择不用底部弹层）。
                 Menu {
@@ -72,10 +84,6 @@ struct UmbraInspirationListView: View {
                     Image(systemName: "arrow.up.arrow.down")
                 }
                 .tint(UmbraColor.orange)
-            }
-            ToolbarItem(placement: .topBarTrailing) {
-                Button { router.go(.inspEdit(id: nil)) } label: { Image(systemName: "plus") }
-                    .tint(UmbraColor.orange)
             }
         }
         .refreshable { await insp.refresh() }

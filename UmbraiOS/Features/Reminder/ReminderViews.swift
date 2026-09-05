@@ -760,10 +760,14 @@ struct UmbraReminderListView: View {
                 }
             }
             .padding(.vertical, 4)
+            // 行高下限走 token（骨架 `iosShell.list.row`：min-height 48）。
+            // 原来完全没写，行高全靠 List 的默认内衬撑 —— 那不是「偏了几个点」，是没有下限。
+            .frame(minHeight: UmbraMetric.rowMinH)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .listRowBackground(UmbraColor.card)
+        .umbraRowSeparatorFullWidth()
         // 收合动画：整行淡出 + 轻微缩小。行真正移除交给数据变化 + List 的默认动画。
         .opacity(leaving ? 0.999 : 1)   // 占位，避免编译器把闭包判为常量视图
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {

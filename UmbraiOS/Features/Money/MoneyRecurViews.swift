@@ -191,10 +191,13 @@ struct UmbraMoneyRecurListView: View {
             }
             .padding(.vertical, 6)
             .opacity(r.paused ? 0.62 : 1)
+            // 带两行副文，走「独立卡带第二行 60 起」那一档（`iosShell.list.row`）。
+            .frame(minHeight: UmbraMetric.rowMinHSub)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .listRowBackground(UmbraColor.card)
+        .umbraRowSeparatorFullWidth()
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             Button { confirmDelete(r) } label: { Label("删除", systemImage: "trash") }
                 .tint(UmbraColor.danger)
@@ -304,6 +307,21 @@ struct UmbraMoneyRecurEditView: View {
         .toolbar {
             ToolbarItem(placement: .topBarLeading) {
                 Button("取消") { router.back() }.tint(UmbraColor.muted)
+            }
+            // ⋯ 贴最右，只装破坏性动作（`iosShell.toolbar`）。新建态没有可删的东西，不出这颗。
+            // 列表页左滑本来也能删 —— 但已经点进来编辑的人再退出去左滑是多绕一圈，
+            // 规矩允许 ⋯ / 长按 / 左滑三条路，这里两条都留着。
+            if editing != nil {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(role: .destructive) { askDelete() } label: {
+                            Label("删除这条规则", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .tint(UmbraColor.muted)
+                }
             }
         }
         .onAppear { seed() }
@@ -575,17 +593,13 @@ struct UmbraMoneyRecurEditView: View {
         !name.trimmingCharacters(in: .whitespaces).isEmpty && cents != nil && endBadText == nil && !busy
     }
 
+    /// 底部只留「保存」这一颗。「删除」原来占着这里的左半边，被骨架
+    /// `iosShell.toolbar.noDestructiveAtBottom` 挪进了右上角 ⋯。
     private var bottomBar: some View {
         UmbraBottomBar {
             VStack(alignment: .leading, spacing: 8) {
-                HStack(spacing: 9) {
-                    if editing != nil {
-                        UmbraButton(title: "删除", kind: .dangerOutline, height: 48) { askDelete() }
-                            .frame(width: 88)
-                    }
-                    UmbraButton(title: id == nil ? "建好，到点自动记" : "保存修改",
-                                kind: canSave ? .primary : .disabled, height: 48) { save() }
-                }
+                UmbraButton(title: id == nil ? "建好，到点自动记" : "保存修改",
+                            kind: canSave ? .primary : .disabled, height: 48) { save() }
                 if editing != nil {
                     Text("改动只影响以后的 —— 已经自动记进流水的不变。")
                         .font(UmbraFont.sans(11.5)).foregroundColor(UmbraColor.faint)

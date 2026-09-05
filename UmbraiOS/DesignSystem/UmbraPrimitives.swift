@@ -48,6 +48,9 @@ struct UmbraGroupCard<Content: View>: View {
 }
 
 /// 组内分隔线。放在行与行之间，第一行前面不放。
+///
+/// ⚠️ `inset` 默认 0 且**应该一直是 0**（骨架 `iosShell.list.separator`：分隔线一律满宽）。
+/// 参数留着只是为了不去改十五个调用点的签名 —— 别再传非零值进来。
 struct UmbraRowDivider: View {
     var inset: CGFloat = 0
     var body: some View {
@@ -55,6 +58,26 @@ struct UmbraRowDivider: View {
             .fill(UmbraColor.borderSoft)
             .frame(height: UmbraMetric.borderW)
             .padding(.leading, inset)
+    }
+}
+
+extension View {
+    /// 系统 `List` 里的数据行：把分隔线拉成**满宽**。
+    ///
+    /// SwiftUI 的默认分隔线从**行内容的文字左边**起画（leading inset 跟着 cell 内容走），
+    /// 于是带 32/34/48 图标块的行，线会从图标右边才开始 —— 骨架
+    /// `iosShell.list.separator` 明令不许：
+    ///
+    /// > 卡片已经内缩 16，再缩一级会读成「这几行是子项」。带 40 图标块的行也不例外。
+    ///
+    /// 唯一的办法是把 `.listRowSeparatorLeading` 这条对齐线钉到 0 ——
+    /// `listRowInsets(EdgeInsets())` 那条路会连带把行的左右内衬也清掉，
+    /// 得每一行自己再补 padding，代价大得多（保险箱记录行就是那么走的，
+    /// 它能走是因为行内容本来就自带 13pt 内衬）。
+    ///
+    /// **这一条只对系统 List 的行有意义**；自绘卡里的 `UmbraRowDivider` 本来就是满宽的。
+    func umbraRowSeparatorFullWidth() -> some View {
+        alignmentGuide(.listRowSeparatorLeading) { _ in 0 }
     }
 }
 

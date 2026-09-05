@@ -752,7 +752,8 @@ struct UmbraVaultHomeView: View {
             }
             .padding(.horizontal, 13)
             .padding(.vertical, 10)
-            .frame(minHeight: 60)
+            // 带副文的行走 60 那一档。原来写死 60 —— 值碰巧对，但调 token 时它不会跟着动。
+            .frame(minHeight: UmbraMetric.rowMinHSub)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -934,8 +935,17 @@ struct UmbraVaultRecordView: View {
         }
         .navigationTitle("")
         .navigationBarTitleDisplayMode(.inline)
+        // 顺序照 `iosShell.toolbar.right`：主动作「编辑」在左、次级「星标」在右。
+        // topBarTrailing 按声明顺序从左往右排，原来两块是反的。
         .toolbar {
             if let it = item {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button("编辑") {
+                        session.touch()
+                        router.go(.vaultEdit(id: it.id))
+                    }
+                    .tint(UmbraColor.orange)
+                }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button {
                         session.touch()
@@ -944,13 +954,6 @@ struct UmbraVaultRecordView: View {
                         Image(systemName: it.favorite == true ? "star.fill" : "star")
                     }
                     .tint(it.favorite == true ? UmbraColor.orange : UmbraColor.faint)
-                }
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button("编辑") {
-                        session.touch()
-                        router.go(.vaultEdit(id: it.id))
-                    }
-                    .tint(UmbraColor.orange)
                 }
             }
         }
@@ -994,7 +997,10 @@ struct UmbraVaultRecordView: View {
             ]))
             .padding(.horizontal, -UmbraMetric.pagePadX)
 
-            Text("敏感值显示 8 秒后会自动重新遮盖；复制出来的内容 60 秒后自动清空剪贴板。删除请到右上角「编辑」里。")
+            // ⚠️ 这句是**指路文案**，删除口子搬家时必须跟着改：批次 015 之后
+            // 「删除这条记录」从编辑页底部挪进了编辑页右上角的 ⋯，所以这里要说到两层，
+            // 只说「到编辑里」的话人进去会在底部找不到。
+            Text("敏感值显示 8 秒后会自动重新遮盖；复制出来的内容 60 秒后自动清空剪贴板。删除请到「编辑」右上角的 ⋯ 里。")
                 .font(UmbraFont.sans(12, .w400))
                 .foregroundColor(UmbraColor.faint)
                 .lineSpacing(12 * 0.65)
@@ -1195,20 +1201,9 @@ struct UmbraVaultEditView: View {
                     .foregroundColor(UmbraColor.faint)
                     .lineSpacing(12 * 0.65)
 
-                if let it = existing {
-                    UmbraButton(title: "删除这条记录", kind: .dangerOutline) {
-                        router.confirm(UmbraAlert(
-                            title: "删除「\(it.title)」？",
-                            body: "会移入回收站保留 30 天，之后彻底删除。附件与图片一并移入。所有设备上都会一起进回收站。",
-                            confirmLabel: "移入回收站",
-                            confirmDestructive: true,
-                            onConfirm: {
-                                Task { await store.deleteItem(it.id) }
-                                router.back()
-                                router.showToast("已移入回收站 · 保留 30 天")
-                            }))
-                    }
-                }
+                // 「删除这条记录」原来是这里最后一颗按钮，已挪进右上角 ⋯
+                //（骨架 `iosShell.toolbar.noDestructiveAtBottom`）。
+                // 记录详情页那句指路文案已同步改成「到「编辑」右上角的 ⋯ 里」。
             }
             .padding(UmbraMetric.pagePadX)
         })
@@ -1221,11 +1216,36 @@ struct UmbraVaultEditView: View {
                 Button("取消") { router.back() }
                     .tint(UmbraColor.text)
             }
+            // 顺序照 `iosShell.toolbar.right`：主动作「保存」在左，⋯ 贴最右。
             ToolbarItem(placement: .topBarTrailing) {
                 Button { save() } label: {
                     Text("保存").font(UmbraFont.sans(16, .w600))
                 }
                 .tint(canSave ? UmbraColor.orange : UmbraColor.faint)
+            }
+            // 新建态没有可删的东西，不出这颗。
+            if let it = existing {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        Button(role: .destructive) {
+                            router.confirm(UmbraAlert(
+                                title: "删除「\(it.title)」？",
+                                body: "会移入回收站保留 30 天，之后彻底删除。附件与图片一并移入。所有设备上都会一起进回收站。",
+                                confirmLabel: "移入回收站",
+                                confirmDestructive: true,
+                                onConfirm: {
+                                    Task { await store.deleteItem(it.id) }
+                                    router.back()
+                                    router.showToast("已移入回收站 · 保留 30 天")
+                                }))
+                        } label: {
+                            Label("删除这条记录", systemImage: "trash")
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .tint(UmbraColor.muted)
+                }
             }
         }
         .onAppear {

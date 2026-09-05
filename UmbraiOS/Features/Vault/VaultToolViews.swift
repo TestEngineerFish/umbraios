@@ -268,6 +268,8 @@ struct UmbraVaultGroupsView: View {
                                             value: "\(store.items.filter { $0.typeId == t.id }.count) 条")
                         })
             ])
+            // 行里的「N 条」跟着快照走，别的设备改了这边要能拉一下（`iosShell.list.pullRefresh`）。
+            .refreshable { await store.syncNow() }
     }
 }
 
@@ -296,6 +298,7 @@ struct UmbraVaultProfilesView: View {
                         }
                     })
             ])
+            .refreshable { await store.syncNow() }
     }
 }
 
@@ -911,6 +914,12 @@ struct UmbraVaultSettingsView: View {
                     ])
             ])
             .onAppear { session.touch() }
+            // 骨架 `iosShell.list.pullRefresh`。这一页行里带「N 项」「有改动待推」这类会变的真值，
+            // 原来只在进页时拉一次。刷新同时做两件：同步保险箱本体 + 重拉回收站条数。
+            .refreshable {
+                await store.syncNow()
+                if let dto = await HTTPService.shared.fetchTrash() { genericTrash = dto.items.count }
+            }
             .task {
                 // 回收站那一行要显示「N 项」。通用区的条数只有服务端知道，
                 // 拉一次；拉不到就退回只算保险箱那部分（trashCountLabel 里那句注释）。

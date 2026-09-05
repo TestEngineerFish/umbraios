@@ -19,6 +19,9 @@ struct UmbraChatContactsView: View {
                 ForEach(chat.contacts, id: \.self) { conv in
                     contactRow(conv)
                         .listRowBackground(UmbraColor.card)
+                        // 分隔线满宽（骨架 `iosShell.list.separator`）。这一屏的行带 48 头像，
+                        // 系统默认会把线从头像右边才起 —— 正是规矩点名不许的那种。
+                        .umbraRowSeparatorFullWidth()
                 }
             } header: {
                 // 分区标题行：左「联系人」，右侧是连接状态（StatusBarChip）。
@@ -119,6 +122,7 @@ struct UmbraChatContactsView: View {
                 }
             }
             .padding(.vertical, 6)
+            .frame(minHeight: UmbraMetric.rowMinH)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)

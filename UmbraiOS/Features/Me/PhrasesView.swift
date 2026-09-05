@@ -266,7 +266,13 @@ struct UmbraPhrasesView: View {
             .buttonStyle(.plain)
             copyButton(p)
         }
+        // 这一行原来既没内衬也没行高，完全吃 List 的默认值。
+        // 纵向 11、行高 48 照 `iosShell.list.row`；横向不补 —— List 自己那份左右内衬
+        // 已经在 14 附近，再叠一层会把复制钮挤到边上。
+        .padding(.vertical, 11)
+        .frame(minHeight: UmbraMetric.rowMinH)
         .listRowBackground(UmbraColor.card)
+        .umbraRowSeparatorFullWidth()
         .swipeActions(edge: .trailing, allowsFullSwipe: false) {
             // 删除必进确认弹窗，所以不用 role: .destructive ——
             // 带 role 的按钮系统会先把行划走，取消确认后行回不来。

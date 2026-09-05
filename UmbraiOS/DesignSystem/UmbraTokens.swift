@@ -264,8 +264,12 @@ enum UmbraMetric {
     static let groupGap: CGFloat = 11         // 分组间距 10–12
     /// Apple 触达底线。**所有点击区不得小于这个值**，自查清单里有这一条。
     static let tapMin: CGFloat = 44
-    static let rowMinH: CGFloat = 44
-    static let rowMinHSub: CGFloat = 60       // 带副文的列表行
+    /// 列表行的**视觉**最小高度（骨架 `iosShell.list.row`：min-height 48 / padding 11 14）。
+    /// 和 `tapMin` 是两件事，别合并：tapMin 管的是热区不许小于 44（可以靠透明外框撑出来，
+    /// 见 `minTapTarget`），rowMinH 管的是这一行看上去有多高。原来两个都写 44，
+    /// 于是「行高」这个概念事实上不存在 —— 骨架这一批把它抬到 48 并真正用起来。
+    static let rowMinH: CGFloat = 48
+    static let rowMinHSub: CGFloat = 60       // 带副文的列表行（独立卡带第二行同档）
 
     // 图标块
     static let iconBlockSM: CGFloat = 24

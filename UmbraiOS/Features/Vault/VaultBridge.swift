@@ -81,6 +81,11 @@ struct UmbraAutoFillDemoView: View {
                 panel
             }
         }
+        // 原来这一页既没标题也没定模式，靠上级页（保险箱设置，inline）继承 ——
+        // 换个入口推进来就会变成大标题。`iosShell.titleMode` 要求「一屏一个模式」，
+        // 模式得由这一屏自己声明，不能是上级给什么算什么。
+        .navigationTitle("系统填充面板")
+        .navigationBarTitleDisplayMode(.inline)
         .onAppear {
             ASCredentialIdentityStore.shared.getState { state in
                 Task { @MainActor in providerEnabled = state.isEnabled }

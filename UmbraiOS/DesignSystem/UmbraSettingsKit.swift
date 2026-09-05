@@ -194,7 +194,9 @@ struct UmbraSettingSectionView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 11)
-        .frame(minHeight: 48)
+        // 14 / 11 / 48 就是骨架 `iosShell.list.row` 的取值 —— 这一处本来就对，
+        // 只是把写死的 48 换成 token，以后调一处全站跟着动。
+        .frame(minHeight: UmbraMetric.rowMinH)
 
         // 有开关的行，点击区归开关（否则点标签也会切，容易误触）；
         // 其它有动作的行整行可点。
@@ -218,8 +220,17 @@ struct UmbraSettingsPage<Extra: View>: View {
     var intro: String? = nil
     var sections: [UmbraSettingSection] = []
     var footnote: String? = nil
-    /// 破坏性动作（「从联系人列表移除」这类）。**只放在这里**，不进分组行。
+    /// 破坏性动作（「从联系人列表移除」这类）。
+    ///
+    /// 它**渲染到右上角的 ⋯ 菜单里**，不是页面底部 —— 骨架 `iosShell.toolbar.noDestructiveAtBottom`：
+    /// 「破坏性动作不占详情页底部，全进 ⋯ / 长按菜单 / 左滑」。
+    /// 理由是底部那一行是「往前走」的位置（保存 / 继续），把「删掉」放在同一个位置上，
+    /// 手指的肌肉记忆是错的。参数签名没变，十几个调用点一处都不用改。
     var danger: (label: String, action: () -> Void)? = nil
+    /// ⋯ 菜单里那一项的图标。默认垃圾桶，但**不是每个破坏性动作都是「删掉一个东西」**：
+    /// 「重置为空白模板」配垃圾桶会被读成「删除画像」，「忘掉本地数据」也不是删除。
+    /// 语义不是删除的，传一个对的 SF Symbol 进来。
+    var dangerIcon: String = "trash"
     @ViewBuilder var extra: () -> Extra
 
     var body: some View {
@@ -241,10 +252,6 @@ struct UmbraSettingsPage<Extra: View>: View {
 
                 extra()
 
-                if let d = danger {
-                    UmbraButton(title: d.label, kind: .dangerOutline, action: d.action)
-                        .padding(.horizontal, UmbraMetric.pagePadX)
-                }
                 if let f = footnote, !f.isEmpty {
                     Text(f)
                         .font(UmbraFont.sans(12, .w400))
@@ -257,6 +264,25 @@ struct UmbraSettingsPage<Extra: View>: View {
         })
         .navigationTitle(title)
         .navigationBarTitleDisplayMode(.inline)
+        // ⋯ 贴最右（`iosShell.toolbar.right`：从右往左 ⋯ → 齿轮 → 次级 → 主）。
+        // 没有破坏性动作的页面不出这颗 —— 空的 ⋯ 比没有 ⋯ 更让人犹豫。
+        .toolbar {
+            if let d = danger {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Menu {
+                        // role: .destructive 只负责把这一项标红。真正的二次确认仍然由
+                        // 调用方在 action 里走 router.confirm —— 系统菜单项点了就执行，
+                        // 不像左滑那样自带「划开等你按」的中间态。
+                        Button(role: .destructive, action: d.action) {
+                            Label(d.label, systemImage: dangerIcon)
+                        }
+                    } label: {
+                        Image(systemName: "ellipsis.circle")
+                    }
+                    .tint(UmbraColor.muted)
+                }
+            }
+        }
     }
 }
 
@@ -264,9 +290,10 @@ extension UmbraSettingsPage where Extra == EmptyView {
     init(backLabel: String, title: String, onBack: @escaping () -> Void,
          hero: (() -> AnyView)? = nil, intro: String? = nil,
          sections: [UmbraSettingSection] = [], footnote: String? = nil,
-         danger: (label: String, action: () -> Void)? = nil) {
+         danger: (label: String, action: () -> Void)? = nil,
+         dangerIcon: String = "trash") {
         self.init(backLabel: backLabel, title: title, onBack: onBack, hero: hero,
                   intro: intro, sections: sections, footnote: footnote,
-                  danger: danger, extra: { EmptyView() })
+                  danger: danger, dangerIcon: dangerIcon, extra: { EmptyView() })
     }
 }

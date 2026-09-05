@@ -40,6 +40,16 @@ struct UmbraToolHomeView: View {
             .padding(.top, 2)
         }
         .navigationTitle("工具")
+        // 骨架 `iosShell.list.pullRefresh`：「iOS 列表默认都有下拉刷新」。
+        // 这一页六张卡底压的全是真数据（任务执行中/失败数、灵感条数、本月支出、保险箱条数），
+        // 原来只在 onAppear 拉一次 —— 停在这一页时数据变了拉不动，只能退出去再进来。
+        .refreshable {
+            // silent: true —— 下拉刷新不把记账打回骨架态（这一页只借它的合计数，
+            // 让整张卡闪一下骨架反而像出错了）。
+            await money.reload(silent: true)
+            await tasks.loadTasks()
+            await inspirations.load()
+        }
         // 进页就把清单静默拉起来 —— 卡底的状态行是真数据，不拉就只能摆假的；
         // 顺带把记账页预热了（点进去秒开）。提醒 09-02 移出本页，不再从这里拉。
         .onAppear {

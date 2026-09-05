@@ -42,6 +42,8 @@ struct UmbraTaskListView: View {
             if seg == .history { history } else { plan }
         }
         .navigationTitle("任务")
+        // 同灵感列表：push 屏一律内联标题（`iosShell.titleMode`）。
+        .navigationBarTitleDisplayMode(.inline)
         // 列表页不参与键盘避让：搜索框在页面上方用不着避让，
         // 反而搜索键盘收起后底部 inset 可能留着不走，让页面短一截（同保险箱首页的坑）。
         .ignoresSafeArea(.keyboard, edges: .bottom)
@@ -250,6 +252,14 @@ struct UmbraTaskDetailView: View {
         })
         .navigationTitle(navTitle)
         .navigationBarTitleDisplayMode(.inline)
+        // 条件放在 builder 这一层，而不是 moreMenu 内部：写在里面的话，任务已结束时
+        // ToolbarItem 仍然被创建、只是内容解析成 nil —— 「item 不存在」和「item 存在但空」
+        // 在结构上是两回事，后者是会在某些 iOS 版本上留占位的那种坑。
+        .toolbar {
+            if let d = detail, TasksViewModel.isActive(d.task.status) {
+                ToolbarItem(placement: .topBarTrailing) { moreMenu(d) }
+            }
+        }
         .umbraImageViewer(item: $viewerItem)
         .onAppear { Task { await tasks.loadTaskDetail(id: id) } }
         .onDisappear { tasks.closeTaskDetail() }
@@ -606,29 +616,45 @@ struct UmbraTaskDetailView: View {
 
     /// 底部动作条。**还没有「重试任务」**——服务端已有 /tasks/{id}/retry（PC 已接），
     /// iOS 待接（记在回流台账）；在接上之前不摆一个点了没反应的按钮。
+    ///
+    /// 「停止任务」原来是这里的第一颗，骨架 `iosShell.toolbar.noDestructiveAtBottom`
+    /// 把它挪进了右上角 ⋯：底部这一行是「往前走」的位置，破坏性动作不占。
     private func bottomBar(_ d: TaskDetail) -> some View {
         UmbraBottomBar {
-            if TasksViewModel.isActive(d.task.status) {
-                UmbraButton(title: "停止任务", kind: .dangerOutline) {
-                    router.confirm(UmbraAlert(
-                        title: "停止这个任务？",
-                        body: "已完成的步骤会保留，正在跑的那一步会被打断。",
-                        confirmLabel: "停止",
-                        confirmDestructive: true,
-                        onConfirm: {
-                            Task {
-                                await tasks.stopTask(id: d.task.id)
-                                await tasks.loadTaskDetail(id: d.task.id)
-                            }
-                            router.showToast("已发出停止")
-                        }))
-                }
-            }
             UmbraButton(title: "复制详情", kind: .secondary) {
                 UIPasteboard.general.string = plainText(d)
                 router.showToast("已复制")
             }
         }
+    }
+
+    /// 右上角 ⋯：只在任务还在跑的时候出现（`iosShell.toolbar.right`：⋯ 贴最右，
+    /// 装低频动作与**全部**破坏性动作）。任务已经结束时这颗不出 ——
+    /// 一个点开只有灰项的 ⋯ 比没有 ⋯ 更让人犹豫。出不出由调用处的条件决定。
+    private func moreMenu(_ d: TaskDetail) -> some View {
+        Menu {
+            // role: .destructive 只把这一项标红；真正的二次确认还是走 router.confirm——
+            // 系统菜单项点了就执行，没有左滑那种「划开等你按」的中间态。
+            Button(role: .destructive) {
+                router.confirm(UmbraAlert(
+                    title: "停止这个任务？",
+                    body: "已完成的步骤会保留，正在跑的那一步会被打断。",
+                    confirmLabel: "停止",
+                    confirmDestructive: true,
+                    onConfirm: {
+                        Task {
+                            await tasks.stopTask(id: d.task.id)
+                            await tasks.loadTaskDetail(id: d.task.id)
+                        }
+                        router.showToast("已发出停止")
+                    }))
+            } label: {
+                Label("停止任务", systemImage: "stop.circle")
+            }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .tint(UmbraColor.muted)
     }
 
     private func plainText(_ d: TaskDetail) -> String {

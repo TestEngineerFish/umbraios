@@ -103,6 +103,8 @@ struct UmbraDevicesView: View {
                         }
                     })
             ])
+            // 骨架 `iosShell.list.pullRefresh`：数据来自 /devices/all，原来只在 onAppear 拉一次。
+            .refreshable { await chat.reloadDevices() }
             .onAppear { chat.loadDevices() }
     }
 
@@ -183,6 +185,8 @@ struct UmbraDeviceDetailView: View {
                         router.showToast("已从联系人列表移除")
                     }))
             }))
+            // 和「设备与能力」同一份服务端数据，那边能下拉这边也要能。
+            .refreshable { await chat.reloadDevices() }
     }
 
     private func capabilitySection(_ d: KnownDevice) -> UmbraSettingSection {
@@ -217,6 +221,7 @@ struct UmbraCapabilitiesView: View {
             backLabel: "返回", title: "能力", onBack: { router.back() },
             intro: "设备上报的 provider 与 skill，手机上一律只读。要改这些去电脑上的「能力」页。",
             sections: sections)
+            .refreshable { await vm.loadCapabilities() }
             .onAppear { Task { await vm.loadCapabilities() } }
     }
 
@@ -259,6 +264,17 @@ struct UmbraProfileView: View {
             backLabel: "我", title: "用户画像", onBack: { router.back() },
             intro: "秘书对你的当前认知快照，随对话自动更新；内容有误可直接编辑保存，或重置为空白模板。",
             sections: [],
+            // 参数顺序跟着 UmbraSettingsPage 的字段声明走：danger / dangerIcon 在 extra 之前。
+            danger: (label: "重置为空白模板", action: {
+                router.confirm(UmbraAlert(
+                    title: "确定要清空用户画像吗？",
+                    body: "会重置为空白模板，秘书将重新认识你（不可恢复）。",
+                    confirmLabel: "重置",
+                    confirmDestructive: true,
+                    onConfirm: { reset() }))
+            }),
+            // 不配垃圾桶：这是「清空重来」不是「删掉画像」，图标读错会让人不敢点。
+            dangerIcon: "arrow.counterclockwise",
             extra: {
                 VStack(alignment: .leading, spacing: UmbraMetric.sp3) {
                     // 画像是 markdown，用等宽 13/1.75 —— 和设计稿一致。
@@ -274,23 +290,18 @@ struct UmbraProfileView: View {
                                 .strokeBorder(UmbraColor.border, lineWidth: UmbraMetric.borderW)
                         )
 
-                    HStack(spacing: 8) {
-                        UmbraButton(title: saving ? "保存中…" : "保存", kind: saving ? .disabled : .primary, height: 46) {
-                            save()
-                        }
-                        UmbraButton(title: "重置为空白模板", kind: .dangerOutline, height: 46) {
-                            router.confirm(UmbraAlert(
-                                title: "确定要清空用户画像吗？",
-                                body: "会重置为空白模板，秘书将重新认识你（不可恢复）。",
-                                confirmLabel: "重置",
-                                confirmDestructive: true,
-                                onConfirm: { reset() }))
-                        }
-                        .frame(maxWidth: 160)
+                    // 「重置为空白模板」原来和「保存」并排在这里，被骨架
+                    // `iosShell.toolbar.noDestructiveAtBottom` 点名 —— 破坏性动作不占底部，
+                    // 已经搬进右上角 ⋯（走 UmbraSettingsPage 的 danger 槽）。
+                    // 底部只留「保存」，是这一屏唯一的「往前走」。
+                    UmbraButton(title: saving ? "保存中…" : "保存", kind: saving ? .disabled : .primary, height: 46) {
+                        save()
                     }
                 }
                 .padding(.horizontal, UmbraMetric.pagePadX)
             })
+            // ⚠️ 这一屏**故意不给下拉刷新**，虽然骨架说「列表默认都有」——
+            // 它是个编辑器，下拉重拉会把没保存的编辑直接冲掉。
             .onAppear {
                 guard !loaded else { return }
                 loaded = true
