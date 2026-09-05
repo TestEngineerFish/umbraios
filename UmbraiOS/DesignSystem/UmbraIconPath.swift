@@ -148,12 +148,19 @@ enum UmbraIconPath {
     /// 原始 d：`M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z`（只有直线，无需弧转贝塞尔）。
     static let layoutGrid = "M4,4L11,4L11,11L4,11ZM13,4L20,4L20,11L13,11ZM4,13L11,13L11,20L4,20ZM13,13L20,13L20,20L13,20Z"
 
-    /// 停止（批次 011 ① 新增）：圆角方块。占位气泡尾部那颗停止钮、以及半截回复下面
-    /// 「你停了这次回复 · 只写到这里」那一行的前缀图标都用它。
-    /// **它不在 `umbra-icons.json` 里** —— iOS 稿两处都是内联 `<rect x=7 y=7 w=10 h=10 rx=2>`，
-    /// 清单没收录。已回执给设计侧补进清单，补了之后这里的注释可以改成引清单名。
-    /// 原始 d：`M7 7h10v10H7z` 的 rx=2 版本（四角用 κ=0.5523 的三次贝塞尔近似）。
+    /// 停止（批次 011 ①，批次 014 已进清单 = `stop-square`）：圆角方块。
+    /// 两处用它：占位 / 流式气泡外的停止钮、半截中断那行小字的前缀 —— 同一颗形状让人认出
+    /// 「这是我按的那个键干的」。**任务详情里的「停止」是文字钮，不配图标，别把这颗形拿过去**
+    ///（清单里那条边界）。
+    /// 原始 d：`M7 7h10v10H7z` 的 rx=2 版本（四角用 κ=0.5523 的三次贝塞尔近似，清单已认可等价）。
     static let stopSquare = "M9,7L15,7C16.105,7 17,7.895 17,9L17,15C17,16.105 16.105,17 15,17L9,17C7.895,17 7,16.105 7,15L7,9C7,7.895 7.895,7 9,7Z"
+
+    /// 失败态（批次 014 补）：**八角形**轮廓 + 感叹号。名字叫 alert-circle 是沿用
+    /// `umbra-icons.json` 的命名（它自己的注释写着「失败态；八角形轮廓，和 info 的圆形一眼分得开」），
+    /// 形状不是圆 —— 别照名字画成圆。消息发送失败那一行用它（`replyCancel.textFailed`）。
+    /// ⚠️ 与 `UmbraStatus.failed` 现在用的 `xCircle` 是两套说法，已回执给设计侧，等裁。
+    /// 原始 d：`M8.6 3h6.8L21 8.6v6.8L15.4 21H8.6L3 15.4V8.6zM12 8v4.5M12 16h.01`（只有直线）
+    static let alertCircle = "M8.6,3L15.4,3L21,8.6L21,15.4L15.4,21L8.6,21L3,15.4L3,8.6ZM12,8L12,12.5M12,16L12.01,16"
 
     /// 原始 d：`M18 6 6 18M6 6l12 12`
     static let x = "M18,6L6,18M6,6L18,18"
@@ -168,6 +175,7 @@ enum UmbraIconPath {
     static let allNames: [String] = table.keys.sorted()
 
     private static let table: [String: String] = [
+        "alertCircle": alertCircle,
         "alertTriangle": alertTriangle,
         "ban": ban,
         "bell": bell,

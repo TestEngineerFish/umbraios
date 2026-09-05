@@ -397,7 +397,8 @@ struct UmbraChatThreadView: View {
         actionQuote(id: serverId, role: role, text: text)
         actionIdea(text)
         actionRemind(text)
-        actionDelete(serverId: serverId)
+        // 设备发来的消息不归我们删（它在服务端也不是「我的一条消息」），所以不出这一项。
+        actionDelete(serverId: serverId, settling: role != "device")
     }
 
     /// 结构化消息（任务卡 / 确认卡 / 完成卡）只给「复制摘要」一项。
@@ -505,10 +506,21 @@ struct UmbraChatThreadView: View {
     }
 
     /// 删除。跨端的，必须先问一句（`messageMenu.deleteCopy` 的原文）。
-    /// 没有 serverId 的（还没拿到回执）删不了 —— 不摆一个点了没反应的按钮。
+    ///
+    /// `settling`：这条**本该**有服务端 id、只是还没拿到（取消收尾之后那一轮里我发的那条 ——
+    /// `reply_cancelled` 不带 `user_message_id`，服务端补上之前认不到）。这种不能静默少一项：
+    /// 「全场唯一一条菜单不一样的消息」用户解释不了，会当成卡了。所以照样给「删除」，
+    /// 点了吐一句实话。服务端补上 `user_message_id` 之后，这个分支连同文案一起删。
+    /// `settling = false` 的（设备发来的消息）本来就不归我们删，那才该静默不出。
     @ViewBuilder
-    private func actionDelete(serverId: Int?) -> some View {
-        if let sid = serverId {
+    private func actionDelete(serverId: Int?, settling: Bool = true) -> some View {
+        if serverId == nil, settling {
+            Button(role: .destructive) {
+                router.showToast(L("chat.msgSettling"))
+            } label: {
+                Label(L("chat.menu.delete"), systemImage: "trash")
+            }
+        } else if let sid = serverId {
             Button(role: .destructive) {
                 router.confirm(UmbraAlert(
                     title: L("chat.delMsgTitle"),
@@ -600,40 +612,52 @@ struct UmbraChatThreadView: View {
         .onTapGesture { if let id = q.id { jumpTo = id } }
     }
 
-    /// 「没发出去」那一行（稿②）：14px 红图标 + 原因 + 就地重发。
-    /// 错误三段式在这一行里齐了：发生了什么 · 为什么 + 一颗能点的「重新发送」。
+    /// 「没发出去」那一行（`replyCancel.textFailed`）：14px 描边 alert-circle + 原因 + 动作。
+    /// 错误三段式在这一行里齐了 —— 发生了什么 · 为什么 + 可点的钮。
     ///
-    /// 图标用 `xCircle`（圆叉）而不是稿上画的圆圈感叹号：本工程「失败 = 圆叉」是
-    /// 交接文档定的**全站语义**（`UmbraStatus.iconPath`），而稿这一处的圆圈感叹号
-    /// 既不在 `umbra-icons.json` 里，也和清单里那颗叫 `alert-circle` 的**八角形**对不上。
-    /// 三方不一致已回执给设计侧，在他们裁定之前先服从全站语义。
+    /// **原因照实分档，动作跟着分档**：没连上给两颗（重新发送 / 检查服务端），
+    /// 服务端拒了只给重新发送 —— 服务端都回话了，再让人去检查地址是把人往错方向支。
+    ///
+    /// 图标是清单里那颗 `alert-circle`（**八角形**，不是圆；见 UmbraIconPath 的注释）。
     private func failedRow(_ u: ChatBlock.UserBlock) -> some View {
         HStack(spacing: 6) {
-            UmbraIcon(d: UmbraIconPath.xCircle, size: 14, strokeWidth: 2)
+            UmbraIcon(d: UmbraIconPath.alertCircle, size: 14, strokeWidth: 2)
                 .foregroundColor(UmbraColor.danger)
-            Text(L("chat.sendFailed"))
+            Text(L(u.failure == .rejected ? "chat.sendFailed.rejected" : "chat.sendFailed.offline"))
                 .font(UmbraFont.sans(12.5, .w400))
                 .foregroundColor(UmbraColor.danger)
                 .fixedSize()
-            Button {
+            failedAction(L("chat.menu.resend"), weight: .w600, tint: UmbraColor.danger) {
                 chat.resendFailed(blockId: u.id.uuidString)
-            } label: {
-                Text(L("chat.menu.resend"))
-                    .font(UmbraFont.sans(12.5, .w600))
-                    .foregroundColor(UmbraColor.danger)
-                    .padding(.horizontal, 6)
-                    .frame(minHeight: UmbraMetric.tapMin)
-                    .contentShape(Rectangle())
             }
-            .buttonStyle(.plain)
-            // 热区 44 高，但这一行在视觉上只占 18 —— 多出来的用负边距收掉。
-            .padding(.vertical, -(UmbraMetric.tapMin - 18) / 2)
+            // 没连上才给「检查服务端」：这一颗是把人送到能解决问题的地方去。
+            if u.failure == .offline {
+                failedAction(L("chat.menu.checkServer"), weight: .w400, tint: UmbraColor.muted) {
+                    router.jump(.setConn)
+                }
+            }
         }
     }
 
-    /// 左侧气泡。fill 用来区分说话人：秘书用 card、设备用 deviceBubble ——
-    /// 两边都在左侧，不换色的话在设备会话里根本分不出哪句是秘书说的（用户点名）。
-    /// 设备气泡专用（秘书那条走 `aiBubbleBody`）。设备消息**没有服务端 id**，
+    /// 失败行里的行内文字动作。热区照 `minTapTarget` 撑到 44（tokens 点名：12.5px 字
+    /// 配 13px 纵向 padding 只有 41，不够），多出来的高度用负边距收掉，这一行的行高不变。
+    private func failedAction(_ title: String, weight: UmbraFont.Weight,
+                              tint: Color, act: @escaping () -> Void) -> some View {
+        Button(action: act) {
+            Text(title)
+                .font(UmbraFont.sans(12.5, weight))
+                .foregroundColor(tint)
+                .padding(.horizontal, 6)
+                .frame(minHeight: UmbraMetric.tapMin)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .padding(.vertical, -(UmbraMetric.tapMin - 18) / 2)
+    }
+
+    /// 设备气泡专用（秘书那条走 `aiBubbleBody`）。fill 用来区分说话人 —— 秘书和设备
+    /// 都在左侧，不换色的话在设备会话里根本分不出哪句是秘书说的（用户点名）。
+    /// 设备消息**没有服务端 id**，
     /// 所以它的菜单会自动少掉「删除」（`actionDelete` 里按 serverId 判）。
     private func plainLeftBubble(_ text: String, fill: Color, blockId: String?) -> some View {
         // 同 userBubble：宽度随内容，靠右侧 Spacer 留白，不用 maxWidth 撑满。
@@ -685,7 +709,7 @@ struct UmbraChatThreadView: View {
             UmbraIcon(d: UmbraIconPath.stopSquare, size: 13, strokeWidth: 2)
                 .foregroundColor(UmbraColor.muted)
                 .frame(width: Self.stopDiameter, height: Self.stopDiameter)
-                .background(Circle().fill(UmbraColor.bg))
+                .background(Circle().fill(UmbraColor.card))
                 .overlay(Circle().stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
                 .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)   // 热区
                 .contentShape(Circle())

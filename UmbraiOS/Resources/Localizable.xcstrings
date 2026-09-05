@@ -1436,23 +1436,6 @@
         }
       }
     },
-    "chat.sendFailed" : {
-      "extractionState" : "manual",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Not sent · connection dropped"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "没发出去 · 连接断了"
-          }
-        }
-      }
-    },
     "chat.status.approved" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -3966,6 +3949,74 @@
     },
     "验证码要在存了密钥的那台设备上看 —— 这条记录里只存了「已启用」这个标记。" : {
 
+    },
+    "chat.sendFailed.offline" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not sent · not connected to the server"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没发出去 · 没连上服务端"
+          }
+        }
+      }
+    },
+    "chat.sendFailed.rejected" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not sent · the server rejected it"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没发出去 · 服务端拒了这条"
+          }
+        }
+      }
+    },
+    "chat.menu.checkServer" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Check server"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检查服务端"
+          }
+        }
+      }
+    },
+    "chat.msgSettling" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This one is still wrapping up — try again in a moment"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "这条还在收尾，等一下再试"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

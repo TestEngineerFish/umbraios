@@ -387,7 +387,7 @@ class ChatViewModel: ObservableObject {
         // 原来的做法是照样画占位，然后三个点转满 120 秒才冒出「超时」—— 而消息压根没出门。
         guard ws.sendMessage(text, conversation: conv, mode: "auto", quote: sent) else {
             if case .user(var u) = s.blocks[s.blocks.count - 1] {
-                u.failed = true
+                u.failure = .offline
                 s.blocks[s.blocks.count - 1] = .user(u)
             }
             // 不另起错误块：稿②把「没发出去 · 连接断了」+「重新发送」画在气泡**正下方那一行**，
@@ -1143,7 +1143,8 @@ extension ChatBlock {
     ///             **引用和删除都指着它** —— 没有 id 的消息删不了、也没法被引用（没有对象可指）。
     ///   quote     引用注脚：气泡顶部那块「引用 X」，点它跳回原消息。
     ///   atts      附件 file_id（批次 013 带附件的文字消息；纯图片消息走 .image 块）。
-    ///   failed    发出去失败了：气泡左侧一颗红「!」，长按菜单把「重新发送」置顶。
+    ///   failure   发出去失败了、以及为什么。气泡压到 .72、下面跟一行原因 + 动作，
+    ///             长按菜单把「重新发送」置顶。
     struct UserBlock: Hashable {
         let id = UUID()
         var text: String
@@ -1151,7 +1152,20 @@ extension ChatBlock {
         var serverId: Int?
         var quote: ChatQuote?
         var atts: [String] = []
-        var failed: Bool = false
+        var failure: SendFailure?
+
+        var failed: Bool { failure != nil }
+    }
+
+    /// 为什么没发出去。**分档不是为了好看** —— `replyCancel.textFailed` 要求原因照实说、
+    /// 动作跟着原因分：没连上给「重新发送 + 检查服务端」，服务端拒了只给「重新发送」
+    ///（服务端都回话了，让人去检查地址是把人往错的方向支）。
+    enum SendFailure: Hashable {
+        /// WS 根本没连上，这一帧压根没出门。
+        case offline
+        /// 服务端收到了但拒了这条。**现在还没有生产者** —— 服务端的 `error` 事件不带
+        /// 「是哪条用户消息出的错」，认不到具体气泡上。等服务端补了归属再接。
+        case rejected
     }
 
     /// 居中的系统提示行。两个来源，形态一样但性质不同：
