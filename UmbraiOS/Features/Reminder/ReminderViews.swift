@@ -699,11 +699,17 @@ struct UmbraReminderListView: View {
                         }
                     }
                     .frame(width: 24, height: 24)
-                    .padding(10)
+                    // 热区**只往上下撑**（24 宽 × 44 高）。
+                    .padding(.vertical, 10)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .padding(-10)
+                // ⚠️ 负边距只给纵向（`rules.minTapTarget.negativeMarginAxis`，批次 015）。
+                // 这里原来是四向 ±10，是这条规矩点名的那种事故的**真身**：整行本身也是一颗
+                // Button（点行进详情），勾选圈嵌在里面；嵌套 Button 的热区优先级更高，
+                // 所以圈右边那 10pt 看着是文字、按下去却是「标记完成」。横向收回来之后
+                // 24×44 依然够按，而且误触的代价从「改了数据」变回「进了详情」。
+                .padding(.vertical, -10)
 
                 VStack(alignment: .leading, spacing: 5) {
                     Text(r.text)

@@ -241,13 +241,18 @@ struct ChatPendingStrip: View {
                     .frame(width: 20, height: 20)
                     .background(Circle().fill(Color(red: 12 / 255, green: 10 / 255, blue: 9 / 255)
                         .opacity(0.72)))
-                    .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)  // 热区
-                    .contentShape(Circle())
+                    // 热区 44×44，**贴着右上角往里长**（alignment: .topTrailing），
+                    // 所以它整块落在自己那张 64 缩略图里，不越过 HStack 的 8pt 间隙。
+                    .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin,
+                           alignment: .topTrailing)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("chat.img.remove"))
-            // 热区比视觉大一圈，用负边距收掉，免得把缩略条撑大。
-            .padding(-(UmbraMetric.tapMin - 20) / 2)
+            // ⚠️ 这里**不用负边距**（`rules.minTapTarget.negativeMarginAxis`，批次 015）。
+            // 原来是四向 -12：热区往右探出 12，减掉 3 的内缩还剩 9，而缩略图之间只有 8 ——
+            // 正好越界 1pt 咬到下一格（末尾那格就是「+」钮）。这里不需要负边距的原因是
+            // 它挂在 ZStack 上：44 的框在 64 的缩略图之内，撑热区根本不会把条撑大。
             .padding(.top, 3)
             .padding(.trailing, 3)
         }

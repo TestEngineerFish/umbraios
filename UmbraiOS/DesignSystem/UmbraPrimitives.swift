@@ -307,13 +307,28 @@ enum UmbraStatus: String {
 
     /// 固定映射，来自交接文档：运行中 = 旋转弧、已完成 = 对勾、需确认 = 三角感叹、
     /// 失败 = 圆叉、排队中 = 时钟。改这里等于改全站语义。
+    ///
+    /// **这一档整个属于「状态家族」**（批次 015 `familyRule.status`）：标的是「一个对象
+    /// 当前的状态」，永远和文字标签同出、旁边没有按钮。所以失败用 `xCircle` 而不是
+    /// 消息失败行那颗 `alertOctagon` —— 那颗是「通知家族」，标的是「一条要你处理的问题」。
+    /// 两颗同屏是对的，别再想着并。
+    ///
+    /// 015 之前 `.suspended` 借 `alertTriangle`、`.cancelled` 借 `clock` —— 两处都是
+    /// 「清单里没有这颗形，先拿近似的顶着」。1.3.0 补齐了 `pause-circle` / `stop-circle`，
+    /// 状态七档现在一档一形，不再有两个档画同一颗形。
     var iconPath: String {
         switch self {
         case .running: return UmbraIconPath.spinnerArc
         case .done: return UmbraIconPath.check
-        case .awaitingReview, .suspended: return UmbraIconPath.alertTriangle
+        case .awaitingReview: return UmbraIconPath.alertTriangle
         case .failed: return UmbraIconPath.xCircle
-        case .pending, .cancelled: return UmbraIconPath.clock
+        case .pending: return UmbraIconPath.clock
+        // 双竖条。清单原话：「不是错误，不给红」—— 所以下面 fg/soft/bar 仍走 warning
+        // 那一组（琥珀不是红），不跟着 .cancelled 掉到灰。
+        case .suspended: return UmbraIconPath.pauseCircle
+        // 圆内方块。**和停止钮的 stopSquare 不同事**：那颗是「按下去会停」，这颗是
+        // 「已经停了」。清单点名它走 --chip / --muted，正好就是下面 .pending 那一组。
+        case .cancelled: return UmbraIconPath.stopCircle
         }
     }
     var label: String {

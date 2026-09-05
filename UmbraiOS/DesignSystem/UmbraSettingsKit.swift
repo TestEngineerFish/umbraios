@@ -50,9 +50,16 @@ struct UmbraSwitch: View {
                 Circle().fill(Color.white).frame(width: 22, height: 22).padding(2)
             }
             .frame(width: 44, height: 26)
+            // 视觉 26 高，热区撑到 44（`minTapTarget`：视觉可以小于 44，热区不许）。
+            // **只往上下撑**（`minTapTarget.negativeMarginAxis`，批次 015）：横向本来就是
+            // 44，不需要动；真去动横向反而会咬到左边那段值文字 / 右边的箭头。
+            // 上下各外溢 9pt，落在设置行自己的 11pt 纵向内边距里，串不到上下行。
+            .padding(.vertical, (UmbraMetric.tapMin - 26) / 2)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        // 负边距把占位收回 26，行高不变 —— 否则每一行有开关的设置行都会高出 18pt。
+        .padding(.vertical, -(UmbraMetric.tapMin - 26) / 2)
         .animation(UmbraMotion.tint, value: on)
     }
 }

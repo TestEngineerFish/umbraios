@@ -414,7 +414,7 @@ struct UmbraChatThreadView: View {
     /// 图片没发出去那一行。和文字那条同一个形，只是原因由上传链路给。
     private func imageFailedRow(_ img: ChatBlock.ImageBlock) -> some View {
         HStack(spacing: 6) {
-            UmbraIcon(d: UmbraIconPath.alertCircle, size: 14, strokeWidth: 2)
+            UmbraIcon(d: UmbraIconPath.alertOctagon, size: 14, strokeWidth: 2)
                 .foregroundColor(UmbraColor.danger)
             Text(img.failReason.isEmpty ? L("chat.uploadFailed") : img.failReason)
                 .font(UmbraFont.sans(12.5, .w400))
@@ -828,16 +828,18 @@ struct UmbraChatThreadView: View {
         .onTapGesture { if let id = q.id { jumpTo = id } }
     }
 
-    /// 「没发出去」那一行（`replyCancel.textFailed`）：14px 描边 alert-circle + 原因 + 动作。
+    /// 「没发出去」那一行（`replyCancel.textFailed`）：14px 描边 alert-octagon + 原因 + 动作。
     /// 错误三段式在这一行里齐了 —— 发生了什么 · 为什么 + 可点的钮。
     ///
     /// **原因照实分档，动作跟着分档**：没连上给两颗（重新发送 / 检查服务端），
     /// 服务端拒了只给重新发送 —— 服务端都回话了，再让人去检查地址是把人往错方向支。
     ///
-    /// 图标是清单里那颗 `alert-circle`（**八角形**，不是圆；见 UmbraIconPath 的注释）。
+    /// 图标走**通知家族**的 `alertOctagon`（八角），不是状态家族的 `xCircle` ——
+    /// 015 已裁定这两颗不并：这一行是「一条要你处理的问题」（后面跟着原因和按钮），
+    /// 任务卡上的圆叉是「这个对象的状态是失败」。
     private func failedRow(_ u: ChatBlock.UserBlock) -> some View {
         HStack(spacing: 6) {
-            UmbraIcon(d: UmbraIconPath.alertCircle, size: 14, strokeWidth: 2)
+            UmbraIcon(d: UmbraIconPath.alertOctagon, size: 14, strokeWidth: 2)
                 .foregroundColor(UmbraColor.danger)
             Text(L(u.failure == .rejected ? "chat.sendFailed.rejected" : "chat.sendFailed.offline"))
                 .font(UmbraFont.sans(12.5, .w400))
@@ -927,14 +929,21 @@ struct UmbraChatThreadView: View {
                 .frame(width: Self.stopDiameter, height: Self.stopDiameter)
                 .background(Circle().fill(UmbraColor.card))
                 .overlay(Circle().stroke(UmbraColor.border, lineWidth: UmbraMetric.borderW))
-                .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)   // 热区
-                .contentShape(Circle())
+                // 热区**只往上下撑**（32 宽 × 44 高），横向就是视觉那 32。
+                .frame(width: Self.stopDiameter, height: UmbraMetric.tapMin)
+                .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(L("chat.stopReply"))
-        // 热区比视觉大一圈，用负边距抵掉，免得把气泡行撑高。跟着 tapMin 走，
+        // 热区比视觉高一圈，用负边距抵掉，免得把气泡行撑高。跟着 tapMin 走，
         // 写死 -6 的话以后调 tapMin 这里会静默错位。
-        .padding(-(UmbraMetric.tapMin - Self.stopDiameter) / 2)
+        //
+        // ⚠️ **负边距只给纵向**（`rules.minTapTarget.negativeMarginAxis`，批次 015）：
+        // 横向负边距会吃掉 HStack 的 spacing —— 这里左邻就是气泡（它自己带 contextMenu），
+        // 原来四向 -6 撞上 spacing 8，只差 2pt 就叠到气泡上了；tapMin 哪天从 44 调到 48，
+        // 这 2pt 就没了，而且叠上之后是**静默**的：人按气泡，停止钮把这一按吃掉。
+        // 横向本来也不需要满 44（同一条 token 的原话），32 已经够按。
+        .padding(.vertical, -(UmbraMetric.tapMin - Self.stopDiameter) / 2)
     }
 
     /// 停止钮的视觉直径（稿：32，热区 44）。热区走 `UmbraMetric.tapMin`。
@@ -1467,12 +1476,14 @@ struct UmbraChatThreadView: View {
                     .foregroundColor(UmbraColor.muted)
                     .frame(width: 22, height: 22)
                     .background(Circle().fill(UmbraColor.chip))
-                    .frame(width: UmbraMetric.tapMin, height: UmbraMetric.tapMin)   // 热区
-                    .contentShape(Circle())
+                    // 热区只往上下撑（22 宽 × 44 高）：横向撑会吃掉 spacing 9，
+                    // 把左邻那两行引用文字的区域划进来（`minTapTarget.negativeMarginAxis`）。
+                    .frame(width: 22, height: UmbraMetric.tapMin)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("chat.quoteClear"))
-            .padding(-(UmbraMetric.tapMin - 22) / 2)
+            .padding(.vertical, -(UmbraMetric.tapMin - 22) / 2)
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 8)
